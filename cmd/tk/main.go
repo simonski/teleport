@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,6 +50,21 @@ func run(args []string) error {
 		return nil
 	}
 	command := args[0]
+	if command == "_codex-session" {
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		root := flags.String("runtime-dir", "", "owned runtime")
+		id := flags.String("session", "", "owned session")
+		launch := flags.String("launch", "", "launch identity")
+		generation := flags.String("generation", "", "daemon identity")
+		codex := flags.String("codex", "", "installed native harness")
+		role := flags.String("role", "Console", "native phase role")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		return localruntime.RunNative(ctx, *root, *id, *launch, *generation, *codex, *role)
+	}
 	if command == "_session-daemon" {
 		flags := flag.NewFlagSet(command, flag.ContinueOnError)
 		root := flags.String("runtime-dir", "", "owned local runtime directory")
@@ -121,7 +137,17 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		service.ConfigureLocalRuntime(*runtimeRoot, executable, *terminalFixture)
+		localHost, localPort, splitErr := net.SplitHostPort(*addr)
+		if splitErr != nil {
+			return splitErr
+		}
+		if localHost == "" || localHost == "0.0.0.0" {
+			localHost = "127.0.0.1"
+		}
+		if localHost == "::" {
+			localHost = "::1"
+		}
+		service.ConfigureLocalRuntime(*runtimeRoot, executable, *terminalFixture, "http://"+net.JoinHostPort(localHost, localPort))
 		if strings.ContainsAny(*publicHost, "/:@?# ") {
 			return errors.New("--public-host must be a bare hostname")
 		}

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--native-fixture", action="store_true", help="Exercise native Codex protocol through a zero-provider fake executable")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
     args = parser.parse_args()
     folder = Path(tempfile.mkdtemp(prefix="teleport-terminal-proof-"))
@@ -25,10 +26,17 @@ def main():
         port = sock.getsockname()[1]
     endpoint = f"http://127.0.0.1:{port}"
     environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+    if args.native_fixture:
+        fixture_bin = folder / "fixture-bin"
+        fixture_bin.mkdir()
+        subprocess.run(["go", "build", "-o", str(fixture_bin / "codex"), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=60)
+        environment["PATH"] = str(fixture_bin) + os.pathsep + environment["PATH"]
+    harness = "codex" if args.native_fixture else "fixture"
     process = None
     session_id = None
     clean = False
     browser_name = f"teleport-terminal-{port}"
+    browser_open = False
 
     def tk(operation, data=None):
         command = [str(ROOT / "bin/tk"), operation]
@@ -79,7 +87,7 @@ def main():
         git("commit", "-m", "Seed terminal fixture")
         project = tk("createProject", {"name": "Terminal proof", "key": "terminal-" + uuid.uuid4().hex[:12], "requestId": "terminal-project"})
         project = tk("configureLocalRepository", {"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})
-        start = {"projectId": project["id"], "harness": "fixture", "requestId": "terminal-start"}
+        start = {"projectId": project["id"], "harness": harness, "requestId": "terminal-start"}
         row = tk("openConsoleSession", start)
         session_id = row["id"]
         assert row["state"] == "running" and row["ticketId"] == 0
@@ -87,16 +95,27 @@ def main():
         import base64
         def read():
             return base64.b64decode(tk("attachSession", {"id": session_id})["data"]).decode(errors="replace")
-        wait_for(lambda: "terminal fixture" in read())
+        wait_for(lambda: ("native fixture connected" if args.native_fixture else "terminal fixture") in read())
+        if args.native_fixture:
+            wait_for(lambda: tk("getSessionRequests", {"id": session_id})["items"])
+            context_env = dict(environment, TELEPORT_CONFIG=str(folder / "runtime" / (session_id + ".client.json")))
+            for operation, permitted in [("listProjects", True), ("getSession", False), ("listSessions", False), ("approveTicket", False)]:
+                result = subprocess.run([str(ROOT / "bin/tk"), operation, "--data", "{}"], env=context_env, text=True, capture_output=True, timeout=15)
+                assert (result.returncode == 0) == permitted, (operation, result.stdout, result.stderr)
         sent = {"id": session_id, "requestId": "terminal-input-1", "data": base64.b64encode(b"alpha\n").decode()}
         receipt = tk("sendSessionInput", sent)
         assert receipt["state"] == "delivered" and tk("sendSessionInput", sent) == receipt
-        wait_for(lambda: "received: alpha" in read())
-        assert read().count("received: alpha") == 1
+        wait_for(lambda: ("native fixture answer resolved" if args.native_fixture else "received: alpha") in read())
+        assert read().count("native fixture answer resolved" if args.native_fixture else "received: alpha") == 1
+        if args.native_fixture:
+            native = wait_for(lambda: next((r for r in tk("getSessionRequests", {"id": session_id})["items"] if r["state"] == "resolved" and r.get("source")), None))
+            assert native["source"] == "native client" and native["answers"]["secret"]["answers"] == ["[redacted]"]
+            assert "fixture-secret" not in (folder / "runtime/sessions.json").read_text()
         tk("resizeSession", {"id": session_id, "cols": 120, "rows": 35})
         before = json.loads((folder / "runtime/sessions.json").read_text())[session_id]
         if args.browser:
             browser("open", endpoint)
+            browser_open = True
             browser("find", "label", "Username", "fill", "admin")
             browser("find", "label", "Password", "fill", "password")
             browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
@@ -108,7 +127,8 @@ def main():
                 browser("press", "Space" if key == " " else key)
             browser("press", "Enter")
             browser("wait", "--fn", "terminalView?.terminal.buffer.active.getLine(terminalView.terminal.buffer.active.cursorY)?.translateToString(true)!==undefined")
-            wait_for(lambda: "received: from browser" in read())
+            wait_for(lambda: read().count("Fixture direction?") >= 2 if args.native_fixture else "received: from browser" in read())
+            browser("wait", "--fn", "terminalView&&!terminalView.sending&&terminalView.queue.length===0")
             interventions = len(tk("listSessionInterventions", {"id": session_id})["items"])
             browser("press", "Escape")
             browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
@@ -128,12 +148,15 @@ def main():
         assert tk("listSessions")["items"][0]["id"] == session_id
         second = {"id": session_id, "requestId": "terminal-after-restart", "data": base64.b64encode(b"after restart\n").decode()}
         assert tk("sendSessionInput", second)["state"] == "delivered"
-        wait_for(lambda: "received: after restart" in read())
+        wait_for(lambda: ("native fixture answer resolved" if args.native_fixture else "received: after restart") in read())
         after = json.loads((folder / "runtime/sessions.json").read_text())[session_id]
         assert before["launchId"] == after["launchId"] and before["generation"] == after["generation"]
         assert row["directory"] != str(repository.resolve()) and row["directory"].startswith(str((folder / "worktrees").resolve()))
         tk("stopSession", {"id": session_id, "confirm": True})
         wait_for(lambda: tk("listSessions")["items"][0]["state"] == "exited")
+        if args.native_fixture:
+            expired = subprocess.run([str(ROOT / "bin/tk"), "listProjects"], env=context_env, capture_output=True, timeout=15)
+            assert expired.returncode != 0, "Exited native context credential remained usable"
         settings = tk("getSession")["settings"]
         settings = tk("setExecutionMode", {"mode": "demo", "expectedVersion": settings["version"]})
         ticket = tk("createTicket", {"projectId": project["id"], "title": "Prepared native task", "requestId": "native-task"})
@@ -145,10 +168,36 @@ def main():
         tk("setExecutionMode", {"mode": "off", "expectedVersion": settings["version"]})
         ticket = tk("acceptRefinement", {"id": ticket["id"], "expectedVersion": ticket["version"], "proposalId": ticket["refinement"]["id"]})
         ticket = tk("prepareTaskWorktree", {"id": ticket["id"], "expectedVersion": ticket["version"], "requestId": "prepare-native-task"})
-        attached = tk("startTicketSession", {"projectId": project["id"], "ticketId": ticket["id"], "expectedVersion": ticket["version"], "harness": "fixture", "requestId": "ticket-native-start"})
+        attached = tk("startTicketSession", {"projectId": project["id"], "ticketId": ticket["id"], "expectedVersion": ticket["version"], "harness": harness, "requestId": "ticket-native-start"})
         session_id = attached["id"]
         ticket = tk("getTicket", {"id": ticket["id"]})
         assert ticket["execution"] == "local:" + session_id and ticket["active"] and not ticket.get("attention")
+        if args.native_fixture:
+            question = wait_for(lambda: next((r for r in tk("getSessionRequests", {"id": session_id})["items"] if r["state"] == "pending"), None))
+            wait_for(lambda: next((r for r in tk("listSessions")["items"] if r["id"] == session_id and r.get("attention")), None))
+            if args.browser:
+                browser("open", endpoint)
+                browser("wait", "#welcome-status")
+                browser("press", "Escape")
+                browser("find", "role", "button", "click", "--name", "Board", "--exact")
+                browser("wait", f'[data-ticket-card="{ticket["id"]}"] .needs-attention')
+                browser("click", f'[data-ticket-card="{ticket["id"]}"] .ticket-open')
+                browser("wait", '[data-native-request]')
+                # The custom select delegates its value to the hidden form field.
+                browser("click", '#native-ticket-questions .choice-button')
+                browser("find", "role", "option", "click", "--name", "Continue", "--exact")
+                browser("fill", '[data-native-answer="secret"]', "fixture-secret")
+                browser("click", '[data-native-send]')
+                browser("wait", "--fn", "document.querySelector('.native-request h4')?.textContent.includes('resolved')")
+                browser("wait", "--fn", f"document.querySelector('[data-session-summary=\"{session_id}\"] [data-session-label]')?.textContent.includes('Response ready')")
+                browser("screenshot", "/tmp/teleport-native-question.png")
+                browser("press", "Escape")
+            else:
+                answer = {"id": session_id, "requestId": question["id"], "operationId": "native-answer", "answers": {"direction": {"answers": ["Continue"]}, "secret": {"answers": ["fixture-secret"]}}}
+                response = tk("respondToAgent", answer)
+                assert response["state"] == "delivered" and tk("respondToAgent", answer) == response
+            resolved = wait_for(lambda: next((r for r in tk("getSessionRequests", {"id": session_id})["items"] if r["state"] == "resolved"), None))
+            assert resolved["source"] == "ticket/teleport dialog" and resolved["answers"]["secret"]["answers"] == ["[redacted]"]
         audit = tk("sendSessionInput", {"id": session_id, "requestId": "outside-ticket-input", "data": base64.b64encode(b"outside workflow\n").decode()})
         assert audit["state"] == "delivered" and audit["actor"] == "admin" and "data" not in audit
         if args.browser:
@@ -167,9 +216,9 @@ def main():
         assert not ticket["active"] and not ticket.get("execution") and ticket["status"] == "Doing"
         tk("shutdownLocalRuntime", {"confirm": True})
         clean = True
-        print("PASS: real owned daemon/PTY, duplicate fencing, resize, same-instance API restart, observed stop and zero model calls" + ("; browser stdin/output, Escape detach and robot reconnect" if args.browser else ""))
+        print("PASS: real owned daemon/PTY, duplicate fencing, resize, same-instance API restart, observed stop and zero model calls" + ("; native wire question/resolution, redaction and scoped context credentials" if args.native_fixture else "") + ("; browser stdin/output, Escape detach and robot reconnect" if args.browser else ""))
     except Exception:
-        if args.browser:
+        if args.browser and browser_open:
             print(browser("eval", "JSON.stringify({error:document.querySelector('#terminal-error')?.textContent,active:document.activeElement?.outerHTML.slice(0,120),viewer:terminalView&&{cursor:terminalView.cursor,stopped:terminalView.stopped,sending:terminalView.sending,queue:terminalView.queue.length},state:document.querySelector('#terminal-state')?.textContent})"))
             browser("screenshot", "/tmp/teleport-terminal-failure.png")
         raise

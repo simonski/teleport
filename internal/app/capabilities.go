@@ -13,6 +13,7 @@ type PermissionInspectionInput struct {
 	Command   []string `json:"command"`
 }
 type AdapterCapabilities struct {
+	PermissionAuthority    string   `json:"permissionAuthority"`
 	Adapter                string   `json:"adapter"`
 	Mode                   string   `json:"mode"`
 	SchemaInspectedVersion string   `json:"schemaInspectedVersion"`
@@ -59,5 +60,12 @@ func capabilityOperations(st *model.State, a model.Account, operation string, ra
 		mode = "interactive PTY"
 	}
 	capabilities := AdapterCapabilities{Adapter: in.Adapter, Mode: mode, SchemaInspectedVersion: "codex-cli 0.166.0", ManagedExecution: false, MissingProofs: []string{"fresh server authorization before every protected command, including native automatic allows and console commands", "durable owned process/command identity, stop and exit recovery", "safe tool-result continuation without uncertain command replay", "read-only phase filesystem enforcement", "separately authorized live provider acceptance"}}
+	if in.Adapter == "codex-pty" {
+		capabilities.Mode = "trusted local native TUI"
+		capabilities.PermissionAuthority = "native harness"
+		capabilities.MissingProofs = []string{"separately authorized live provider acceptance", "automatic Refine/Review and supervised workflow handoff"}
+		return PermissionInspection{WinningRestriction: "native_harness_decides_os_permission", PolicyVersion: st.Settings.Version, Capabilities: capabilities}, false, nil
+	}
+	capabilities.PermissionAuthority = "central server (unimplemented)"
 	return PermissionInspection{WinningRestriction: "adapter_capability_unverified", PolicyVersion: st.Settings.Version, Capabilities: capabilities}, false, nil
 }

@@ -87,6 +87,12 @@ func collections(st *model.State) {
 	}
 }
 func role(st *model.State, a model.Account, projectID int64) string {
+	if a.ServiceSessionID != "" {
+		if a.ServiceProjectID == projectID {
+			return "Viewer"
+		}
+		return ""
+	}
 	p, ok := st.Projects[projectID]
 	if !ok {
 		return ""

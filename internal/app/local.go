@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -93,12 +94,15 @@ type InterventionPage struct {
 	NextCursor string                `json:"nextCursor"`
 }
 
-func (s *Service) ConfigureLocalRuntime(root, executable string, fixture bool) {
+func (s *Service) ConfigureLocalRuntime(root, executable string, fixture bool, endpoint ...string) {
 	s.localClient = localruntime.New(root, executable)
 	s.fixtureHarness = fixture
+	if len(endpoint) > 0 {
+		s.localEndpoint = endpoint[0]
+	}
 }
 func localOperation(op string) bool {
-	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "shutdownLocalRuntime", "listSessionInterventions"}, op)
+	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "respondToAgent"}, op)
 }
 func localInfo(row model.LocalSession) LocalSessionInfo {
 	return LocalSessionInfo{ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
@@ -121,6 +125,9 @@ func (s *Service) localSnapshot(ctx context.Context, token, id string) (*model.S
 	a, err := actor(st, token)
 	if err != nil {
 		return nil, a, model.LocalSession{}, err
+	}
+	if a.ServiceSessionID != "" {
+		return nil, a, model.LocalSession{}, failure(403, "service_scope", "Managed context credentials cannot control terminals")
 	}
 	if id == "" {
 		return st, a, model.LocalSession{}, nil
@@ -149,6 +156,9 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 			return nil, err
 		}
 		items := []HarnessChoice{}
+		if _, available := nativeExecutable(ctx); available {
+			items = append(items, HarnessChoice{ID: "codex", Title: "Codex · native local", Available: true})
+		}
 		if s.fixtureHarness && localruntime.Supported() {
 			items = append(items, HarnessChoice{ID: "fixture", Title: "Terminal fixture · no model", Available: true})
 		}
@@ -182,6 +192,9 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	}
 	if s.localClient == nil || !localruntime.Supported() {
 		return nil, failure(409, "local_runtime_unavailable", "Local terminals require configured macOS/Linux runtime support")
+	}
+	if operation == "getSessionRequests" || operation == "respondToAgent" {
+		return s.nativeRequestCall(ctx, token, operation, raw)
 	}
 	if operation == "openConsoleSession" || operation == "startTicketSession" {
 		var in OpenLocalSessionInput
@@ -325,8 +338,15 @@ func intervention(item model.LocalInput) SessionIntervention {
 	return SessionIntervention{SessionID: item.SessionID, RequestID: item.RequestID, Actor: item.Actor, Sequence: item.Sequence, State: item.State, Written: item.Written, At: item.At}
 }
 func (s *Service) openLocal(ctx context.Context, token, operation string, in OpenLocalSessionInput) (any, error) {
-	if !s.fixtureHarness || in.Harness != "fixture" {
-		return nil, failure(409, "adapter_unavailable", "Select a verified available harness; native Codex integration is not active in this slice")
+	nativePath := ""
+	if in.Harness == "codex" {
+		var available bool
+		nativePath, available = nativeExecutable(ctx)
+		if !available {
+			return nil, failure(409, "adapter_unavailable", "Native Codex requires the inspected 0.166.0 version on macOS/Linux")
+		}
+	} else if !s.fixtureHarness || in.Harness != "fixture" {
+		return nil, failure(409, "adapter_unavailable", "Select an available supported harness")
 	}
 	if len(in.RequestID) < 1 || len(in.RequestID) > 100 || strings.ContainsRune(in.RequestID, 0) {
 		return nil, failure(422, "invalid_request_id", "Use a stable request ID of 1–100 bytes")
@@ -478,6 +498,13 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "worktree_preparation_pending", "Retain this launch intent and reconcile its owned worktree before retrying")
 	}
 	// Persist the owned directory before dispatch so an API crash cannot lose it.
+	if in.Harness == "codex" {
+		hash, err := s.writeContextCredential(row)
+		if err != nil {
+			return nil, err
+		}
+		row.CredentialHash = hash
+	}
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
 		a, err := actor(st, token)
 		if err != nil {
@@ -491,6 +518,10 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			return false, failure(409, "launch_basis_changed", "Launch intent changed")
 		}
 		current.Worktree = row.Worktree
+		current.CredentialHash = row.CredentialHash
+		if current.CredentialHash != "" && current.CredentialExpires.IsZero() {
+			current.CredentialExpires = time.Now().UTC().Add(12 * time.Hour)
+		}
 		st.LocalSessions[row.ID] = current
 		return true, nil
 	})
@@ -517,7 +548,17 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			}
 		}
 		current.Worktree = row.Worktree
-		out, err := s.localClient.Call(ctx, localruntime.Request{Operation: "launch", Launch: &localruntime.Launch{ID: row.ID, LaunchID: row.LaunchID, Generation: row.Generation, Program: s.localClient.Executable, Args: []string{"_terminal-fixture"}, Cwd: row.Worktree.Path, Cols: 100, Rows: 28}})
+		launch := &localruntime.Launch{ID: row.ID, LaunchID: row.LaunchID, Generation: row.Generation, Program: s.localClient.Executable, Args: []string{"_terminal-fixture"}, Cwd: row.Worktree.Path, Cols: 100, Rows: 28}
+		if in.Harness == "codex" {
+			role := "Console"
+			if row.TicketID != 0 {
+				role = "Doing"
+			}
+			launch.Native = true
+			launch.Args = []string{"_codex-session", "--runtime-dir", s.localClient.Root, "--session", row.ID, "--launch", row.LaunchID, "--generation", row.Generation, "--codex", nativePath, "--role", role}
+			launch.Env = map[string]string{"TELEPORT_CONFIG": filepath.Join(s.localClient.Root, row.ID+".client.json"), "TELEPORT_SERVER": s.localEndpoint, "TELEPORT_SESSION_ID": row.ID}
+		}
+		out, err := s.localClient.Call(ctx, localruntime.Request{Operation: "launch", Launch: launch})
 		if err != nil {
 			return false, failure(503, "launch_ack_unknown", "Launch outcome is unknown; retry this exact request without replacing the instance")
 		}

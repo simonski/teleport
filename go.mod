@@ -3,6 +3,7 @@ module teleport
 go 1.26.1
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/jackc/pgx/v5 v5.7.6
 	golang.org/x/sys v0.42.0

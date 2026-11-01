@@ -5,11 +5,13 @@ import "time"
 const SchemaVersion = 1
 
 type Account struct {
-	ID            string `json:"id"`
-	Username      string `json:"username"`
-	PasswordHash  string `json:"passwordHash,omitempty"`
-	Administrator bool   `json:"administrator"`
-	Suspended     bool   `json:"suspended"`
+	ServiceSessionID string `json:"-"`
+	ServiceProjectID int64  `json:"-"`
+	ID               string `json:"id"`
+	Username         string `json:"username"`
+	PasswordHash     string `json:"passwordHash,omitempty"`
+	Administrator    bool   `json:"administrator"`
+	Suspended        bool   `json:"suspended"`
 }
 type Session struct {
 	AccountID string    `json:"accountId"`

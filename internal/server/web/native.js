@@ -1,0 +1,25 @@
+"use strict";
+let nativeQuestionTimer=null,nativeQuestionEpoch=0;
+function clearNativeQuestions(){nativeQuestionEpoch++;clearTimeout(nativeQuestionTimer);}
+function nativeRequestsHTML(items){return items.map(request=>`<article class="native-request" data-native-request="${escapeHTML(request.id)}"><h4>${request.questions?.length?'Question':'Native permission'} · ${escapeHTML(request.state)}</h4>${request.command?`<pre>${escapeHTML(request.command)}</pre>`:''}${request.reason?`<p>${escapeHTML(request.reason)}</p>`:''}${request.questions?.map(q=>`<label>${escapeHTML(q.header)}<span>${escapeHTML(q.question)}</span>${request.state==='pending'?(q.options?.length?`<select data-native-answer="${escapeHTML(q.id)}"><option value="">Choose</option>${q.options.map(o=>`<option>${escapeHTML(o.label)}</option>`).join('')}${q.isOther?'<option value="@other">Other answer</option>':''}</select>${q.isOther?`<input data-native-other="${escapeHTML(q.id)}" placeholder="Other answer" maxlength="20000">`:''}`:`<input ${q.isSecret?'type="password" autocomplete="off"':''} data-native-answer="${escapeHTML(q.id)}" maxlength="20000">`):`<span class="native-answer">${escapeHTML(request.answers?.[q.id]?.answers?.join(', ')||'No retained answer')}</span>`}</label>`).join('')||''}${request.state==='pending'?request.questions?.length?'<button type="button" class="secondary" data-native-send>Send answer</button>':request.decisions?.map(decision=>`<button type="button" class="secondary" data-native-decision="${escapeHTML(decision)}">${escapeHTML({accept:'Allow once',acceptForSession:'Allow for session',decline:'Deny',cancel:'Deny and interrupt'}[decision]||decision)}</button>`).join('')||'<p>Respond in the terminal.</p>':''}${request.source?`<p class="muted">${escapeHTML(request.source)}</p>`:''}<p class="native-request-error" role="status"></p></article>`).join('');}
+function watchNativeQuestions(ticket,dialog){
+  clearNativeQuestions();const epoch=nativeQuestionEpoch,guard=captureDialogCompletion(dialog),holder=byId('native-ticket-questions');if(!holder)return;
+  let signature='';
+  async function poll(){if(epoch!==nativeQuestionEpoch||!guard.current())return;
+    try{const rows=localSessions.filter(row=>row.ticketId===ticket.id&&row.harness==='codex');const groups=await Promise.all(rows.map(async row=>({row,...await api('getSessionRequests',{id:row.id})})));if(epoch!==nativeQuestionEpoch||!guard.current())return;holder.querySelector('.native-capture-error')?.remove();const next=JSON.stringify(groups);if(next!==signature){const editing=holder.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select,.choice-button');if(!editing){signature=next;holder.innerHTML=groups.map(group=>`<section data-native-session="${escapeHTML(group.row.id)}">${group.gap?'<p>Earlier native question history is outside retention.</p>':''}${nativeRequestsHTML(group.items)}</section>`).join('');bindNativeReplies(holder);}}
+    }catch(error){if(guard.current()&&!error.staleInteraction){let status=holder.querySelector('.native-capture-error');if(!status){status=document.createElement('p');status.className='native-capture-error';status.setAttribute('role','status');holder.append(status);}status.textContent=error.message;}}
+    finally{if(epoch===nativeQuestionEpoch&&guard.current())nativeQuestionTimer=setTimeout(poll,700);}
+  }
+  dialog.addEventListener('close',clearNativeQuestions,{once:true});poll();
+}
+function bindNativeReplies(holder){
+  holder.querySelectorAll('[data-native-request]').forEach(article=>{
+    const operationId=crypto.randomUUID();let sending=false;
+    async function send(decision){if(sending)return;sending=true;const buttons=[...article.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+      try{const answers={};article.querySelectorAll('[data-native-answer]').forEach(input=>{let value=input.value;if(value==='@other')value=[...article.querySelectorAll('[data-native-other]')].find(other=>other.dataset.nativeOther===input.dataset.nativeAnswer)?.value||'';if(!value.trim())throw new Error('Complete every question.');answers[input.dataset.nativeAnswer]={answers:[value]};});const response=await api('respondToAgent',{id:article.closest('[data-native-session]').dataset.nativeSession,requestId:article.dataset.nativeRequest,operationId,...(decision?{decision}:{answers})});if(article.isConnected)article.querySelector('.native-request-error').textContent=response.state==='delivered'?'Waiting for native resolution…':'Delivery is uncertain. Inspect the terminal before another response.';
+      }catch(error){if(article.isConnected&&!error.staleInteraction)article.querySelector('.native-request-error').textContent=error.message;}
+      finally{sending=false;buttons.forEach(b=>{if(b.isConnected)b.disabled=false;});}
+    }
+    article.querySelector('[data-native-send]')?.addEventListener('click',()=>send(''));article.querySelectorAll('[data-native-decision]').forEach(button=>button.onclick=()=>send(button.dataset.nativeDecision));
+  });
+}

@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codex", default="codex")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--export-schemas", type=Path, help="Copy generated schemas to a new owned directory")
     args = parser.parse_args()
     executable = shutil.which(args.codex)
     if not executable:
@@ -26,6 +27,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="teleport-codex-schema-") as temporary:
         run("app-server", "generate-json-schema", "--experimental", "--out", temporary)
         paths = sorted(Path(temporary).rglob("*.json"))
+        if args.export_schemas:
+            shutil.copytree(temporary, args.export_schemas)
         schemas = {}
         digest = hashlib.sha256()
         methods = set()
@@ -52,7 +55,7 @@ def main():
             "methods": sorted(methods), "inspectedSchemas": interesting,
             "verified": ["installed version", "local experimental JSON Schema generation"],
             "managedExecutionEnabled": False,
-            "unverified": ["fresh central authorization before every protected command including native automatic allows", "durable owned process and command recovery", "safe tool-result continuation without uncertain replay", "read-only Review filesystem enforcement", "live provider acceptance (separate authorization required)"],
+            "unverified": ["central per-command enforcement for future centrally enforced mode (not required by trusted native-local mode)", "native Codex owned process and command recovery", "safe tool-result continuation without uncertain replay", "read-only Review filesystem enforcement", "live provider acceptance (separate authorization required)"],
         }
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:

@@ -41,6 +41,7 @@ type Status struct {
 	Next       int64      `json:"next"`
 }
 type Launch struct {
+	Native     bool              `json:"native,omitempty"`
 	Generation string            `json:"generation"`
 	ID         string            `json:"id"`
 	LaunchID   string            `json:"launchId"`
@@ -57,27 +58,32 @@ type InputReceipt struct {
 	Written  int    `json:"written"`
 }
 type Request struct {
-	Operation  string  `json:"operation"`
-	ID         string  `json:"id,omitempty"`
-	LaunchID   string  `json:"launchId,omitempty"`
-	Generation string  `json:"generation,omitempty"`
-	Launch     *Launch `json:"launch,omitempty"`
-	Cursor     int64   `json:"cursor,omitempty"`
-	Sequence   int64   `json:"sequence,omitempty"`
-	Data       []byte  `json:"data,omitempty"`
-	Cols       uint16  `json:"cols,omitempty"`
-	Rows       uint16  `json:"rows,omitempty"`
+	NativeEvent *NativeEvent `json:"nativeEvent,omitempty"`
+	NativeReply *NativeReply `json:"nativeReply,omitempty"`
+	Operation   string       `json:"operation"`
+	ID          string       `json:"id,omitempty"`
+	LaunchID    string       `json:"launchId,omitempty"`
+	Generation  string       `json:"generation,omitempty"`
+	Launch      *Launch      `json:"launch,omitempty"`
+	Cursor      int64        `json:"cursor,omitempty"`
+	Sequence    int64        `json:"sequence,omitempty"`
+	Data        []byte       `json:"data,omitempty"`
+	Cols        uint16       `json:"cols,omitempty"`
+	Rows        uint16       `json:"rows,omitempty"`
 }
 type Response struct {
-	Generation string        `json:"generation,omitempty"`
-	Status     *Status       `json:"status,omitempty"`
-	Items      []Status      `json:"items,omitempty"`
-	Receipt    *InputReceipt `json:"receipt,omitempty"`
-	Data       []byte        `json:"data,omitempty"`
-	Cursor     int64         `json:"cursor"`
-	Next       int64         `json:"next"`
-	Gap        bool          `json:"gap"`
-	Error      string        `json:"error,omitempty"`
+	RequestsGap   bool            `json:"requestsGap"`
+	Requests      []NativeRequest `json:"requests,omitempty"`
+	NativeReceipt *NativeReceipt  `json:"nativeReceipt,omitempty"`
+	Generation    string          `json:"generation,omitempty"`
+	Status        *Status         `json:"status,omitempty"`
+	Items         []Status        `json:"items,omitempty"`
+	Receipt       *InputReceipt   `json:"receipt,omitempty"`
+	Data          []byte          `json:"data,omitempty"`
+	Cursor        int64           `json:"cursor"`
+	Next          int64           `json:"next"`
+	Gap           bool            `json:"gap"`
+	Error         string          `json:"error,omitempty"`
 }
 type configuration struct {
 	Protocol int    `json:"protocol"`

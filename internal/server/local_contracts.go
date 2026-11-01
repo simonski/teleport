@@ -1,12 +1,15 @@
 package server
 
 import "teleport/internal/app"
+import "teleport/internal/localruntime"
 
 func init() {
 	entries := []struct {
 		name, action, summary string
 		input, output         any
 	}{
+		{"getSessionRequests", "ACT-1015", "Read exact native pending requests and retained replies", app.NativeRequestsInput{}, app.NativeRequestPage{}},
+		{"respondToAgent", "ACT-1015", "Answer an exact native request without human ticket approval", app.NativeResponseInput{}, localruntime.NativeReceipt{}},
 		{"getLocalHarnesses", "ACT-1009", "Discover verified local harness choices without starting execution", struct{}{}, app.LocalHarnesses{}},
 		{"listSessions", "ACT-1002", "Read authorized session identities without launching", app.ListInput{}, app.LocalSessionPage{}},
 		{"openConsoleSession", "ACT-1009", "Explicitly start a private free harness in an owned console worktree", app.OpenLocalSessionInput{}, app.LocalSessionInfo{}},

@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--postgres-bin", type=Path)
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--native-only", action="store_true", help="Run only the native fixture against a fresh database")
     args = parser.parse_args()
     candidates = [args.postgres_bin]
     if shutil.which("initdb"):
@@ -34,7 +35,10 @@ def main():
         os.chmod(folder, 0o700)
         data = folder / "data"
         def pg(name, *arguments):
-            return subprocess.run([str(binary / name), *map(str, arguments)], env=environment, check=True, capture_output=True, text=True, timeout=60)
+            result = subprocess.run([str(binary / name), *map(str, arguments)], env=environment, capture_output=True, text=True, timeout=60)
+            if result.returncode:
+                raise RuntimeError(f"PostgreSQL {name} failed: {result.stderr.strip()}")
+            return result
         print(pg("postgres", "--version").stdout.strip(), flush=True)
         pg("initdb", "-D", data, "--auth=trust", "--username=teleport", "--encoding=UTF8", "--no-locale")
         options = "-c listen_addresses='' -c unix_socket_permissions=0700 -c unix_socket_directories=" + shlex.quote(temporary)
@@ -44,21 +48,29 @@ def main():
             started = True
             connection = "postgresql://teleport@/postgres?" + urlencode({"host": temporary, "sslmode": "disable"})
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
-            subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=checked, check=True)
-            pg("createdb", "--host", temporary, "--username", "teleport", "smoke")
-            smoke_url = "postgresql://teleport@/smoke?" + urlencode({"host": temporary, "sslmode": "disable"})
+            if not args.native_only:
+                subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=checked, check=True)
             subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
-            command = ["python3", "-B", "tools/smoke.py", "--database", smoke_url]
+            if not args.native_only:
+                pg("createdb", "--host", temporary, "--username", "teleport", "smoke")
+                smoke_url = "postgresql://teleport@/smoke?" + urlencode({"host": temporary, "sslmode": "disable"})
+                command = ["python3", "-B", "tools/smoke.py", "--database", smoke_url]
+                if args.browser:
+                    command.append("--browser")
+                subprocess.run(command, cwd=ROOT, env=environment, check=True)
+                pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
+                terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
+                terminal_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", terminal_url]
+                if args.browser:
+                    terminal_command.append("--browser")
+                subprocess.run(terminal_command, cwd=ROOT, env=environment, check=True)
+            pg("createdb", "--host", temporary, "--username", "teleport", "native_terminal")
+            native_url = "postgresql://teleport@/native_terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
+            native_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", native_url, "--native-fixture"]
             if args.browser:
-                command.append("--browser")
-            subprocess.run(command, cwd=ROOT, env=environment, check=True)
-            pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
-            terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
-            terminal_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", terminal_url]
-            if args.browser:
-                terminal_command.append("--browser")
-            subprocess.run(terminal_command, cwd=ROOT, env=environment, check=True)
-            print("PASS: PostgreSQL isolated domain/race suite and real binary smoke", flush=True)
+                native_command.append("--browser")
+            subprocess.run(native_command, cwd=ROOT, env=environment, check=True)
+            print("PASS: PostgreSQL native protocol/runtime fixture" if args.native_only else "PASS: PostgreSQL isolated domain/race suite and real binary smoke", flush=True)
         finally:
             if started:
                 pg("pg_ctl", "-D", data, "-m", "fast", "-w", "stop")

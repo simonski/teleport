@@ -29,7 +29,14 @@ type receipt struct {
 	Fingerprint string `json:"fingerprint"`
 }
 type entry struct {
-	ReplayGap bool `json:"replayGap"`
+	Native           bool                           `json:"native,omitempty"`
+	NativeKey        string                         `json:"nativeKey,omitempty"`
+	NativeReleased   bool                           `json:"nativeReleased,omitempty"`
+	NativeThreadID   string                         `json:"nativeThreadId,omitempty"`
+	NativeRequests   []NativeRequest                `json:"nativeRequests,omitempty"`
+	NativeHistoryGap bool                           `json:"nativeHistoryGap,omitempty"`
+	NativeReceipts   map[string]nativeReceiptRecord `json:"nativeReceipts,omitempty"`
+	ReplayGap        bool                           `json:"replayGap"`
 	Status
 	Fingerprint  string            `json:"fingerprint"`
 	LastInput    int64             `json:"lastInput"`
@@ -361,6 +368,12 @@ func (d *daemon) call(in Request) Response {
 	status := e.Status
 	out := Response{Status: &status, Generation: d.generation}
 	switch in.Operation {
+	case "nativeEvent":
+		return d.nativeEvent(e, in.NativeEvent)
+	case "nativeRequests":
+		return Response{Requests: append([]NativeRequest{}, e.NativeRequests...), RequestsGap: e.NativeHistoryGap}
+	case "nativeReply":
+		return d.nativeReply(e, in.NativeReply)
 	case "read":
 		if in.Cursor < 0 || in.Cursor > e.Next && !e.ReplayGap && e.State != "unknown" {
 			return Response{Error: "invalid_cursor"}
@@ -401,6 +414,11 @@ func (d *daemon) call(in Request) Response {
 		if d.persist() != nil {
 			e.State = "running"
 			return Response{Error: "stop_intent_persistence_failed"}
+		}
+		if e.Native {
+			go d.stopNative(e.ID, e.NativeKey)
+			status = e.Status
+			return out
 		}
 		if err := d.killOwnedGroup(e); err != nil {
 			e.ErrorCode = "stop_failed"
@@ -444,6 +462,12 @@ func (d *daemon) launch(in *Launch) Response {
 	}
 	e := &entry{Status: Status{ID: in.ID, LaunchID: in.LaunchID, Generation: d.generation, State: "starting", Cols: in.Cols, Rows: in.Rows, StartedAt: time.Now().UTC()}, Fingerprint: fingerprint, Receipts: map[int64]receipt{}}
 	d.entries[in.ID] = e
+	if in.Native {
+		e.Native = true
+		e.NativeKey = identity()
+		e.NativeReceipts = map[string]nativeReceiptRecord{}
+		e.Attention = "Native setup required"
+	}
 	if d.persist() != nil {
 		delete(d.entries, in.ID)
 		return Response{Error: "launch_intent_persistence_failed"}
@@ -458,6 +482,9 @@ func (d *daemon) launch(in *Launch) Response {
 			return Response{Error: "invalid_environment"}
 		}
 		cmd.Env = append(cmd.Env, key+"="+value)
+	}
+	if in.Native {
+		cmd.Env = append(cmd.Env, "TELEPORT_NATIVE_KEY="+e.NativeKey)
 	}
 	terminal, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: in.Cols, Rows: in.Rows})
 	if err != nil {
@@ -587,6 +614,11 @@ func (d *daemon) collect(e *entry) {
 	_ = e.pty.Close()
 	e.pty = nil
 	if !waitVerified {
+		return
+	}
+	if e.Native && !e.NativeReleased {
+		e.State, e.ErrorCode = "unknown", "native_exit_unverified"
+		_ = d.persist()
 		return
 	}
 	now := time.Now().UTC()

@@ -40,6 +40,15 @@ func modelCandidate(c gitwork.Candidate) model.GitCandidate {
 func (s *Service) gitCall(ctx context.Context, token, operation string, raw json.RawMessage) (any, error) {
 	s.gitMu.Lock()
 	defer s.gitMu.Unlock()
+	st, readErr := s.db.Read(ctx)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if a, err := actor(st, token); err != nil {
+		return nil, err
+	} else if a.ServiceSessionID != "" {
+		return nil, failure(403, "service_scope", "Managed context credentials cannot deliver or approve code")
+	}
 	if operation == "configureLocalRepository" {
 		return s.configureRepository(ctx, token, raw)
 	}

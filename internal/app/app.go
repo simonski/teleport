@@ -79,6 +79,7 @@ func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
 }
 
 type Service struct {
+	localEndpoint  string
 	localMu        sync.Mutex
 	localClient    *localruntime.Client
 	fixtureHarness bool
@@ -98,6 +99,9 @@ type LoginResult struct {
 }
 
 func actor(st *model.State, token string) (model.Account, error) {
+	if scoped, ok := localActor(st, token); ok {
+		return scoped, nil
+	}
 	session, ok := st.Sessions[digest(token)]
 	if !ok || token == "" || time.Now().After(session.Expires) {
 		return model.Account{}, failure(401, "unauthenticated", "Sign in to continue")
@@ -115,6 +119,15 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		raw = json.RawMessage(`{}`)
 	}
 	if operation == "login" {
+		if token != "" {
+			snapshot, err := s.db.Read(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := localActor(snapshot, token); ok {
+				return nil, failure(403, "agent_scope", "Managed context credentials cannot sign in as a human")
+			}
+		}
 		return s.login(ctx, raw)
 	}
 	if localOperation(operation) {
@@ -135,6 +148,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			return false, err
 		}
 		collections(st)
+		if a.ServiceSessionID != "" && !contains([]string{"getTicket", "listTickets", "listProjects", "listWorkflows", "getWorkflow", "getTicketAgreements", "listTicketHistory"}, operation) {
+			return false, failure(403, "agent_scope", "This managed credential permits scoped context reads only")
+		}
 		switch operation {
 		case "getSession":
 			result = map[string]any{"account": publicAccount(a), "installationId": st.InstallationID, "revision": st.Revision, "settings": st.Settings, "preferences": personalPreferences(st, a), "welcomeSetup": welcomeSetup(st, a)}

@@ -24,10 +24,10 @@ type GitTaskInput struct {
 }
 
 func ownedWorktree(w model.Worktree) gitwork.Worktree {
-	return gitwork.Worktree{Owner: w.Owner, TicketID: w.TicketID, Path: w.Path, Branch: w.Branch, Base: w.Base}
+	return gitwork.Worktree{Owner: w.Owner, TicketID: w.TicketID, Path: w.Path, Branch: w.Branch, Base: w.Base, ConsoleID: w.ConsoleID}
 }
 func modelWorktree(w gitwork.Worktree) model.Worktree {
-	return model.Worktree{Owner: w.Owner, TicketID: w.TicketID, Path: w.Path, Branch: w.Branch, Base: w.Base}
+	return model.Worktree{Owner: w.Owner, TicketID: w.TicketID, Path: w.Path, Branch: w.Branch, Base: w.Base, ConsoleID: w.ConsoleID}
 }
 func gitCandidate(c model.GitCandidate) gitwork.Candidate {
 	return gitwork.Candidate{Base: c.Base, Commit: c.Commit, Diff: c.Diff, ChecksPassed: c.ChecksPassed, CheckOutput: c.CheckOutput, Fingerprint: c.Fingerprint}
@@ -298,6 +298,11 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 		for _, t := range st.Tickets {
 			if t.ProjectID == p.ID && (busy(t) || t.Delivery != nil) {
 				return false, failure(409, "migration_required", "Existing execution/artifacts require a separate stopped host migration")
+			}
+		}
+		for _, session := range st.LocalSessions {
+			if session.ProjectID == p.ID && (activeLocal(session) || session.Worktree.Path != "") {
+				return false, failure(409, "migration_required", "Retained harness worktrees and unresolved sessions require explicit host migration")
 			}
 		}
 		version := int64(1)

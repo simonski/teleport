@@ -16,6 +16,7 @@ def main():
     tests = sorted((ROOT / "internal/server/webtests").glob("*_test.cjs"))
     subprocess.run([node, "--test", *map(str, tests)], check=True)
     subprocess.run(["python3", "-B", str(ROOT / "tools/vendor_web.py"), "--verify"], check=True)
+    subprocess.run(["python3", "-B", str(ROOT / "tools/vendor_terminal.py"), "--verify"], check=True)
     print(f"PASS: {len(sources)} browser source syntax checks")
 
 

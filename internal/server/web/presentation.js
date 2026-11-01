@@ -11,6 +11,7 @@ function applyAppearance(p) {
 function clearPresentation() {
   if (typeof dismissOverlays === 'function') dismissOverlays();
   if (typeof resetWelcome === 'function') resetWelcome();
+  if (typeof resetTerminals === 'function') resetTerminals();
   leaveGraph(); graphCameras.clear(); graphData=null;graphPending={};graphQuery='';graphKind='';calendarState={date:'',period:'default',duePeriod:'',query:''};calendarDirty=false;calendarEpoch++;selected=null;workflowMap={};flow=null;flows=[];flowDirty=false;flowDrag=null;resetShift();projects=[];tickets=[];ideas=[];root.replaceChildren();notice('');session=null;preferences=null;preferencesActor='';initialNavigation=true;appearanceDirty=false;navigationDirty=false;
   clearTimeout(preferenceTimer);preferenceDraft={};preferenceError='';preferenceConflict=false;preferenceSaving=false;
   document.documentElement.removeAttribute('data-style');document.documentElement.removeAttribute('data-mode');

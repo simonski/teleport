@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"teleport/internal/app"
+	"teleport/internal/localruntime"
 	"teleport/internal/server"
 	"teleport/internal/store"
 )
@@ -47,6 +49,27 @@ func run(args []string) error {
 		return nil
 	}
 	command := args[0]
+	if command == "_session-daemon" {
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		root := flags.String("runtime-dir", "", "owned local runtime directory")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		return localruntime.Run(ctx, *root)
+	}
+	if command == "_terminal-fixture" {
+		fmt.Println("teleport terminal fixture · no model")
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			if scanner.Text() == "exit" {
+				return nil
+			}
+			fmt.Println("received:", scanner.Text())
+		}
+		return scanner.Err()
+	}
 	if command == "version" {
 		fmt.Println(version)
 		return nil
@@ -59,6 +82,8 @@ func run(args []string) error {
 	dbPath := flags.String("db", env("TELEPORT_DB", filepath.Join(home, ".teleport", "database.db")), "SQLite path or PostgreSQL URL (init/serve only)")
 	addr := flags.String("addr", "localhost:9999", "listen address")
 	publicHost := flags.String("public-host", "", "explicit additional trusted browser hostname (no scheme or path)")
+	runtimeRoot := flags.String("runtime-dir", env("TELEPORT_RUNTIME_DIR", ""), "private local session daemon state directory (serve only)")
+	terminalFixture := flags.Bool("enable-terminal-fixture", false, "enable the no-model development terminal fixture (serve only)")
 	endpoint := flags.String("server", env("TELEPORT_SERVER", "http://localhost:9999"), "server URL")
 	config := flags.String("config", env("TELEPORT_CONFIG", filepath.Join(home, ".teleport", "client.json")), "client credential file")
 	data := flags.String("data", "{}", "JSON request")
@@ -89,6 +114,14 @@ func run(args []string) error {
 			return err
 		}
 		service := app.New(db)
+		if *runtimeRoot == "" {
+			*runtimeRoot = filepath.Join(home, ".teleport", "runtime", initialState.InstallationID[:16])
+		}
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		service.ConfigureLocalRuntime(*runtimeRoot, executable, *terminalFixture)
 		if strings.ContainsAny(*publicHost, "/:@?# ") {
 			return errors.New("--public-host must be a bare hostname")
 		}
@@ -103,6 +136,9 @@ func run(args []string) error {
 				case <-stopCtx.Done():
 					return
 				case <-ticker.C:
+					if err := service.PumpLocal(stopCtx); err != nil && stopCtx.Err() == nil {
+						slog.Error("local runtime reconciliation failed", "error", err)
+					}
 					if err := service.PumpDemo(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("demo scheduler failed", "error", err)
 					}

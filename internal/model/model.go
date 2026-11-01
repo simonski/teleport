@@ -55,29 +55,32 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
-	WelcomeSetups   map[string]WelcomeSetup   `json:"welcomeSetups"`
-	GoalReviews     map[int64][]GoalReview    `json:"goalReviews"`
-	GraphLayouts    map[string]GraphLayout    `json:"graphLayouts"`
-	Preferences     map[string]Preferences    `json:"preferences"`
-	NextIdeaID      int64                     `json:"nextIdeaId"`
-	Ideas           map[string]Idea           `json:"ideas"`
-	IdeaHistory     map[string][]IdeaRevision `json:"ideaHistory"`
-	IdeaProposals   map[string]IdeaProposal   `json:"ideaProposals"`
-	IdeaAcceptances map[string]IdeaAcceptance `json:"ideaAcceptances"`
-	IdeaLinks       []IdeaLink                `json:"ideaLinks"`
-	Schema          int                       `json:"schema"`
-	InstallationID  string                    `json:"installationId"`
-	Revision        int64                     `json:"revision"`
-	Accounts        map[string]Account        `json:"accounts"`
-	Sessions        map[string]Session        `json:"sessions"`
-	Settings        Settings                  `json:"settings"`
-	Workflows       map[string]Workflow       `json:"workflows"`
-	NextTicketID    int64                     `json:"nextTicketId"`
-	NextProjectID   int64                     `json:"nextProjectId"`
-	Projects        map[int64]Project         `json:"projects"`
-	Tickets         map[int64]Ticket          `json:"tickets"`
-	History         map[int64][]Revision      `json:"history"`
-	Receipts        map[string]Receipt        `json:"receipts"`
+	NextLocalSessionID int64                     `json:"nextLocalSessionId"`
+	LocalSessions      map[string]LocalSession   `json:"localSessions"`
+	LocalInputs        map[string]LocalInput     `json:"localInputs"`
+	WelcomeSetups      map[string]WelcomeSetup   `json:"welcomeSetups"`
+	GoalReviews        map[int64][]GoalReview    `json:"goalReviews"`
+	GraphLayouts       map[string]GraphLayout    `json:"graphLayouts"`
+	Preferences        map[string]Preferences    `json:"preferences"`
+	NextIdeaID         int64                     `json:"nextIdeaId"`
+	Ideas              map[string]Idea           `json:"ideas"`
+	IdeaHistory        map[string][]IdeaRevision `json:"ideaHistory"`
+	IdeaProposals      map[string]IdeaProposal   `json:"ideaProposals"`
+	IdeaAcceptances    map[string]IdeaAcceptance `json:"ideaAcceptances"`
+	IdeaLinks          []IdeaLink                `json:"ideaLinks"`
+	Schema             int                       `json:"schema"`
+	InstallationID     string                    `json:"installationId"`
+	Revision           int64                     `json:"revision"`
+	Accounts           map[string]Account        `json:"accounts"`
+	Sessions           map[string]Session        `json:"sessions"`
+	Settings           Settings                  `json:"settings"`
+	Workflows          map[string]Workflow       `json:"workflows"`
+	NextTicketID       int64                     `json:"nextTicketId"`
+	NextProjectID      int64                     `json:"nextProjectId"`
+	Projects           map[int64]Project         `json:"projects"`
+	Tickets            map[int64]Ticket          `json:"tickets"`
+	History            map[int64][]Revision      `json:"history"`
+	Receipts           map[string]Receipt        `json:"receipts"`
 }
 
 type Project struct {
@@ -219,11 +222,12 @@ type RepositoryBinding struct {
 	Version     int64  `json:"version"`
 }
 type Worktree struct {
-	Owner    string `json:"owner"`
-	TicketID int64  `json:"ticketId"`
-	Path     string `json:"path"`
-	Branch   string `json:"branch"`
-	Base     string `json:"base"`
+	ConsoleID string `json:"consoleId,omitempty"`
+	Owner     string `json:"owner"`
+	TicketID  int64  `json:"ticketId"`
+	Path      string `json:"path"`
+	Branch    string `json:"branch"`
+	Base      string `json:"base"`
 }
 type GitCandidate struct {
 	Base         string `json:"base"`

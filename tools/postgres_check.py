@@ -52,6 +52,12 @@ def main():
             if args.browser:
                 command.append("--browser")
             subprocess.run(command, cwd=ROOT, env=environment, check=True)
+            pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
+            terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
+            terminal_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", terminal_url]
+            if args.browser:
+                terminal_command.append("--browser")
+            subprocess.run(terminal_command, cwd=ROOT, env=environment, check=True)
             print("PASS: PostgreSQL isolated domain/race suite and real binary smoke", flush=True)
         finally:
             if started:

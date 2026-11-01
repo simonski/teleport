@@ -23,11 +23,12 @@ type Binding struct {
 	StorageRoot string `json:"storageRoot"`
 }
 type Worktree struct {
-	Owner    string `json:"owner"`
-	TicketID int64  `json:"ticketId"`
-	Path     string `json:"path"`
-	Branch   string `json:"branch"`
-	Base     string `json:"base"`
+	ConsoleID string `json:"consoleId,omitempty"`
+	Owner     string `json:"owner"`
+	TicketID  int64  `json:"ticketId"`
+	Path      string `json:"path"`
+	Branch    string `json:"branch"`
+	Base      string `json:"base"`
 }
 type Candidate struct {
 	Base         string `json:"base"`
@@ -158,13 +159,17 @@ func validateBinding(ctx context.Context, b Binding) error {
 	return nil
 }
 func manifestPath(b Binding, w Worktree) string {
+	if w.ConsoleID != "" {
+		return filepath.Join(b.StorageRoot, ".ownership", w.Owner+"-console-"+w.ConsoleID+".json")
+	}
 	return filepath.Join(b.StorageRoot, ".ownership", w.Owner+"-"+strconv.FormatInt(w.TicketID, 10)+".json")
 }
 func validateWork(ctx context.Context, b Binding, w Worktree) error {
 	if err := validateBinding(ctx, b); err != nil {
 		return err
 	}
-	if !regexp.MustCompile(`^[a-z0-9-]{8,80}$`).MatchString(w.Owner) || w.TicketID < 1 || !contained(b.StorageRoot, w.Path) {
+	validIdentity := w.TicketID > 0 && w.ConsoleID == "" || w.TicketID == 0 && regexp.MustCompile(`^H[1-9][0-9]{0,15}$`).MatchString(w.ConsoleID)
+	if !regexp.MustCompile(`^[a-z0-9-]{8,80}$`).MatchString(w.Owner) || !validIdentity || !contained(b.StorageRoot, w.Path) {
 		return errors.New("invalid worktree identity")
 	}
 	actualPath, err := potentialPath(w.Path)
@@ -214,14 +219,27 @@ func validateWork(ctx context.Context, b Binding, w Worktree) error {
 	return nil
 }
 func Prepare(ctx context.Context, b Binding, owner string, ticketID int64) (Worktree, error) {
+	return prepare(ctx, b, owner, ticketID, "")
+}
+func PrepareConsole(ctx context.Context, b Binding, owner, consoleID string) (Worktree, error) {
+	return prepare(ctx, b, owner, 0, consoleID)
+}
+func Verify(ctx context.Context, b Binding, w Worktree) error { return validateWork(ctx, b, w) }
+func prepare(ctx context.Context, b Binding, owner string, ticketID int64, consoleID string) (Worktree, error) {
 	if err := validateBinding(ctx, b); err != nil {
 		return Worktree{}, err
 	}
-	if !regexp.MustCompile(`^[a-z0-9-]{8,80}$`).MatchString(owner) || ticketID < 1 {
+	validIdentity := ticketID > 0 && consoleID == "" || ticketID == 0 && regexp.MustCompile(`^H[1-9][0-9]{0,15}$`).MatchString(consoleID)
+	if !regexp.MustCompile(`^[a-z0-9-]{8,80}$`).MatchString(owner) || !validIdentity {
 		return Worktree{}, errors.New("invalid owner or ticket identity")
 	}
 	name := owner + "-" + strconv.FormatInt(ticketID, 10)
 	w := Worktree{Owner: owner, TicketID: ticketID, Path: filepath.Join(b.StorageRoot, "tk-"+name), Branch: "tk/" + owner + "/ticket-" + strconv.FormatInt(ticketID, 10)}
+	if consoleID != "" {
+		w.ConsoleID = consoleID
+		w.Path = filepath.Join(b.StorageRoot, "tk-"+owner+"-console-"+consoleID)
+		w.Branch = "tk/" + owner + "/console-" + consoleID
+	}
 	file := manifestPath(b, w)
 	resolved, err := potentialPath(file)
 	if err != nil || !contained(b.StorageRoot, resolved) {
@@ -229,7 +247,7 @@ func Prepare(ctx context.Context, b Binding, owner string, ticketID int64) (Work
 	}
 	if data, err := os.ReadFile(file); err == nil {
 		var saved Worktree
-		if json.Unmarshal(data, &saved) != nil || saved.Owner != owner || saved.TicketID != ticketID || saved.Path != w.Path || saved.Branch != w.Branch {
+		if json.Unmarshal(data, &saved) != nil || saved.Owner != owner || saved.TicketID != ticketID || saved.ConsoleID != consoleID || saved.Path != w.Path || saved.Branch != w.Branch {
 			return Worktree{}, errors.New("existing ownership manifest conflicts")
 		}
 		w = saved

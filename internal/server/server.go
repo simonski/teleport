@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -109,11 +111,29 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 		write(w, 200, result)
 	})
 	web, _ := fs.Sub(assets, "web")
+	index := func(w http.ResponseWriter, r *http.Request) {
+		var entropy [24]byte
+		if _, err := rand.Read(entropy[:]); err != nil {
+			http.Error(w, "Page initialization failed", 500)
+			return
+		}
+		nonce := base64.RawURLEncoding.EncodeToString(entropy[:])
+		content, err := assets.ReadFile("web/index.html")
+		if err != nil {
+			http.Error(w, "Page unavailable", 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", contentPolicy(nonce))
+		fmt.Fprint(w, strings.Replace(string(content), "</head>", `<meta name="teleport-style-nonce" content="`+nonce+`"></head>`, 1))
+	}
+	mux.HandleFunc("GET /{$}", index)
+	mux.HandleFunc("GET /index.html", index)
 	mux.Handle("GET /", http.FileServer(http.FS(web)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", contentPolicy(""))
 		w.Header().Set("Cache-Control", "no-store")
 		if !trustedHost(r.Host, configuredHosts) {
 			writeError(w, &app.Error{Status: 421, Code: "untrusted_host", Message: "Request Host is not configured for this server"})
@@ -121,6 +141,13 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+func contentPolicy(nonce string) string {
+	style := "style-src 'self'"
+	if nonce != "" {
+		style += " 'nonce-" + nonce + "'"
+	}
+	return "default-src 'self'; script-src 'self'; " + style + "; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 }
 func trustedHost(host string, configured []string) bool {
 	if hostname, _, err := net.SplitHostPort(host); err == nil {

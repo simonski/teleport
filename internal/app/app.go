@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"teleport/internal/localruntime"
 	"teleport/internal/model"
 	"teleport/internal/store"
 )
@@ -78,12 +79,15 @@ func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
 }
 
 type Service struct {
-	controllerID string
-	gitMu        sync.Mutex
-	db           *store.Store
-	mu           sync.Mutex
-	failures     int
-	blockedUntil time.Time
+	localMu        sync.Mutex
+	localClient    *localruntime.Client
+	fixtureHarness bool
+	controllerID   string
+	gitMu          sync.Mutex
+	db             *store.Store
+	mu             sync.Mutex
+	failures       int
+	blockedUntil   time.Time
 }
 
 func New(db *store.Store) *Service { return &Service{db: db, controllerID: randomID()} }
@@ -112,6 +116,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	}
 	if operation == "login" {
 		return s.login(ctx, raw)
+	}
+	if localOperation(operation) {
+		return s.localCall(ctx, token, operation, raw)
 	}
 	if operation == "configureLocalRepository" || operation == "prepareTaskWorktree" || operation == "recordTaskDelivery" || operation == "approveTicket" || operation == "reconcileGitOperation" {
 		return s.gitCall(ctx, token, operation, raw)

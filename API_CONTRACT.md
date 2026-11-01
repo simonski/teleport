@@ -16,6 +16,12 @@ Settings/System are not navigation destinations. Legacy stored Settings sign-in 
 
 The browser renders only usable views in saved order. Drag and Alt+Shift+Arrow reordering move stable view IDs; surrounding tabs animate unless reduced motion is requested. Pointer cancellation/Escape rolls back an unfinished drag without saving. Side collapse and position changes persist independently of current view/project. Apply layout/order by moving existing navigation nodes, preserving content, focus, active terminals and unsaved fields. Defer remote layout changes while a foreground interaction owns input; own explicit edits may preview their pending values. Actor changes clear pending navigation state. Save conflicts retain the local draft and expose Retry rather than silently overwriting another device.
 
+### Ticket creation and board focus
+
+New and N share one creation path: Goals selects Goal, Epics selects Epic, other ticket views select Task. Todos selects human intent; Board selects human intent only in its Human lens, otherwise agent intent. Explicit type selection remains editable. Ideas keeps its separate creation path. Opening/cancelling a dialog makes no domain mutation.
+
+Board/Todos arrows operate on visible ticket buttons when focus is in the board or the document body. Up/down move within the current lane without wrapping; left/right skip empty lanes and preserve the row index, clamped to the destination lane. With no focused ticket, an arrow focuses the first visible ticket. E opens the currently focused ticket through `getTicket` and the existing versioned editor, including read-only inspection for Viewers. Header controls, text/contenteditable input, modifiers, composition, foreground menus/dialogs and terminals retain their own keys. Polling restores the same ticket's focus only while actor, load generation and input ownership remain current; a disappeared ticket never redirects focus to another record. These controls never move ticket state or start execution.
+
 ## Transport
 
 HTTP protocol 0.1.0. Domain calls use `POST /api/tools/OPERATION` with a single JSON object, `Content-Type: application/json`, and a complete body limit of 1 MiB. Authentication uses `Authorization: Bearer TOKEN` or the HttpOnly SameSite=Strict session cookie. Browser origins must match the server. Sessions expire after 12 hours and are stored as token hashes. Production TLS termination must preserve trusted transport semantics; this phase binds localhost by default.

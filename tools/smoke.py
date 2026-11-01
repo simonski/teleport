@@ -9,6 +9,7 @@ import tempfile
 import time
 import urllib.request
 from navigation_browser import verify_navigation
+from ticket_browser import verify_ticket_keyboard
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,9 +18,10 @@ def main():
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--shell-only", action="store_true", help="Verify only the shared shell and profile popups; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
+    parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.shell_only or args.navigation_only) and not args.browser:
+    if (args.shell_only or args.navigation_only or args.tickets_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
         folder = Path(temporary)
@@ -164,9 +166,13 @@ def main():
                     if args.shell_only:
                         print("PASS: real build footer, compact desktop/mobile shell, separate profile popups, exact confirmed system handbrake and console viewers without execution")
                         return
+                    if args.tickets_only:
+                        verify_ticket_keyboard(browser, tk, project["id"])
+                        return
                     verify_navigation(browser, tk, project["id"])
                     if args.navigation_only:
                         return
+                    verify_ticket_keyboard(browser, tk, project["id"])
                     browser("eval", "if(document.querySelector('dialog,[data-view=Settings],#finder-open')||document.body.innerText.includes('Work, in motion'))throw new Error('Obsolete navigation or native dialog');if(!document.querySelector('.wordmark .rocket'))throw new Error('Missing rocket')")
                     browser("click", "#project + .choice-button")
                     browser("press", "ArrowDown")

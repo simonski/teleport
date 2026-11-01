@@ -201,7 +201,7 @@ func openAPI(version string) map[string]any {
 			post["security"] = []any{}
 		}
 	}
-	for _, path := range []string{"/healthz", "/openapi.json", "/api/actions", "/skill.md", "/", "/app.js", "/workspace.js", "/controls.js", "/workflows.js", "/agents.js", "/delivery.js", "/style.css", "/workflows.css", "/agents.css", "/delivery.css", "/shell.js", "/shell.css", "/navigation.js", "/navigation.css"} {
+	for _, path := range []string{"/healthz", "/openapi.json", "/api/actions", "/skill.md", "/", "/app.js", "/workspace.js", "/controls.js", "/workflows.js", "/agents.js", "/delivery.js", "/style.css", "/workflows.css", "/agents.css", "/delivery.css", "/shell.js", "/shell.css", "/navigation.js", "/navigation.css", "/tickets.js"} {
 		paths[path] = map[string]any{"get": map[string]any{"responses": map[string]any{"200": map[string]string{"description": "Public application asset or discovery"}}}}
 	}
 	return map[string]any{"openapi": "3.1.0", "info": map[string]string{"title": "teleport", "version": version}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"session": map[string]string{"type": "apiKey", "in": "cookie", "name": "teleport_session"}, "bearer": map[string]string{"type": "http", "scheme": "bearer"}}}}

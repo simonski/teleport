@@ -18,6 +18,7 @@ function clearPresentation() {
   if (typeof resetNavigation === 'function') resetNavigation();
   if (typeof resetProjectDirectory === 'function') resetProjectDirectory();
   if (typeof dismissTicketMenu === 'function') dismissTicketMenu();
+  if (typeof resetWorkflowPublication === 'function') resetWorkflowPublication();
   leaveGraph(); graphCameras.clear(); graphData=null;graphPending={};graphQuery='';graphKind='';calendarState={date:'',period:'default',duePeriod:'',query:''};calendarDirty=false;calendarEpoch++;selected=null;workflowMap={};flow=null;flows=[];flowDirty=false;flowDrag=null;resetShift();projects=[];tickets=[];ideas=[];root.replaceChildren();notice('');session=null;preferences=null;preferencesActor='';initialNavigation=true;appearanceDirty=false;navigationDirty=false;
   clearTimeout(preferenceTimer);preferenceDraft={};preferenceError='';preferenceConflict=false;preferenceSaving=false;
   document.documentElement.removeAttribute('data-style');document.documentElement.removeAttribute('data-mode');

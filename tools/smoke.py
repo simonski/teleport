@@ -220,6 +220,17 @@ def main():
                     browser("wait", "--fn", "document.querySelector('#preview-result')?.innerText.includes('Todo')")
                     browser("eval", "document.querySelector('#workflow-editor').scrollTop=0")
                     browser("screenshot", "/tmp/teleport-workflow.png")
+                    browser("eval", "if(!document.querySelector('#flow-activate').disabled)throw new Error('Unpublished draft can be selected without publication')")
+                    browser("eval", "{const original=window.fetch;let lose=true;window.fetch=async(...args)=>{const response=await original(...args);if(lose&&String(args[0]).endsWith('/publishWorkflow')){lose=false;throw new Error('Simulated lost publication response');}return response;};}")
+                    browser("click", "#flow-publish")
+                    browser("wait", "--fn", "document.querySelector('#flow-message')?.textContent.includes('Simulated lost publication response')")
+                    browser("click", "#flow-publish")
+                    browser("wait", "--fn", "document.querySelector('#flow-message')?.textContent.includes('Published v-1')")
+                    unchanged = next(item for item in json.loads(tk("listProjects"))["items"] if item["id"] == project["id"])
+                    assert unchanged["humanWorkflow"] == "human@1"
+                    publications = [item for item in json.loads(tk("listWorkflows", "--data", json.dumps({"projectId": project["id"]})))["items"] if item["id"] == draft["id"]]
+                    assert len(publications) == 1 and publications[0]["published"] and publications[0]["version"] == 1
+                    browser("screenshot", "/tmp/teleport-workflow-published.png")
                     browser("click", "#flow-activate")
                     browser("click", '#editor button[type="submit"]')
                     browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")

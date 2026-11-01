@@ -15,6 +15,7 @@ func init() {
 		{"copyWorkflow", "ACT-0703", "Copy a workflow into a private draft", app.CopyWorkflowInput{}, model.Workflow{}},
 		{"draftWorkflow", "ACT-0702", "Start the next draft of a published definition", app.WorkflowKeyInput{}, model.Workflow{}},
 		{"saveWorkflow", "ACT-0702", "Validate and save an expected-version draft", app.SaveWorkflowInput{}, model.Workflow{}},
+		{"publishWorkflow", "ACT-0720", "Publish an exact saved draft without selecting it", app.PublishWorkflowInput{}, model.Workflow{}},
 		{"deleteWorkflow", "ACT-0705", "Delete an exact current draft", app.DeleteWorkflowInput{}, struct {
 			Deleted bool `json:"deleted"`
 		}{}},

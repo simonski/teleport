@@ -422,6 +422,8 @@ func workflowOperations(st *model.State, a model.Account, operation string, raw 
 		source.DraftRevision = 1
 		st.Workflows[workflowKey(source)] = source
 		return source, true, nil
+	case "publishWorkflow":
+		return publishWorkflow(st, a, raw)
 	case "saveWorkflow":
 		var in SaveWorkflowInput
 		if err := parse(raw, &in); err != nil {

@@ -8,12 +8,15 @@ import (
 )
 
 type AgreementBasis struct {
-	CurrentBasis string `json:"currentBasis"`
-	SavedBasis   string `json:"savedBasis"`
-	Stale        bool   `json:"stale"`
-	Criteria     string `json:"criteria"`
+	ReadyBasis    string `json:"readyBasis,omitempty"`
+	ReadyReviewed bool   `json:"readyReviewed"`
+	CurrentBasis  string `json:"currentBasis"`
+	SavedBasis    string `json:"savedBasis"`
+	Stale         bool   `json:"stale"`
+	Criteria      string `json:"criteria"`
 }
 type MarkReadyInput struct {
+	ReadyBasis      string `json:"readyBasis,omitempty"`
 	ID              int64  `json:"id"`
 	ExpectedVersion int64  `json:"expectedVersion"`
 	Basis           string `json:"basis"`
@@ -52,7 +55,11 @@ func agreementOperations(st *model.State, a model.Account, operation string, raw
 			}
 			criteria = t.Refinement.Criteria
 		}
-		return AgreementBasis{CurrentBasis: current, SavedBasis: saved, Stale: current != saved, Criteria: criteria}, false, nil
+		result := AgreementBasis{CurrentBasis: current, SavedBasis: saved, Stale: current != saved, Criteria: criteria, ReadyReviewed: readyReviewed(st, t)}
+		if readyReviewRequired(st, t) {
+			result.ReadyBasis = readyReviewBasis(st, t)
+		}
+		return result, false, nil
 	case "markReady":
 		var in MarkReadyInput
 		if err := parse(raw, &in); err != nil {
@@ -71,6 +78,16 @@ func agreementOperations(st *model.State, a model.Account, operation string, raw
 		t.Refinement.AcceptedBasis = in.Basis
 		t.Refinement.AcceptedBy = a.ID
 		t.Refinement.AcceptedAt = time.Now().UTC()
+		if readyReviewRequired(st, t) {
+			if in.ReadyBasis != readyReviewBasis(st, t) {
+				return nil, false, failure(409, "agreement_stale", "Refresh the exact final readiness review basis")
+			}
+			if a.ServiceRunID != "" || a.ServiceSessionID != "" {
+				return nil, false, failure(403, "human_review_required", "Only an authenticated human can review Ready work")
+			}
+			t.ReadyApproval = &model.ReadyApproval{RecordVersion: t.Version + 1, Basis: readyReviewBasis(st, t), Actor: a.ID, At: time.Now().UTC()}
+			t.Attention = ""
+		}
 		agreement := completionBasis(st, t, a, t.Refinement.Criteria, t.Version)
 		agreement.Kind = "Ready"
 		t.Agreements = append(t.Agreements, agreement)

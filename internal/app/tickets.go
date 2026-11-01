@@ -129,6 +129,9 @@ func expected(t model.Ticket, version int64) error {
 }
 func saveTicket(st *model.State, t *model.Ticket, a model.Account, action string) {
 	t.Version++
+	if readyReviewRequired(st, *t) && !readyReviewed(st, *t) && t.Attention == "" {
+		t.Attention = "Final human review required"
+	}
 	t.UpdatedAt = time.Now().UTC()
 	if t.CreatedAt.IsZero() {
 		t.CreatedAt = t.UpdatedAt

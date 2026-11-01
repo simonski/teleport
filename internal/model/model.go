@@ -27,13 +27,14 @@ type Settings struct {
 	Handbrake     bool   `json:"handbrake"`
 }
 type Phase struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Role         string `json:"role"`
-	Agentic      bool   `json:"agentic"`
-	Instructions string `json:"instructions"`
-	Description  string `json:"description,omitempty"`
-	Workers      *int   `json:"workers,omitempty"`
+	RequireReadyReview bool   `json:"requireReadyReview,omitempty"`
+	ID                 string `json:"id"`
+	Title              string `json:"title"`
+	Role               string `json:"role"`
+	Agentic            bool   `json:"agentic"`
+	Instructions       string `json:"instructions"`
+	Description        string `json:"description,omitempty"`
+	Workers            *int   `json:"workers,omitempty"`
 }
 type Rule struct {
 	ID         string            `json:"id"`
@@ -128,54 +129,55 @@ type Agreement struct {
 	BasisVersion         int64           `json:"basisVersion"`
 }
 type Ticket struct {
-	GoalPlan           *GoalPlan    `json:"goalPlan,omitempty"`
-	Delivery           *Delivery    `json:"delivery,omitempty"`
-	RoutingHold        string       `json:"routingHold,omitempty"`
-	PhaseEnteredAt     time.Time    `json:"phaseEnteredAt"`
-	AttemptLimit       int          `json:"attemptLimit"`
-	Attempts           int          `json:"attempts"`
-	StageVisit         int64        `json:"stageVisit"`
-	ResumeAttempt      string       `json:"resumeAttempt,omitempty"`
-	Attention          string       `json:"attention,omitempty"`
-	Refinement         *Refinement  `json:"refinement,omitempty"`
-	Question           *Question    `json:"question,omitempty"`
-	AgentReview        *AgentReview `json:"agentReview,omitempty"`
-	StageEvents        []StageEvent `json:"stageEvents,omitempty"`
-	ID                 int64        `json:"id"`
-	Version            int64        `json:"version"`
-	ProjectID          int64        `json:"projectId"`
-	ParentID           int64        `json:"parentId"`
-	Kind               string       `json:"kind"`
-	Title              string       `json:"title"`
-	Description        string       `json:"description"`
-	Criteria           string       `json:"criteria"`
-	Status             string       `json:"status"`
-	Phase              string       `json:"phase"`
-	Workflow           string       `json:"workflow"`
-	Agent              bool         `json:"agent"`
-	Assignee           string       `json:"assignee,omitempty"`
-	Creator            string       `json:"creator"`
-	Priority           string       `json:"priority"`
-	Labels             []string     `json:"labels"`
-	Start              string       `json:"start,omitempty"`
-	ETA                string       `json:"eta,omitempty"`
-	Due                string       `json:"due,omitempty"`
-	Progress           int          `json:"progress"`
-	Archived           bool         `json:"archived"`
-	Deleted            bool         `json:"deleted"`
-	Protected          bool         `json:"protected"`
-	Planning           bool         `json:"planning"`
-	Active             bool         `json:"active"`
-	Claim              string       `json:"claim,omitempty"`
-	Execution          string       `json:"execution,omitempty"`
-	StopRequested      bool         `json:"stopRequested"`
-	ResumeHold         bool         `json:"resumeHold"`
-	CancellationBatch  string       `json:"cancellationBatch,omitempty"`
-	CancellationReason string       `json:"cancellationReason,omitempty"`
-	Dependencies       []int64      `json:"dependencies"`
-	Agreements         []Agreement  `json:"agreements"`
-	CreatedAt          time.Time    `json:"createdAt"`
-	UpdatedAt          time.Time    `json:"updatedAt"`
+	ReadyApproval      *ReadyApproval `json:"readyApproval,omitempty"`
+	GoalPlan           *GoalPlan      `json:"goalPlan,omitempty"`
+	Delivery           *Delivery      `json:"delivery,omitempty"`
+	RoutingHold        string         `json:"routingHold,omitempty"`
+	PhaseEnteredAt     time.Time      `json:"phaseEnteredAt"`
+	AttemptLimit       int            `json:"attemptLimit"`
+	Attempts           int            `json:"attempts"`
+	StageVisit         int64          `json:"stageVisit"`
+	ResumeAttempt      string         `json:"resumeAttempt,omitempty"`
+	Attention          string         `json:"attention,omitempty"`
+	Refinement         *Refinement    `json:"refinement,omitempty"`
+	Question           *Question      `json:"question,omitempty"`
+	AgentReview        *AgentReview   `json:"agentReview,omitempty"`
+	StageEvents        []StageEvent   `json:"stageEvents,omitempty"`
+	ID                 int64          `json:"id"`
+	Version            int64          `json:"version"`
+	ProjectID          int64          `json:"projectId"`
+	ParentID           int64          `json:"parentId"`
+	Kind               string         `json:"kind"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	Criteria           string         `json:"criteria"`
+	Status             string         `json:"status"`
+	Phase              string         `json:"phase"`
+	Workflow           string         `json:"workflow"`
+	Agent              bool           `json:"agent"`
+	Assignee           string         `json:"assignee,omitempty"`
+	Creator            string         `json:"creator"`
+	Priority           string         `json:"priority"`
+	Labels             []string       `json:"labels"`
+	Start              string         `json:"start,omitempty"`
+	ETA                string         `json:"eta,omitempty"`
+	Due                string         `json:"due,omitempty"`
+	Progress           int            `json:"progress"`
+	Archived           bool           `json:"archived"`
+	Deleted            bool           `json:"deleted"`
+	Protected          bool           `json:"protected"`
+	Planning           bool           `json:"planning"`
+	Active             bool           `json:"active"`
+	Claim              string         `json:"claim,omitempty"`
+	Execution          string         `json:"execution,omitempty"`
+	StopRequested      bool           `json:"stopRequested"`
+	ResumeHold         bool           `json:"resumeHold"`
+	CancellationBatch  string         `json:"cancellationBatch,omitempty"`
+	CancellationReason string         `json:"cancellationReason,omitempty"`
+	Dependencies       []int64        `json:"dependencies"`
+	Agreements         []Agreement    `json:"agreements"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
 }
 type Revision struct {
 	ScriptRunID   string    `json:"scriptRunId,omitempty"`
@@ -186,6 +188,13 @@ type Revision struct {
 	Action        string    `json:"action"`
 	At            time.Time `json:"at"`
 	Snapshot      Ticket    `json:"snapshot"`
+}
+
+type ReadyApproval struct {
+	RecordVersion int64     `json:"recordVersion"`
+	Basis         string    `json:"basis"`
+	Actor         string    `json:"actor"`
+	At            time.Time `json:"at"`
 }
 type Refinement struct {
 	AcceptedBasis string    `json:"acceptedBasis,omitempty"`

@@ -185,6 +185,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	if operation == "listProjectSummaries" {
 		return s.projectDirectory(ctx, token, raw)
 	}
+	if operation == "getBoardExecution" {
+		return s.boardExecution(ctx, token, raw)
+	}
 	if localOperation(operation) {
 		return s.localCall(ctx, token, operation, raw)
 	}
@@ -220,6 +223,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		default:
 			var changed bool
 			result, changed, err = projectOperations(st, a, operation, raw)
+			if changed && err == nil {
+				reconcileReadyAttention(st, a)
+			}
 			return changed, err
 		}
 	})

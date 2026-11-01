@@ -10,6 +10,7 @@ import tempfile
 import time
 import urllib.request
 from human_todos_browser import verify_human_todos
+from board_controls_browser import verify_board_controls
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -89,6 +90,7 @@ def main():
                 browser("click", '#login button[type="submit"],#login button')
                 browser("wait", "#nav-views")
                 verify_human_todos(browser, api, project)
+                verify_board_controls(browser, api, project)
                 browser("close")
                 project = api("listProjects")["items"][0]
             tk("init", "-f", "-demo", fail=True)

@@ -194,6 +194,24 @@ def main():
         session_id = attached["id"]
         ticket = tk("getTicket", {"id": ticket["id"]})
         assert ticket["execution"] == "local:" + session_id and ticket["active"] and not ticket.get("attention")
+        if not args.native_fixture:
+            def board_active():
+                result = tk("getBoardExecution", {"projectId": project["id"], "workflowKey": ticket["workflow"]})
+                phase = next(row for row in result["phases"] if row["phaseId"] == ticket["phase"])
+                return phase if phase["active"] == 1 else None
+            observed_phase = wait_for(board_active)
+            assert observed_phase["capacity"] == 1 and ticket["id"] in observed_phase["activeTicketIds"]
+            if args.browser:
+                browser("press", "Escape")
+                browser("click", '#nav-views [data-view="Board"]')
+                browser("wait", f'[data-ticket-card="{ticket["id"]}"].is-working')
+                browser("eval", f"{{const node=document.querySelector('[data-ticket-card=\"{ticket['id']}\"] .agent-trace rect');if(getComputedStyle(node).animationName!=='agent-perimeter')throw new Error('Observed agent lacks a perimeter trace');}}")
+                browser("screenshot", "/tmp/teleport-agent-perimeter.png")
+                browser("wait", f'#session-icons [data-session="{session_id}"]')
+                browser("click", f'#session-icons [data-session="{session_id}"]')
+                browser("wait", ".xterm-screen")
+                browser("press", "Escape")
+            print("PASS: observed active/capacity, rounded perimeter trace and exact robot reconnect", flush=True)
         if args.native_fixture:
             question = wait_for(lambda: next((r for r in tk("getSessionRequests", {"id": session_id})["items"] if r["state"] == "pending"), None))
             wait_for(lambda: next((r for r in tk("listSessions")["items"] if r["id"] == session_id and r.get("attention")), None))

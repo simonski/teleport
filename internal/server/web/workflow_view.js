@@ -23,6 +23,8 @@ const drawWorkflowBeforeView=drawWorkflow;
 drawWorkflow=function(){
   const host=byId('workflow-editor');if(!host||!flow)return;
   drawWorkflowBeforeView();if(view!=='Workflows')return;
+  enhanceReadyReviewFields(host);
+  if(workflowFocusPhase){const index=flow.phases.findIndex(phase=>phase.id===workflowFocusPhase),row=host.querySelector(`[data-phase="${index}"]`);row?.scrollIntoView({block:'center',behavior:'instant'});(row?.querySelector('input:not(:disabled)')||byId('flow-draft'))?.focus({preventScroll:true});workflowFocusPhase='';}
   if(typeof bindWorkflowLaneOrder==='function')bindWorkflowLaneOrder();
   workflowPreferred=flowKey(flow);
   byId('flow-close').hidden=true;

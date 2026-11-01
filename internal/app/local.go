@@ -17,6 +17,7 @@ import (
 )
 
 type LocalSessionInfo struct {
+	Activity  string     `json:"activity,omitempty"`
 	ID        string     `json:"id"`
 	Creator   string     `json:"creator"`
 	ProjectID int64      `json:"projectId"`
@@ -181,13 +182,47 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		}
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Number < rows[j].Number })
 		out := LocalSessionPage{Items: []LocalSessionInfo{}}
+		probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
 		for _, row := range rows {
 			if len(out.Items) == limit {
 				out.NextCursor = cursorNumber(rows[limit-1].Number)
 				break
 			}
-			out.Items = append(out.Items, localInfo(row))
+			info := localInfo(row)
+			if activeLocal(row) && row.State == "running" && s.localClient != nil {
+				info.Activity = "unknown"
+				if row.Harness == "codex" {
+					if observed, callErr := s.localClient.Call(probe, daemonRequest(row, "nativeTurn")); callErr == nil {
+						info.Activity = "idle"
+						if observed.Turn != nil {
+							if observed.Turn.State == "inProgress" {
+								info.Activity = "active"
+							} else if observed.Turn.State == "unknown" {
+								info.Activity = "unknown"
+							}
+						}
+					}
+				}
+			}
+			out.Items = append(out.Items, info)
 		}
+		current, currentActor, _, readErr := s.localSnapshot(ctx, token, "")
+		if readErr != nil {
+			return nil, readErr
+		}
+		filtered := []LocalSessionInfo{}
+		for _, info := range out.Items {
+			row, exists := current.LocalSessions[info.ID]
+			if exists && row.LaunchID == st.LocalSessions[info.ID].LaunchID && row.Generation == st.LocalSessions[info.ID].Generation && localAllowed(current, currentActor, row) == nil {
+				fresh := localInfo(row)
+				if row.State == "running" && !row.StopRequested {
+					fresh.Activity = info.Activity
+				}
+				filtered = append(filtered, fresh)
+			}
+		}
+		out.Items = filtered
 		return out, nil
 	}
 	if s.localClient == nil || !localruntime.Supported() {
@@ -435,7 +470,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 					repeated = true
 				}
 			}
-			if p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+t.Phase] {
+			if p.LaneLocks[st.Workflows[t.Workflow].ID+"#*"] || p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+t.Phase] {
 				return false, failure(409, "capacity_blocked", "Implementation capacity is unavailable or the phase is locked")
 			}
 			phase, ok := phaseByID(st.Workflows[t.Workflow], t.Phase)

@@ -22,6 +22,7 @@ func init() {
 		{"pauseTicket", "ACT-0313", "Pause admission and logical continuation", app.VersionInput{}, model.Ticket{}},
 		{"resumeTicket", "ACT-0313", "Explicitly resume eligible held work", app.VersionInput{}, model.Ticket{}},
 		{"setLaneCapacity", "ACT-0709", "Configure shared Refine and Doing capacity", app.CapacityInput{}, model.Project{}},
+		{"getBoardExecution", "ACT-0709", "Read bounded phase capacity and observed activity", app.BoardExecutionInput{}, app.BoardExecution{}},
 		{"setHandbrake", "ACT-0914", "Set system/project/stable-phase handbrake", app.HandbrakeInput{}, oneOf{model.Settings{}, model.Project{}}},
 	}
 	for _, e := range entries {

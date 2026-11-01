@@ -139,7 +139,7 @@ func demoAdmission(st *model.State, t model.Ticket, p model.Phase) error {
 	}
 	project := st.Projects[t.ProjectID]
 	w := st.Workflows[t.Workflow]
-	if st.Settings.Handbrake || project.Handbrake || project.LaneLocks[w.ID+"#"+t.Phase] {
+	if st.Settings.Handbrake || project.Handbrake || project.LaneLocks[w.ID+"#*"] || project.LaneLocks[w.ID+"#"+t.Phase] {
 		return failure(409, "handbrake", "An applicable handbrake blocks admission")
 	}
 	if !dependenciesDone(st, t) {
@@ -188,6 +188,9 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 		return DemoStageResult{}, false, failure(409, "workflow_mapping", "Pinned phase is unavailable")
 	}
 	if phase.Role == "Ready" {
+		if err := requireReadyReview(st, t); err != nil {
+			return DemoStageResult{}, false, err
+		}
 		route, err := ResolveOutcome(w, t.Phase, "start", nil)
 		if err != nil {
 			return DemoStageResult{}, false, err
@@ -310,6 +313,7 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 
 func (s *Service) PumpDemo(ctx context.Context) error {
 	return s.db.Update(ctx, func(st *model.State) (bool, error) {
+		attentionChanged := reconcileReadyAttention(st, model.Account{ID: "ready-review-supervisor"})
 		collections(st)
 		ids := []int64{}
 		for id, t := range st.Tickets {
@@ -359,7 +363,7 @@ func (s *Service) PumpDemo(ctx context.Context) error {
 				return true, nil
 			}
 		}
-		return false, nil
+		return attentionChanged, nil
 	})
 }
 
@@ -703,18 +707,25 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		if p.Version != in.ExpectedVersion {
 			return nil, false, failure(409, "version_conflict", "Project changed")
 		}
-		if in.PhaseID != "" {
+		if in.PhaseID != "" || in.WorkflowKey != "" {
 			w, err := workflowRead(st, a, in.WorkflowKey)
 			if err != nil {
 				return nil, false, err
 			}
-			if _, ok := phaseByID(w, in.PhaseID); !ok {
+			if w.ProjectID != 0 && w.ProjectID != p.ID {
+				return nil, false, failure(422, "invalid_board_workflow", "The workflow belongs to another project")
+			}
+			if _, ok := phaseByID(w, in.PhaseID); in.PhaseID != "" && !ok {
 				return nil, false, failure(422, "invalid_phase", "Phase is missing")
 			}
 			if p.LaneLocks == nil {
 				p.LaneLocks = map[string]bool{}
 			}
-			p.LaneLocks[w.ID+"#"+in.PhaseID] = in.Engaged
+			phase := in.PhaseID
+			if phase == "" {
+				phase = "*"
+			}
+			p.LaneLocks[w.ID+"#"+phase] = in.Engaged
 		} else {
 			p.Handbrake = in.Engaged
 		}

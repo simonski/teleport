@@ -135,6 +135,9 @@ func ValidateWorkflow(w model.Workflow, complete bool) error {
 		if !p.Agentic && p.Workers != nil {
 			return failure(422, "phase_gate", "Manual phases cannot reserve agent workers")
 		}
+		if p.RequireReadyReview && (w.Family != "agent" || p.Role != "Ready" || p.Agentic) {
+			return failure(422, "phase_gate", "Final readiness review belongs only to manual Ready lanes in agent workflows")
+		}
 		if w.Family == "human" && !contains([]string{"Todo", "Doing", "Done", "Clarify", "Cancelled"}, p.Role) {
 			return failure(422, "phase_gate", "Human workflows use manual human roles")
 		}

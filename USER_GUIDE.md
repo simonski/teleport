@@ -42,6 +42,14 @@ Workflows hosts the graph and list editor in its own view; Project settings → 
 
 Save latest before previewing a saved route or choosing Publish latest. Publication freezes the next numbered version without selecting it. Retry an unconfirmed publication response using the same action; it returns the original version. Select for new work separately changes future tickets; existing Board sections retain their exact pin. Edit next version starts a new latest draft. Settings can make Workflows the sign-in default. The CLI also exposes stopped same-role migration and retains its older combined activation operation.
 
+## Board controls and readiness
+
+Board groups work by project and pinned workflow. Use a lane's pencil to open that workflow, then edit/publish a draft through the normal workflow controls. Existing tickets retain their pin. Pause board controls only that project's stable workflow; agentic-lane handbrakes pause that lane across its versions. Handbrakes stop new admissions and leave running work attached. Counts show observed active/effective configured agents within shared project pools; hover for reserved/unknown totals. Missing observations show unavailable values.
+
+Ready admission offers Automatically send to implementation or Final review by human required in the workflow editor. The review option calls for attention and holds implementation until Review readiness records exact human confirmation. Changed ticket/dependency/repository basis or a new Ready visit requires review again. Scope acceptance and final code Approval remain separate.
+
+Board cards label readiness in colour. Observed active agents have a glow tracing the rounded perimeter; unknown ownership does not animate. Hover briefly or focus a ticket to reveal its description. Reduced motion suppresses animation. The header shows every retained running/idle/unresolved harness icon, labelled with ticket and session IDs or Idle/Free; click to reconnect to the exact instance. Native turn observations distinguish active from idle without reading another account's terminal.
+
 ## Reinitialize or explore PetStore
 
 Stop `tk serve` before initialization. `tk init -f` backs up the SQLite database (including WAL contents) to the printed adjacent private `.backup-….sqlite` file, then creates a fresh installation with bootstrap credentials. All old installation data and logins are replaced. Retained running/unknown jobs must be stopped and reconciled first. Backup failure prevents reset. PostgreSQL force reset is unavailable.

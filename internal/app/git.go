@@ -134,6 +134,9 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 			return false, failure(409, "delivery_blocked", "Real delivery requires visible stopped agent work with current accepted scope and completed prerequisites")
 		}
 		if operation == "prepareTaskWorktree" {
+			if err := requireReadyReview(st, t); err != nil {
+				return false, err
+			}
 			if t.Delivery != nil && t.Delivery.Worktree.Path != "" {
 				reserved = t
 				return false, nil
@@ -141,7 +144,7 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 			if t.Status != "Ready" {
 				return false, failure(409, "readiness_required", "Prepare retained work only after accepted scope reaches Ready")
 			}
-			if st.Settings.Handbrake || p.Handbrake {
+			if st.Settings.Handbrake || p.Handbrake || p.LaneLocks[st.Workflows[t.Workflow].ID+"#*"] {
 				return false, failure(409, "handbrake", "Release applicable admissions handbrakes")
 			}
 			if p.CapacityConfigured && p.DoingWorkers == 0 {
@@ -338,6 +341,7 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 		p.Repository = &model.RepositoryBinding{Repository: binding.Repository, StorageRoot: binding.StorageRoot, Version: version}
 		p.Version++
 		st.Projects[p.ID] = p
+		reconcileReadyAttention(st, a)
 		result = p
 		return true, nil
 	})

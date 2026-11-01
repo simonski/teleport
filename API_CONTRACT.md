@@ -97,7 +97,7 @@ The wizard omits the legacy repository step (step 2); resuming that step advance
 | `logout` | `{}` | `{signedOut:true}` | Revokes current session only |
 | `listWorkflows` | `{}` | `{items:Workflow[],nextCursor:""}` | Current session; two seeded definitions in P01 |
 
-`Workflow` is `{id:string,version:integer,title:string,family:"human"|"agent",published:boolean,phases:Phase[],rules:Rule[]}`. `Phase` has string `id,title,role,instructions` and boolean `agentic`. `Rule` has string `id,source,outcome`, optional string `target,action`, integer `priority` and optional string-map `conditions`. The human definition's main path is Todo/Doing/Done; agent Doing displays as Implementation. The published seed versions are immutable.
+`Workflow` is `{id:string,version:integer,title:string,family:"human"|"agent",published:boolean,phases:Phase[],rules:Rule[]}`. `Phase` has string `id,title,role,instructions`, boolean `agentic`, optional string `description` and optional integer `workers` (see lane quotas below). `Rule` has string `id,source,outcome`, optional string `target,action`, integer `priority` and optional string-map `conditions`. The human definition's main path is Todo/Doing/Done; agent Doing displays as Implementation. The published seed versions are immutable.
 
 Public discovery: `GET /healthz`, `/openapi.json`, `/api/actions`, `/skill.md`; browser assets `/`, `/app.js`, `/style.css`. No domain database access is available over the client surface. OpenAPI publishes input/result/error schemas for every registered operation; the exact request/result contract above is normative for this build.
 
@@ -124,6 +124,14 @@ The generated OpenAPI contains complete concrete project/ticket/history and oper
 `changePassword` takes `{currentPassword,newPassword}`, verifies the current password, requires 12–1,024 new-password bytes and revokes all account sign-in sessions atomically. It returns `{signedOut:true}` and requires a fresh sign-in. The combined visibility and container-cancellation routes compose their corresponding permanent action variants; API discovery names the primary action.
 
 ## Workflow definitions
+
+### Lane descriptions and quotas
+
+`Phase` adds optional `description:string` and `workers:integer|null` (0–20). Missing description retains the legacy instructions as its displayed intent; explicit nonempty descriptions must contain non-whitespace text and fit 20,000 UTF-8 bytes. Existing published definitions are not rewritten. `saveWorkflow` remains a whole-definition, expected-revision mutation: omission/null of workers means inherit the shared project pool, zero prevents new admission, and a positive value caps that stable workflow/lane within the shared pool. Manual lanes reject worker settings. No quota can increase project capacity.
+
+Count reserved, starting, active, stopping and ownership-unknown work until confirmed exit. Quotas span versions of the same stable workflow/lane within one project. Current pinned definitions determine each admission's quota; published versions and existing ticket pins remain immutable. Apply these checks to simulated admission, owned implementation preparation and ticket-attached native launch. Existing free-console limits remain separate. Changing a draft never stops work or changes an active pin. Validation uses `invalid_phase`/`phase_gate` (422); unavailable shared/lane capacity uses `capacity_disabled`, `capacity_full`, `lane_capacity_disabled` or `lane_capacity_full` (409), with no reservation or attempt consumption.
+
+The Workflows editor exposes Description and an agentic-only Workers field (blank inherits, 0 pauses new admission). Model/harness/persona advice, lane drag ordering and visible scoped locks remain separate slices; these fields do not imply that automatic native stages are delivered.
 
 `listWorkflows` accepts `{projectId?,cursor?,limit?}` and returns authorized definitions ordered by exact key; its cursor is the last opaque workflow key. `getWorkflow` accepts `{workflowKey,ticketId?}`. Optional ticket context grants access only to that currently authorized ticket's exact retained pin, including after transfer. Published keys are `ID@VERSION`; mutable drafts use `ID@draft`. Definitions add `projectId,draftRevision,layout?` to the seed shape; layout maps phase IDs to bounded `{x,y}` coordinates.
 

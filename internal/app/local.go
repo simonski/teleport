@@ -423,22 +423,21 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 				return false, failure(409, "ticket_session_blocked", "Use an unblocked accepted task with its prepared owned Implementation worktree")
 			}
 			p := st.Projects[t.ProjectID]
-			limit := p.DoingWorkers
-			if !p.CapacityConfigured {
-				limit = 1
-			}
-			used := 0
 			repeated := false
 			for _, other := range st.LocalSessions {
 				if other.TicketID == t.ID {
 					repeated = true
 				}
-				if other.ProjectID == p.ID && other.TicketID != 0 && activeLocal(other) {
-					used++
-				}
 			}
-			if used >= limit || p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+t.Phase] {
+			if p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+t.Phase] {
 				return false, failure(409, "capacity_blocked", "Implementation capacity is unavailable or the phase is locked")
+			}
+			phase, ok := phaseByID(st.Workflows[t.Workflow], t.Phase)
+			if !ok || !phase.Agentic {
+				return false, failure(409, "phase_gate", "A ticket harness requires its pinned agentic phase")
+			}
+			if err := phaseCapacity(st, t, phase); err != nil {
+				return false, err
 			}
 			if repeated {
 				limit := t.AttemptLimit

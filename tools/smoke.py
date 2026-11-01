@@ -11,6 +11,7 @@ import urllib.request
 from navigation_browser import verify_navigation
 from ticket_browser import verify_ticket_keyboard
 from project_browser import verify_project_directory
+from workflow_lanes_browser import verify_workflow_lanes
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -270,6 +271,7 @@ def main():
                     browser("reload")
                     browser("wait", "--fn", "view==='Workflows'&&!workflowLoading&&!!document.querySelector('#flow-select')")
                     browser("screenshot", "/tmp/teleport-workflows-view.png")
+                    verify_workflow_lanes(browser, tk, project)
                     browser("find", "role", "button", "click", "--name", "Settings", "--exact")
                     browser("select", "#preference-view", "Home")
                     browser("select", "#preference-project", "0")

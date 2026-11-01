@@ -49,7 +49,12 @@ async function changeWorkflow(operation,input,message){
   }catch(error){if(current()){selector.value=flowKey(source);flowMessage(error.message);}}
   finally{if(workflowMutation===token)workflowMutation=null;controls.forEach((control,index)=>{if(control.isConnected)control.disabled=disabled[index];});}
 }
-saveFlow=async function(){if(!flowWritable(flow))return;await changeWorkflow('saveWorkflow',{definition:structuredClone(flow),expectedRevision:flow.draftRevision},'Draft saved. Existing work remains pinned.');};
+saveFlow=async function(){
+  if(!flowWritable(flow))return;
+  const invalid=byId('workflow-editor')?.querySelector('input:invalid,textarea:invalid');
+  if(invalid){flowMessage('Workers must be a whole number from 0 to 20.');invalid.focus();return;}
+  await changeWorkflow('saveWorkflow',{definition:structuredClone(flow),expectedRevision:flow.draftRevision},'Draft saved. Existing work remains pinned.');
+};
 
 copyFlowForm=function(){
   if(flowDirty){flowMessage('Save latest or discard changes before copying.');return;}

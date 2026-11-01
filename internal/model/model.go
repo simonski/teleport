@@ -32,6 +32,8 @@ type Phase struct {
 	Role         string `json:"role"`
 	Agentic      bool   `json:"agentic"`
 	Instructions string `json:"instructions"`
+	Description  string `json:"description,omitempty"`
+	Workers      *int   `json:"workers,omitempty"`
 }
 type Rule struct {
 	ID         string            `json:"id"`

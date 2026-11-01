@@ -148,30 +148,8 @@ func demoAdmission(st *model.State, t model.Ticket, p model.Phase) error {
 	if contains([]string{"Doing", "Rebase", "Review", "Decompose"}, p.Role) && !acceptedScope(st, t) {
 		return failure(409, "scope_stale", "Current human-accepted scope is required")
 	}
-	capacity := 1
-	if project.CapacityConfigured {
-		if p.Role == "Refine" || p.Role == "Decompose" {
-			capacity = project.RefineWorkers
-		} else {
-			capacity = project.DoingWorkers
-		}
-	}
-	if capacity == 0 {
-		return failure(409, "capacity_disabled", "The shared execution pool has zero workers")
-	}
-	running := 0
-	for _, other := range st.Tickets {
-		if other.ProjectID != t.ProjectID || !busy(other) {
-			continue
-		}
-		otherPhase, _ := phaseByID(st.Workflows[other.Workflow], other.Phase)
-		samePool := (p.Role == "Refine" || p.Role == "Decompose") == (otherPhase.Role == "Refine" || otherPhase.Role == "Decompose")
-		if samePool {
-			running++
-		}
-	}
-	if running >= capacity {
-		return failure(409, "capacity_full", "The shared project pool is fully reserved")
+	if err := phaseCapacity(st, t, p); err != nil {
+		return err
 	}
 	if p.Role == "Refine" && t.Refinement != nil && t.ResumeAttempt == "" {
 		return failure(409, "scope_waiting", "The proposal is awaiting human acceptance")

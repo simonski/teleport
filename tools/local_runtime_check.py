@@ -173,6 +173,13 @@ def main():
             expired = subprocess.run([str(ROOT / "bin/tk"), "listProjects"], env=context_env, capture_output=True, timeout=15)
             assert expired.returncode != 0, "Exited native context credential remained usable"
         settings = tk("getSession")["settings"]
+        limited = tk("copyWorkflow", {"sourceKey": "agent@1", "projectId": project["id"], "title": "One implementation worker", "requestId": "native-quota"})
+        for phase in limited["phases"]:
+            if phase["role"] == "Doing":
+                phase["workers"] = 1
+                phase["description"] = "Keep native implementation inside the shared pool."
+        limited = tk("saveWorkflow", {"definition": limited, "expectedRevision": limited["draftRevision"]})
+        project = tk("activateWorkflowVersion", {"workflowKey": limited["id"] + "@draft", "expectedRevision": limited["draftRevision"], "projectId": project["id"], "expectedProjectVersion": project["version"]})
         settings = tk("setExecutionMode", {"mode": "demo", "expectedVersion": settings["version"]})
         ticket = tk("createTicket", {"projectId": project["id"], "title": "Prepared native task", "requestId": "native-task"})
         tk("requestRefinement", {"id": ticket["id"], "expectedVersion": ticket["version"]})

@@ -129,6 +129,12 @@ func ValidateWorkflow(w model.Workflow, complete bool) error {
 		if p.Agentic && (w.Family == "human" || contains([]string{"Todo", "Ready", "Clarify", "Approval", "Done", "Cancelled"}, p.Role)) {
 			return failure(422, "phase_gate", "This semantic role must remain manual")
 		}
+		if p.Description != "" && strings.TrimSpace(p.Description) == "" || len(p.Description) > 20000 || p.Workers != nil && (*p.Workers < 0 || *p.Workers > 20) {
+			return failure(422, "invalid_phase", "Use a nonblank description up to 20,000 bytes and a worker quota from 0 to 20")
+		}
+		if !p.Agentic && p.Workers != nil {
+			return failure(422, "phase_gate", "Manual phases cannot reserve agent workers")
+		}
 		if w.Family == "human" && !contains([]string{"Todo", "Doing", "Done", "Clarify", "Cancelled"}, p.Role) {
 			return failure(422, "phase_gate", "Human workflows use manual human roles")
 		}

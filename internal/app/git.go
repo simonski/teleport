@@ -159,6 +159,9 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 			if !ok || target.Role != "Doing" || p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+target.ID] {
 				return false, failure(409, "phase_gate", "Implementation destination is missing or locked")
 			}
+			if err := phaseCapacity(st, t, target); err != nil {
+				return false, err
+			}
 			if err = enterPhase(&t, st.Workflows[t.Workflow], target.ID); err != nil {
 				return false, err
 			}

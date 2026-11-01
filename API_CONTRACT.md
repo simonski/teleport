@@ -131,7 +131,13 @@ The generated OpenAPI contains complete concrete project/ticket/history and oper
 
 Count reserved, starting, active, stopping and ownership-unknown work until confirmed exit. Quotas span versions of the same stable workflow/lane within one project. Current pinned definitions determine each admission's quota; published versions and existing ticket pins remain immutable. Apply these checks to simulated admission, owned implementation preparation and ticket-attached native launch. Existing free-console limits remain separate. Changing a draft never stops work or changes an active pin. Validation uses `invalid_phase`/`phase_gate` (422); unavailable shared/lane capacity uses `capacity_disabled`, `capacity_full`, `lane_capacity_disabled` or `lane_capacity_full` (409), with no reservation or attempt consumption.
 
-The Workflows editor exposes Description and an agentic-only Workers field (blank inherits, 0 pauses new admission). Model/harness/persona advice, lane drag ordering and visible scoped locks remain separate slices; these fields do not imply that automatic native stages are delivered.
+The Workflows editor exposes Description and an agentic-only Workers field (blank inherits, 0 pauses new admission). Model/harness/persona advice and visible scoped locks remain separate slices; these fields do not imply that automatic native stages are delivered.
+
+### Lane ordering
+
+The draft phase array defines presentation order. Dragging a phase's grip or using its Move up/Move down buttons changes that order locally; Save latest persists through the existing expected-revision `saveWorkflow` action. Alt+ArrowUp/Down on the grip is the keyboard equivalent. No new mutation endpoint or autosave is introduced. Preserve stable IDs, semantic roles, instructions, quotas, graph coordinates and exact source/destination rules. Reordering alone never routes a ticket, changes a pin or grants execution.
+
+Preview pointer movement after a small drag threshold. Escape, pointer cancellation, lost capture, window blur/resize or actor/editor replacement rolls back the preview without changing the draft array or its prior dirty state. A successful drop marks the draft dirty only when its order changed. Published/read-only definitions cannot reorder; pending mutations freeze grips and buttons. Save/discard remains mandatory before navigation after a completed edit.
 
 `listWorkflows` accepts `{projectId?,cursor?,limit?}` and returns authorized definitions ordered by exact key; its cursor is the last opaque workflow key. `getWorkflow` accepts `{workflowKey,ticketId?}`. Optional ticket context grants access only to that currently authorized ticket's exact retained pin, including after transfer. Published keys are `ID@VERSION`; mutable drafts use `ID@draft`. Definitions add `projectId,draftRevision,layout?` to the seed shape; layout maps phase IDs to bounded `{x,y}` coordinates.
 

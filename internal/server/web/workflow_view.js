@@ -1,7 +1,7 @@
 "use strict";
 let workflowViewEpoch=0,workflowLoading=false,workflowMutation=null,workflowPreferred='',workflowFeedback=null;
-function resetWorkflowView(){workflowViewEpoch++;workflowLoading=false;workflowMutation=null;workflowPreferred='';workflowFeedback=null;}
-function workflowNavigationBlocked(){return view==='Workflows'&&(flowDirty||!!workflowMutation||!!workflowPublicationPending);}
+function resetWorkflowView(){if(typeof cancelWorkflowLaneDrag==='function')cancelWorkflowLaneDrag();workflowViewEpoch++;workflowLoading=false;workflowMutation=null;workflowPreferred='';workflowFeedback=null;}
+function workflowNavigationBlocked(){return view==='Workflows'&&(flowDirty||!!flowDrag||!!workflowMutation||!!workflowPublicationPending);}
 function workflowViewBusy(){return view==='Workflows'&&(workflowNavigationBlocked()||workflowLoading||!!flowDrag||!!workflowPublicationRecovery);}
 function workflowsView(){return '<section id="workflow-editor" class="workflow-view"><p id="workflow-load" role="status">Loading workflows…</p></section>';}
 workflowEditor=async function(){navigateView('Workflows');};
@@ -23,6 +23,7 @@ const drawWorkflowBeforeView=drawWorkflow;
 drawWorkflow=function(){
   const host=byId('workflow-editor');if(!host||!flow)return;
   drawWorkflowBeforeView();if(view!=='Workflows')return;
+  if(typeof bindWorkflowLaneOrder==='function')bindWorkflowLaneOrder();
   workflowPreferred=flowKey(flow);
   byId('flow-close').hidden=true;
   if(workflowFeedback?.key===flowKey(flow)&&workflowFeedback.revision===flow.draftRevision)byId('flow-message').textContent=workflowFeedback.text;

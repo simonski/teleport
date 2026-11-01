@@ -480,6 +480,7 @@ def main():
                     browser("click", "#dismiss")
                 except Exception:
                     print(browser("snapshot", "-i"))
+                    print(browser("eval", "fetch('/api/tools/getSession',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(response=>({sessionReadStatus:response.status})).catch(()=>({sessionReadStatus:'network-error'}))"))
                     print(browser("eval", "document.querySelector('#notice')?.innerText"))
                     print(browser("eval", "({welcomeStatus:document.querySelector('#welcome-status')?.innerText,trace:window.welcomeTrace})"))
                     browser("screenshot", "/tmp/teleport-failure.png")

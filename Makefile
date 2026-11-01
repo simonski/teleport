@@ -20,6 +20,7 @@ lint:
 check: lint
 	python3 -B tools/test_build.py
 	python3 -B tools/spec_sources.py --verify
+	python3 -B tools/client_scope.py
 	go test -race ./...
 clean:
 	go clean

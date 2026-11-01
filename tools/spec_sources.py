@@ -23,7 +23,7 @@ def verify(root, document=None):
         failures.append("Missing action definitions")
     if len(actual_actions) != len(set(actual_actions)):
         failures.append("Duplicate action definitions")
-    for prefix, expected in (("A", 173), ("D", 46), ("C", 9)):
+    for prefix, expected in (("A", 181), ("D", 53), ("C", 9)):
         defined = definitions(specification, prefix)
         required = {f"{prefix}{number:02d}" for number in range(1, expected + 1)}
         if set(defined) != required or len(defined) != expected:
@@ -70,7 +70,7 @@ def verify(root, document=None):
         failures.append("Expected exactly one document title")
     if re.search(r"\btp\b|\bHuman board\b|\bAgent Costs\b|\bOverview\b", specification):
         failures.append("Obsolete CLI or view naming remains")
-    for name in ("Home", "Board", "Todos", "Graph", "Ideas", "Cost", "Settings", "Projects"):
+    for name in ("Home", "Board", "Todos", "Graph", "Ideas", "Cost", "Settings", "System", "Workflows", "Evolution", "Projects"):
         if not re.search(rf"^\| {name} \|", specification, re.M):
             failures.append(f"Missing canonical view definition: {name}")
     workflow_requirements = (
@@ -78,7 +78,7 @@ def verify(root, document=None):
         "Backward edges, cycles and explicit same-phase retry edges are permitted",
         "### 4.6 Visual workflow editor",
         "**Todo → Doing → Done**",
-        "**Todo → Refine → Ready → Implementation → Review → Approval → Done**",
+        "**Todo → Typo → Refine → Ready → Implementation → Verify → Approval → Done**",
         "Review is agentic analysis; Approval is the human decision",
     )
     for requirement in workflow_requirements:
@@ -100,7 +100,7 @@ def verify(root, document=None):
     if failures:
         raise SystemExit("FAILED:\n" + "\n".join(failures))
     print(f"PASS: {len(actual_actions)} unique action definitions with valid references")
-    print("PASS: A01–A173, D01–D46, and C01–C09 defined with valid references")
+    print("PASS: A01–A181, D01–D53, and C01–C09 defined with valid references")
     print("PASS: current document references exist; planned/API documents are explicit")
     print("PASS: directed workflow graph, GUI editor, seeded defaults and review-role wording")
     print("PASS: standalone product specification contains no ticket/source provenance")

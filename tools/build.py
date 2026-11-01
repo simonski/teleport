@@ -7,6 +7,11 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def local_version(root, count):
+    revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=root, text=True).strip()
+    dirty = subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=normal"], cwd=root, text=True).strip()
+    return f"0.1.0-dev.{count}+{revision}" + (".dirty" if dirty else "")
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--install-only", action="store_true")
@@ -15,8 +20,7 @@ def main():
     if not args.install_only:
         counter = ROOT / ".build-count"
         count = int(counter.read_text()) + 1 if counter.exists() else 1
-        revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip()
-        build_version = os.environ.get("TELEPORT_BUILD_VERSION", f"0.1.0-dev.{count}+{revision}.dirty")
+        build_version = os.environ.get("TELEPORT_BUILD_VERSION") or local_version(ROOT, count)
         binary.parent.mkdir(exist_ok=True)
         subprocess.run(["go", "build", "-trimpath", "-ldflags", f"-X main.version={build_version}", "-o", str(binary), "./cmd/tk"], cwd=ROOT, check=True)
         counter.write_text(str(count))

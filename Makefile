@@ -18,6 +18,7 @@ lint:
 	go vet ./...
 	python3 -B tools/web_check.py
 check: lint
+	python3 -B tools/test_build.py
 	python3 -B tools/spec_sources.py --verify
 	go test -race ./...
 clean:

@@ -28,6 +28,7 @@ Go 1.26.1+, Python 3 and Make are required. Supported commands:
 - `go test -race ./...`: check Go code for data races.
 - `make check`: verify formatting, vet, documentation and race tests.
 - `python3 -B tools/smoke.py --browser`: exercise an isolated real binary/browser installation after building.
+- `python3 -B tools/postgres_check.py --browser`: run the same suite and real browser path against a disposable PostgreSQL cluster; requires local server binaries.
 
 Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations. See `USER_GUIDE.md` and `API_CONTRACT.md` for shipped behavior.
 

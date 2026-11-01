@@ -3,22 +3,17 @@ package server_test
 import (
 	"context"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"teleport/internal/app"
 	"teleport/internal/server"
-	"teleport/internal/store"
+	"teleport/internal/teststore"
 )
 
 func TestRejectsInvalidBodiesOriginsAndUnauthenticatedCalls(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "db"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err = app.Initialize(context.Background(), db); err != nil {
+	db := teststore.Open(t)
+	if _, err := app.Initialize(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
 	h := server.New(app.New(db), "test")

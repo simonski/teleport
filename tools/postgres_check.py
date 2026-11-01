@@ -1,0 +1,62 @@
+"""Run parity checks against a disposable, socket-only PostgreSQL installation.
+
+Requires local PostgreSQL 17+ binaries, including initdb, pg_ctl and createdb.
+No existing database, configuration or running service is modified.
+See https://www.postgresql.org/docs/17/runtime-config-connection.html
+"""
+import argparse
+import os
+from pathlib import Path
+import shlex
+import shutil
+import subprocess
+import tempfile
+from urllib.parse import urlencode
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--postgres-bin", type=Path)
+    parser.add_argument("--browser", action="store_true")
+    args = parser.parse_args()
+    candidates = [args.postgres_bin]
+    if shutil.which("initdb"):
+        candidates.append(Path(shutil.which("initdb")).parent)
+    candidates.append(Path("/Applications/Postgres.app/Contents/Versions/latest/bin"))
+    binary = next((p for p in candidates if p and (p / "initdb").is_file()), None)
+    if not binary:
+        parser.error("Install PostgreSQL 17+ or supply --postgres-bin; no checks were run")
+    environment = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
+    with tempfile.TemporaryDirectory(prefix="tkpg-", dir="/tmp") as temporary:
+        folder = Path(temporary)
+        os.chmod(folder, 0o700)
+        data = folder / "data"
+        def pg(name, *arguments):
+            return subprocess.run([str(binary / name), *map(str, arguments)], env=environment, check=True, capture_output=True, text=True, timeout=60)
+        print(pg("postgres", "--version").stdout.strip(), flush=True)
+        pg("initdb", "-D", data, "--auth=trust", "--username=teleport", "--encoding=UTF8", "--no-locale")
+        options = "-c listen_addresses='' -c unix_socket_permissions=0700 -c unix_socket_directories=" + shlex.quote(temporary)
+        started = False
+        try:
+            pg("pg_ctl", "-D", data, "-l", folder / "server.log", "-o", options, "-w", "start")
+            started = True
+            connection = "postgresql://teleport@/postgres?" + urlencode({"host": temporary, "sslmode": "disable"})
+            checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
+            subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=checked, check=True)
+            pg("createdb", "--host", temporary, "--username", "teleport", "smoke")
+            smoke_url = "postgresql://teleport@/smoke?" + urlencode({"host": temporary, "sslmode": "disable"})
+            subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
+            command = ["python3", "-B", "tools/smoke.py", "--database", smoke_url]
+            if args.browser:
+                command.append("--browser")
+            subprocess.run(command, cwd=ROOT, env=environment, check=True)
+            print("PASS: PostgreSQL isolated domain/race suite and real binary smoke", flush=True)
+        finally:
+            if started:
+                pg("pg_ctl", "-D", data, "-m", "fast", "-w", "stop")
+
+
+if __name__ == "__main__":
+    main()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"teleport/internal/app"
 	"teleport/internal/model"
 	"teleport/internal/store"
+	"teleport/internal/teststore"
 )
 
 func fixture(t *testing.T) (*app.Service, string) {
@@ -21,12 +21,8 @@ func fixture(t *testing.T) (*app.Service, string) {
 
 func fixtureWithStore(t *testing.T) (*app.Service, string, *store.Store) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "database.db"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if _, err = app.Initialize(context.Background(), db); err != nil {
+	db := teststore.Open(t)
+	if _, err := app.Initialize(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
 	svc := app.New(db)

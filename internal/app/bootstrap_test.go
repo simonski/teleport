@@ -3,19 +3,14 @@ package app_test
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"teleport/internal/app"
-	"teleport/internal/store"
+	"teleport/internal/teststore"
 )
 
 func TestInitializationPreservesIdentityAndAuthentication(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "database.db"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := teststore.Open(t)
 	ctx := context.Background()
 	first, err := app.Initialize(ctx, db)
 	if err != nil {

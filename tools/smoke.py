@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
         folder = Path(temporary)
@@ -21,7 +22,7 @@ def main():
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         endpoint = f"http://127.0.0.1:{port}"
-        environment = dict(os.environ, TELEPORT_DB=str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+        environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
         def tk(*arguments, input=None, success=True):
             result = subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, input=input, text=True, capture_output=True, timeout=30)
             if success and result.returncode:

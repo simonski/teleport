@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 	"teleport/internal/model"
@@ -21,10 +23,11 @@ import (
 var ErrUninitialized = errors.New("storage is not initialized; run tk init")
 
 type Store struct {
-	db       *sql.DB
-	postgres bool
-	mu       sync.Mutex
-	release  func()
+	db         *sql.DB
+	connection *sql.Conn
+	postgres   bool
+	mu         sync.Mutex
+	release    func()
 }
 
 func Open(location string, initialize bool) (*Store, error) {
@@ -85,12 +88,24 @@ func Open(location string, initialize bool) (*Store, error) {
 			s.Close()
 			return nil, errors.New("installation is already owned or its lock is unavailable")
 		}
-		s.release = func() { conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock(1949675634)"); conn.Close() }
+		s.release = func() {
+			defer conn.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			conn.ExecContext(ctx, "SELECT pg_advisory_unlock(1949675634)")
+		}
+		s.connection = conn
 	} else {
 		db.SetMaxOpenConns(1)
 	}
 	if initialize {
-		_, err = db.Exec("CREATE TABLE IF NOT EXISTS teleport_state (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if s.connection != nil {
+			_, err = s.connection.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS teleport_state (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
+		} else {
+			_, err = db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS teleport_state (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
+		}
 		if err != nil {
 			s.Close()
 			return nil, err
@@ -140,8 +155,16 @@ func (s *Store) Read(ctx context.Context) (*model.State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var body string
-	if err := s.db.QueryRowContext(ctx, "SELECT body FROM teleport_state WHERE id=1").Scan(&body); err != nil {
-		return nil, ErrUninitialized
+	query := s.db.QueryRowContext
+	if s.connection != nil {
+		query = s.connection.QueryRowContext
+	}
+	if err := query(ctx, "SELECT body FROM teleport_state WHERE id=1").Scan(&body); err != nil {
+		var pgError *pgconn.PgError
+		if errors.Is(err, sql.ErrNoRows) || errors.As(err, &pgError) && pgError.Code == "42P01" || strings.Contains(err.Error(), "no such table: teleport_state") {
+			return nil, ErrUninitialized
+		}
+		return nil, fmt.Errorf("read storage: %w", err)
 	}
 	return decode(body)
 }
@@ -160,7 +183,11 @@ func decode(body string) (*model.State, error) {
 func (s *Store) Update(ctx context.Context, fn func(*model.State) (bool, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	tx, err := s.db.BeginTx(ctx, nil)
+	begin := s.db.BeginTx
+	if s.connection != nil {
+		begin = s.connection.BeginTx
+	}
+	tx, err := begin(ctx, nil)
 	if err != nil {
 		return err
 	}

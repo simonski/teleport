@@ -1,13 +1,68 @@
 "use strict";
 let preferences = null, preferencesActor = '', initialNavigation = true, appearanceDirty = false, navigationDirty = false;
+let preferenceDraft = {}, preferenceSaving = false, preferenceTimer = null, preferenceError = '', preferenceConflict = false;
 function presentationBusy() { return view === 'Settings' && (appearanceDirty || navigationDirty); }
-function applyAppearance(p) { document.documentElement.dataset.style = p.style; document.documentElement.dataset.mode = p.mode; document.dispatchEvent(new Event('teleport-appearance')); }
-function clearPresentation() { leaveGraph(); graphCameras.clear(); graphData=null;graphPending={};graphQuery='';graphKind='';calendarState={date:'',period:'default',duePeriod:'',query:''};calendarDirty=false;calendarEpoch++;selected=null;workflowMap={};flow=null;flows=[];flowDirty=false;flowDrag=null;resetShift();projects=[];tickets=[];ideas=[];root.replaceChildren();notice('');session=null;preferences=null;preferencesActor='';initialNavigation=true;appearanceDirty=false;navigationDirty=false;document.documentElement.removeAttribute('data-style');document.documentElement.removeAttribute('data-mode'); }
-function appearanceHTML() { return `<section><h2>Appearance</h2><p>Personal style and mode synchronize across devices; shared Graph coordinates remain separate.</p><div class="form-grid"><label>Visual style<select id="appearance-style"><option value="paper" ${preferences?.style==='paper'?'selected':''}>Paper · editorial workspace</option><option value="instrument" ${preferences?.style==='instrument'?'selected':''}>Instrument · compact controls</option></select></label><label>Mode<select id="appearance-mode"><option value="light" ${preferences?.mode!=='dark'?'selected':''}>Light</option><option value="dark" ${preferences?.mode==='dark'?'selected':''}>Dark</option></select></label></div><button class="secondary" id="save-appearance">Save appearance</button><h3>Future navigation</h3><p>Choose the next sign-in destination. Other open clients stay on their current view.</p><div class="form-grid"><label>Default view<select id="preference-view">${['Home','Board','Todos','Goals','Epics','Calendar','Graph','Ideas','Cost','Projects','Settings'].map(name=>`<option ${preferences?.defaultView===name?'selected':''}>${name}</option>`).join('')}</select></label><label>Default project<select id="preference-project"><option value="0">All projects</option>${projects.map(p=>`<option value="${p.id}" ${preferences?.defaultProject===p.id?'selected':''}>${escapeHTML(p.name)}</option>`).join('')}</select></label></div><button class="secondary" id="save-navigation">Save sign-in defaults</button></section>`; }
+function applyAppearance(p) {
+  const draft = preferencesActor === session?.account.id ? preferenceDraft : {};
+  document.documentElement.dataset.style = draft.style ?? p.style;
+  document.documentElement.dataset.mode = draft.mode ?? p.mode;
+  document.dispatchEvent(new Event('teleport-appearance'));
+}
+function clearPresentation() {
+  if (typeof dismissOverlays === 'function') dismissOverlays();
+  leaveGraph(); graphCameras.clear(); graphData=null;graphPending={};graphQuery='';graphKind='';calendarState={date:'',period:'default',duePeriod:'',query:''};calendarDirty=false;calendarEpoch++;selected=null;workflowMap={};flow=null;flows=[];flowDirty=false;flowDrag=null;resetShift();projects=[];tickets=[];ideas=[];root.replaceChildren();notice('');session=null;preferences=null;preferencesActor='';initialNavigation=true;appearanceDirty=false;navigationDirty=false;
+  clearTimeout(preferenceTimer);preferenceDraft={};preferenceError='';preferenceConflict=false;preferenceSaving=false;
+  document.documentElement.removeAttribute('data-style');document.documentElement.removeAttribute('data-mode');
+}
+function appearanceHTML() {
+  const p = {...preferences,...preferenceDraft};
+  return `<section><h2>Appearance</h2><div class="form-grid"><label>Visual style<select id="appearance-style"><option value="paper" ${p.style==='paper'?'selected':''}>Paper</option><option value="instrument" ${p.style==='instrument'?'selected':''}>Instrument</option></select></label><label>Mode<select id="appearance-mode"><option value="light" ${p.mode!=='dark'?'selected':''}>Light</option><option value="dark" ${p.mode==='dark'?'selected':''}>Dark</option></select></label></div><h3>Sign-in defaults</h3><div class="form-grid"><label>Default view<select id="preference-view">${['Home','Board','Todos','Goals','Epics','Calendar','Graph','Ideas','Cost','Projects'].map(name=>`<option ${p.defaultView===name?'selected':''}>${name}</option>`).join('')}</select></label><label>Default project<select id="preference-project"><option value="0">All projects</option>${projects.map(project=>`<option value="${project.id}" ${p.defaultProject===project.id?'selected':''}>${escapeHTML(project.name)}</option>`).join('')}</select></label></div><p id="preference-status" class="save-status" role="status"></p><button type="button" class="secondary" id="preference-retry" hidden>Retry changes</button></section>`;
+}
+function preferenceStatus() {
+  const status=byId('preference-status'),retry=byId('preference-retry');
+  if(status){status.textContent=preferenceError || (preferenceSaving?'Saving…':'');status.classList.toggle('error',!!preferenceError);}
+  if(retry)retry.hidden=!preferenceError;
+}
+function queuePreferenceSave(field,value) {
+  preferenceDraft[field]=value;
+  appearanceDirty='style' in preferenceDraft || 'mode' in preferenceDraft;
+  navigationDirty='defaultView' in preferenceDraft || 'defaultProject' in preferenceDraft;
+  if(field==='style'||field==='mode')applyAppearance(preferences);
+  clearTimeout(preferenceTimer);
+  if(!preferenceConflict){preferenceError='';preferenceTimer=setTimeout(flushPreferenceSave,120);}
+  preferenceStatus();
+}
+async function flushPreferenceSave() {
+  if(preferenceSaving||!session||!Object.keys(preferenceDraft).length||preferenceConflict)return;
+  const actor=session.account.id,draft=preferenceDraft;
+  preferenceSaving=true;preferenceStatus();
+  try {
+    for(const [operation,fields] of [['setAppearance',['style','mode']],['saveViewPreferences',['defaultView','defaultProject']]]){
+      if(session?.account.id!==actor||preferenceDraft!==draft)return;
+      const changed=Object.fromEntries(fields.filter(field=>field in draft).map(field=>[field,draft[field]]));
+      if(!Object.keys(changed).length)continue;
+      const values={...preferences,...draft},body={expectedVersion:preferences.version};
+      if(operation==='setAppearance')Object.assign(body,{style:values.style,mode:values.mode});
+      else Object.assign(body,{defaultView:values.defaultView,defaultProject:values.defaultProject,recent:preferences.recent||[]});
+      const result=await api(operation,body);
+      if(session?.account.id!==actor||preferenceDraft!==draft)return;
+      if(result.version>=(preferences?.version||0))preferences=result;
+      for(const [field,value] of Object.entries(changed))if(draft[field]===value)delete draft[field];
+      applyAppearance(preferences);
+    }
+  }catch(error){
+    if(session?.account.id!==actor||preferenceDraft!==draft)return;
+    preferenceConflict=error.status===409;
+    preferenceError=preferenceConflict?'Preferences changed elsewhere. Retry to apply these changes to the latest version.':error.message||'Preferences could not be saved. Retry changes.';
+  }finally{
+    if(session?.account.id===actor&&preferenceDraft===draft){preferenceSaving=false;appearanceDirty='style' in draft||'mode' in draft;navigationDirty='defaultView' in draft||'defaultProject' in draft;preferenceStatus();if(!preferenceError&&Object.keys(draft).length)preferenceTimer=setTimeout(flushPreferenceSave,120);}
+  }
+}
 function bindPresentation() {
-  let formVersion = preferences?.version;
-  for(const id of ['appearance-style','appearance-mode'])on(id,'change',()=>appearanceDirty=true);
-  for(const id of ['preference-view','preference-project'])on(id,'change',()=>navigationDirty=true);
-  on('save-appearance','click',async()=>{const actor=session.account.id,generation=loadGeneration;try{const p=await api('setAppearance',{expectedVersion:formVersion,style:byId('appearance-style').value,mode:byId('appearance-mode').value});if(session?.account.id!==actor||generation!==loadGeneration||p.version<(preferences?.version||0))return;preferences=p;formVersion=p.version;appearanceDirty=false;applyAppearance(p);notice('Personal appearance saved');}catch(error){showError(error);}});
-  on('save-navigation','click',async()=>{const actor=session.account.id,generation=loadGeneration;try{const p=await api('saveViewPreferences',{expectedVersion:formVersion,defaultView:byId('preference-view').value,defaultProject:Number(byId('preference-project').value),recent:[{view,projectId},...(preferences.recent||[]).filter(c=>c.view!==view||c.projectId!==projectId)].slice(0,20)});if(session?.account.id!==actor||generation!==loadGeneration||p.version<(preferences?.version||0))return;preferences=p;formVersion=p.version;navigationDirty=false;notice('Future sign-in defaults saved; active views retained');}catch(error){showError(error);}});
+  for(const [id,field] of [['appearance-style','style'],['appearance-mode','mode'],['preference-view','defaultView'],['preference-project','defaultProject']])on(id,'change',e=>queuePreferenceSave(field,field==='defaultProject'?Number(e.target.value):e.target.value));
+  on('preference-retry','click',async()=>{
+    const actor=session?.account.id,draft=preferenceDraft;
+    try{const latest=await api('getViewPreferences');if(session?.account.id!==actor||preferenceDraft!==draft)return;preferences=latest;preferenceConflict=false;preferenceError='';await flushPreferenceSave();}catch(error){if(session?.account.id===actor&&preferenceDraft===draft){preferenceError=error.message;preferenceStatus();}}
+  });
+  preferenceStatus();
 }

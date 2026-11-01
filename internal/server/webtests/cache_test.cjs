@@ -6,7 +6,7 @@ const vm=require('node:vm');
 
 test('account invalidation clears query, record, workflow and layout caches',()=>{
   let cleared=false;
-  const context=vm.createContext({session:{account:{id:'first'}},root:{replaceChildren(){cleared=true;}},notice(){},document:{documentElement:{removeAttribute(){}}}});
+  const context=vm.createContext({session:{account:{id:'first'}},root:{replaceChildren(){cleared=true;}},notice(){},clearTimeout(){},document:{documentElement:{removeAttribute(){}}}});
   vm.runInContext(`let graphData={secret:1},graphPending={secret:1},graphQuery='private graph query',graphKind='task',calendarState={query:'private calendar query'},calendarDirty=true,calendarEpoch=3,selected={title:'private ticket'},workflowMap={private:1},flow={instructions:'private draft'},flows=[{private:1}],flowDirty=true,flowDrag={},projects=[{}],tickets=[{}],ideas=[{}];const graphCameras=new Map([['first',{}]]);function leaveGraph(){};function resetShift(){}`,context);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/presentation.js'),'utf8'),context);
   vm.runInContext('clearPresentation()',context);

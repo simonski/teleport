@@ -58,6 +58,12 @@ def main():
             assert ticket["status"] == "Doing"
             if args.browser:
                 def browser(*arguments):
+                    if arguments[0] == "select":
+                        browser("click", arguments[1] + " + .choice-button")
+                        return browser("click", ".choice-list [data-value=" + json.dumps(arguments[2]) + "]")
+                    if arguments == ("find", "role", "button", "click", "--name", "Settings", "--exact"):
+                        browser("click", "#account")
+                        return browser("click", "#account-settings")
                     if arguments[0] == "click" and len(arguments) == 2:
                         # Native-driver visibility can include a few clipped pixels;
                         # centre the actual control inside its scroll container.
@@ -73,13 +79,30 @@ def main():
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
                     browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
+                    browser("eval", "if(document.querySelector('dialog,[data-view=Settings],#finder-open')||document.body.innerText.includes('Work, in motion'))throw new Error('Obsolete navigation or native dialog');if(!document.querySelector('.wordmark .rocket'))throw new Error('Missing rocket')")
+                    browser("click", "#project + .choice-button")
+                    browser("press", "ArrowDown")
+                    browser("press", "Escape")
+                    browser("eval", "if(document.querySelector('.choice-list')||document.activeElement!==document.querySelector('#project + .choice-button'))throw new Error('Choice keyboard dismissal lost focus')")
+                    browser("click", "#new")
+                    browser("fill", '[name="title"]', "Unsaved dismissal check")
+                    browser("eval", "document.querySelector('#editor button[type=submit]').focus()")
+                    browser("press", "Tab")
+                    browser("eval", "if(document.activeElement!==document.querySelector('#dismiss'))throw new Error('Modal focus escaped')")
+                    browser("press", "Escape")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!document.querySelector('#app').inert")
+                    browser("click", "#new")
+                    browser("mouse", "move", "3", "3")
+                    browser("mouse", "down", "left")
+                    browser("mouse", "up", "left")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     browser("find", "role", "button", "click", "--name", "Todos", "--exact")
                     browser("find", "role", "button", "click", "--name", "Pack the flight case")
-                    browser("wait", "--fn", "document.querySelector('dialog')?.open")
+                    browser("wait", "--fn", "document.querySelector('tk-dialog')?.open")
                     browser("find", "role", "button", "click", "--name", "Move to Done", "--exact")
                     browser("find", "label", "Accept these completion criteria", "check")
                     browser("find", "role", "button", "click", "--name", "Complete ticket", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog')?.open")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog')?.open")
                     assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["status"] == "Done"
                     browser("screenshot", "/tmp/teleport-smoke.png")
                     draft = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "human@1", "projectId": project["id"], "title": "Flight workflow", "requestId": "smoke-flow"})))
@@ -99,7 +122,7 @@ def main():
                     browser("screenshot", "/tmp/teleport-workflow.png")
                     browser("click", "#flow-activate")
                     browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     new_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Fresh workflow pin", "agent": False, "requestId": "new-pin"})))
                     assert new_ticket["workflow"] == draft["id"] + "@1"
                     assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["workflow"] == "human@1"
@@ -123,7 +146,7 @@ def main():
                     browser("click", '[data-agent="accept"]')
                     browser("find", "label", "Accept this exact scope and basis", "check")
                     browser("find", "role", "button", "click", "--name", "Accept scope", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     candidate = wait_ticket(lambda current: current["status"] == "Approval")
                     assert candidate["attempts"] == 3 and candidate["agentReview"]["simulated"]
                     tk("approveTicket", "--data", json.dumps({"id": candidate["id"], "expectedVersion": candidate["version"], "confirm": True}), success=False)
@@ -162,7 +185,7 @@ def main():
                     browser("wait", '[data-delivery="prepare"]')
                     browser("click", '[data-delivery="prepare"]')
                     browser("find", "role", "button", "click", "--name", "Prepare worktree", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     prepared = wait_ticket(lambda current: current.get("delivery", {}).get("worktree", {}).get("path"))
                     worktree = Path(prepared["delivery"]["worktree"]["path"])
                     (worktree / "README.md").write_text("Delivered fixture\n")
@@ -172,13 +195,13 @@ def main():
                     browser("wait", '[data-delivery="report"]')
                     browser("click", '[data-delivery="report"]')
                     browser("find", "role", "button", "click", "--name", "Capture candidate", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     browser("find", "role", "button", "click", "--name", "Real external fixture")
                     browser("wait", '[data-delivery="approve"]')
                     browser("click", '[data-delivery="approve"]')
                     browser("find", "label", "Approve this exact code and completion basis", "check")
                     browser("find", "role", "button", "click", "--name", "Approve and fast-forward main", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     done = wait_ticket(lambda current: current["status"] == "Done")
                     assert done.get("agentReview") is None
                     assert (repository / "README.md").read_text() == "Delivered fixture\n"
@@ -224,12 +247,12 @@ def main():
                     browser("find", "role", "button", "click", "--name", "Settings", "--exact")
                     browser("select", "#appearance-style", "instrument")
                     browser("select", "#appearance-mode", "dark")
-                    browser("click", "#save-appearance")
-                    browser("wait", "--fn", "document.documentElement.dataset.mode==='dark'")
+                    browser("wait", "--fn", "document.documentElement.dataset.mode==='dark'&&!preferenceSaving&&!Object.keys(preferenceDraft).length")
                     prefs = json.loads(tk("getViewPreferences"))
                     assert prefs["style"] == "instrument" and prefs["mode"] == "dark"
+                    browser("eval", "if(document.querySelector('#save-appearance,#save-navigation,#save-execution-mode')||document.querySelector('#notice').textContent.includes('appearance saved'))throw new Error('Obsolete preference save UI')")
                     browser("click", "#inspect-native")
-                    browser("wait", "--fn", "document.querySelector('dialog[open]')?.innerText.includes('fresh server authorization')")
+                    browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.innerText.includes('fresh server authorization')")
                     browser("click", '#editor button[type="submit"]')
                     browser("find", "role", "button", "click", "--name", "Graph", "--exact")
                     browser("wait", "--fn", "document.querySelector('#graph-state')?.innerText.includes('entities')")
@@ -250,7 +273,7 @@ def main():
                     browser("click", "#new-hierarchy")
                     browser("find", "label", "Title", "fill", "Reduce boarding delay")
                     browser("find", "role", "button", "click", "--name", "Create ticket", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     goals = json.loads(tk("getGoalView", "--data", json.dumps({"projectId": project["id"]})))["items"]
                     goal_id = next(g["id"] for g in goals if g["title"] == "Reduce boarding delay")
                     browser("wait", f'[data-ticket="{goal_id}"]')
@@ -278,7 +301,8 @@ def main():
                     reviews = json.loads(tk("listGoalReviews", "--data", json.dumps({"id": reviewed_goal["id"]})))["items"]
                     assert reviews[0]["assessment"] == "unknown" and reviews[0]["nextReview"] == "2026-02-28"
                     browser("click", "#dismiss")
-                    browser("click", "#finder-open")
+                    browser("press", "Shift")
+                    browser("press", "Shift")
                     browser("fill", "#finder-query", f'#{idea_ticket["id"]}')
                     browser("wait", "[data-result]")
                     browser("screenshot", "/tmp/teleport-finder.png")
@@ -287,7 +311,7 @@ def main():
                     browser("eval", "for(const [name,value]of Object.entries({start:'2026-03-28',eta:'2026-03-30'})){const input=document.querySelector(`[name=${name}]`);input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));}")
                     browser("eval", "document.querySelector('#editor button[type=submit]').scrollIntoView({block:'center'})")
                     browser("find", "role", "button", "click", "--name", "Save changes", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     browser("find", "role", "button", "click", "--name", "Calendar", "--exact")
                     browser("wait", "#calendar-controls")
                     browser("select", '#calendar-controls [name="period"]', "week")

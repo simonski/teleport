@@ -26,7 +26,7 @@ test('a late mutation response cannot close a replacement dialog or enter anothe
   const dialog = {open:true,querySelector:()=>form};
   const context = vm.createContext({
     session:{account:{id:'first'}},loadGeneration:1,
-    document:{querySelector:selector=>selector==='dialog[open]'?dialog:{}},
+    document:{querySelector:selector=>selector==='tk-dialog[open]'?dialog:{}},
     workspace:async()=>{},fetch:()=>new Promise(resolve=>release=resolve),
   });
   vm.runInContext(source('app.js'), context);
@@ -40,7 +40,7 @@ test('a late mutation response cannot close a replacement dialog or enter anothe
 
 test('a late content read is rejected after actor or view invalidation',async()=>{
   let release;
-  const context=vm.createContext({session:{account:{id:'first'}},loadGeneration:1,document:{querySelector:selector=>selector==='dialog[open]'?null:{}},workspace:async()=>{},fetch:()=>new Promise(resolve=>release=resolve)});
+  const context=vm.createContext({session:{account:{id:'first'}},loadGeneration:1,document:{querySelector:selector=>selector==='tk-dialog[open]'?null:{}},workspace:async()=>{},fetch:()=>new Promise(resolve=>release=resolve)});
   vm.runInContext(source('app.js'),context);
   const pending=vm.runInContext("api('listWorkflows',{})",context);
   vm.runInContext("session={account:{id:'second'}};loadGeneration++",context);

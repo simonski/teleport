@@ -12,6 +12,7 @@ func init() {
 	}{
 		{"setExecutionMode", "ACT-0918", "Configure explicit off/demo execution", app.ExecutionModeInput{}, model.Settings{}},
 		{"requestRefinement", "ACT-0301", "Request scoped refinement", app.VersionInput{}, model.Ticket{}},
+		{"returnRefinementToTodo", "ACT-0403", "Return unowned queued refinement to human Todo", app.VersionInput{}, model.Ticket{}},
 		{"runDemoStage", "ACT-0316", "Run one labelled deterministic demo stage", app.DemoStageInput{}, app.DemoStageResult{}},
 		{"acceptRefinement", "ACT-0420", "Human accepts the exact current proposal", app.AcceptScopeInput{}, model.Ticket{}},
 		{"answerQuestion", "ACT-0412", "Answer the exact pending structured question", app.AnswerInput{}, model.Ticket{}},

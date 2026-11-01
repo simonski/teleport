@@ -1,5 +1,6 @@
 tk-dialog{display:none;padding:28px;width:min(600px,calc(100vw - 28px));max-height:calc(100dvh - 40px);overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;box-shadow:0 24px 80px #20231f33;margin:auto;position:relative}
 tk-dialog[open]{display:block}.modal-shade{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px 0;background:#26292344;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.human-board .ticket[draggable=true]{cursor:grab}.human-dragging{opacity:.45}.human-board .human-drop-target{box-shadow:inset 0 0 0 2px var(--accent);border-radius:8px;background:var(--soft)}
 .choice-source{position:absolute!important;width:1px!important;height:1px!important;clip-path:inset(50%);overflow:hidden;opacity:0;pointer-events:none}
 .choice-button{display:flex;justify-content:space-between;align-items:center;gap:16px;min-width:0;width:100%;font-weight:400;text-align:left;background:var(--surface)!important;padding:10px;color:var(--ink)}
 .choice-button::after{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);flex:none;margin:0 4px 4px 8px}.choice-button:disabled{opacity:.55;cursor:default}

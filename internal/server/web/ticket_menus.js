@@ -17,8 +17,13 @@ function menuTicketSource(target){
 function attachedRunningSession(ticket,rows){return rows.find(row=>row.ticketId===ticket.id&&row.projectId===ticket.projectId&&row.state==='running'&&ticket.execution==='local:'+row.id);}
 function ticketMenuEntries(ticket,rows,nativePending=false){
   const entries=[{id:'open',label:'Open ticket'}],attached=attachedRunningSession(ticket,rows);
+  if(typeof roleAllowsWrite==='function'&&roleAllowsWrite(ticket.projectId)){
+    if(view==='Todos'&&!ticket.agent)for(const move of humanMoves(ticket))entries.push({id:'move-'+move.target,label:'Move to '+move.role,target:move.target});
+    if(canQueueRefinement(ticket)&&ticket.status==='Todo')entries.push({id:'refine',label:'Send to refine'});
+    if(ticket.agent&&ticket.status==='Refine'&&canQueueRefinement(ticket))entries.push({id:'return-todo',label:'Send back to Todos'});
+  }
   if(ticket.question&&!ticket.question.resolved&&!ticket.question.obsolete||nativePending)entries.push({id:'questions',label:'Questions'});
-  if(attached)entries.push({id:'teleport',label:'Teleport · '+attached.id,sessionId:attached.id});
+  if(attached&&view!=='Todos')entries.push({id:'teleport',label:'Teleport · '+attached.id,sessionId:attached.id});
   return entries;
 }
 async function showTicketMenu(id,source,point=null){
@@ -26,7 +31,7 @@ async function showTicketMenu(id,source,point=null){
   dismissTicketMenu();const epoch=++ticketMenuEpoch,actor=session.account.id,generation=loadGeneration,detail=++detailEpoch;ticketMenuPending=true;
   const current=()=>ticketMenuEpoch===epoch&&session?.account.id===actor&&loadGeneration===generation&&detailEpoch===detail&&source.isConnected&&!menuForeground();
   try{
-    const [ticket,rows]=await Promise.all([api('getTicket',{id}),pages('listSessions')]);
+    const [ticket,rows]=await Promise.all([api('getTicket',{id}),view==='Todos'?Promise.resolve([]):pages('listSessions')]);
     if(!current())return;
     const attached=attachedRunningSession(ticket,rows),requests=attached?.harness==='codex'?[await api('getSessionRequests',{id:attached.id})]:[];
     if(!current())return;
@@ -41,7 +46,7 @@ async function showTicketMenu(id,source,point=null){
       if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const index=buttons.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}
       else if(e.key==='Tab')dismissTicketMenu(true);
     });
-    element.addEventListener('click',e=>{const button=e.target.closest('[data-ticket-menu]'),entry=entries.find(item=>item.id===button?.dataset.ticketMenu);if(!entry)return;dismissTicketMenu(true);if(entry.id==='teleport')teleportTicketSession(id,entry.sessionId).catch(showError);else editTicket(id);});
+    element.addEventListener('click',e=>{const button=e.target.closest('[data-ticket-menu]'),entry=entries.find(item=>item.id===button?.dataset.ticketMenu);if(!entry)return;dismissTicketMenu(true);if(entry.target)moveHumanTicket(ticket,entry.target);else if(entry.id==='refine'||entry.id==='return-todo')changeRefinementQueue(ticket,entry.id==='refine'?'requestRefinement':'returnRefinementToTodo');else if(entry.id==='teleport')teleportTicketSession(id,entry.sessionId).catch(showError);else editTicket(id);});
   }catch(error){if(current())showError(error);}
   finally{if(ticketMenuEpoch===epoch)ticketMenuPending=false;}
 }

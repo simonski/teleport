@@ -398,6 +398,17 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		if err = expected(t, in.ExpectedVersion); err != nil {
 			return nil, false, err
 		}
+		if !t.Agent {
+			if t.Kind != "task" || t.Status != "Todo" || !refinementQueueAvailable(st, t) {
+				return nil, false, failure(409, "refinement_blocked", "Send an unclaimed human Todo draft without retained implementation to refinement")
+			}
+			t.Agent, t.Assignee, t.Workflow = true, "", st.Projects[t.ProjectID].AgentWorkflow
+			initial, ok := phaseForRole(st.Workflows[t.Workflow], "Todo")
+			if !ok {
+				return nil, false, failure(409, "workflow_mapping", "The project agent workflow needs one Todo phase")
+			}
+			t.Phase = initial.ID
+		}
 		if !t.Agent || t.Status != "Todo" || t.Kind == "goal" || busy(t) || t.Archived || t.Deleted {
 			return nil, false, failure(409, "refinement_blocked", "Request refinement on an ordinary visible unclaimed agent Todo task/epic")
 		}
@@ -420,6 +431,38 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		saveTicket(st, &t, a, operation)
 		reconcile(st, t.ParentID, a)
 		reconcileDependencyStops(st, a)
+		return t, true, nil
+	case "returnRefinementToTodo":
+		var in VersionInput
+		if err := parse(raw, &in); err != nil {
+			return nil, false, err
+		}
+		t, err := ticketFor(st, a, in.ID, "Contributor")
+		if err != nil {
+			return nil, false, err
+		}
+		if err = expected(t, in.ExpectedVersion); err != nil {
+			return nil, false, err
+		}
+		if a.ServiceSessionID != "" || a.ServiceRunID != "" || !t.Agent || t.Kind != "task" || t.Status != "Refine" || !refinementQueueAvailable(st, t) {
+			return nil, false, failure(409, "refinement_owned", "Only an unowned queued Refine task can return to human Todo")
+		}
+		workflow := st.Projects[t.ProjectID].HumanWorkflow
+		initial, ok := phaseForRole(st.Workflows[workflow], "Todo")
+		if !ok {
+			return nil, false, failure(409, "workflow_mapping", "The project human workflow needs one Todo phase")
+		}
+		t.Agent, t.Assignee, t.Workflow = false, a.ID, workflow
+		if err = enterPhase(&t, st.Workflows[workflow], initial.ID); err != nil {
+			return nil, false, err
+		}
+		t.Refinement, t.ResumeAttempt, t.Attention = nil, "", ""
+		t.ResumeHold, t.StopRequested = false, false
+		if t.Question != nil {
+			t.Question.Obsolete = true
+		}
+		saveTicket(st, &t, a, operation)
+		reconcile(st, t.ParentID, a)
 		return t, true, nil
 	case "runDemoStage":
 		var in DemoStageInput

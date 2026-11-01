@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+from human_todos_browser import verify_human_todos
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
+    parser.add_argument("--browser", action="store_true")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="teleport-init-proof-") as temporary:
         folder = Path(temporary)
@@ -26,6 +28,13 @@ def main():
         database = args.database or str(folder / "installation.sqlite")
         environment = dict(os.environ, TELEPORT_DB=database, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
         process = None
+        browser_name = f"teleport-init-{port}"
+
+        def browser(*arguments):
+            result = subprocess.run(["agent-browser", "--session", browser_name, *arguments], capture_output=True, text=True, timeout=40)
+            if result.returncode:
+                raise RuntimeError(result.stderr or result.stdout)
+            return result.stdout
 
         def tk(*arguments, fail=False, input=None):
             result = subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, text=True, input=input, capture_output=True, timeout=30)
@@ -73,6 +82,15 @@ def main():
             assert len(tickets) >= 25 and len(ideas) == 4, (len(tickets), len(ideas), project["id"])
             assert not first["settings"]["agents"] and first["preferences"]["defaultProject"] == project["id"]
             assert all(not ticket["agent"] for ticket in tickets if ticket["status"] == "Done")
+            if args.browser:
+                browser("open", endpoint)
+                browser("fill", 'input[name="username"]', "admin")
+                browser("fill", 'input[name="password"]', "password")
+                browser("click", '#login button[type="submit"],#login button')
+                browser("wait", "#nav-views")
+                verify_human_todos(browser, api, project)
+                browser("close")
+                project = api("listProjects")["items"][0]
             tk("init", "-f", "-demo", fail=True)
             assert api("getSession")["installationId"] == first["installationId"]
             api("saveProject", {"id": project["id"], "expectedVersion": project["version"], "description": "Human-edited sample"})
@@ -101,7 +119,15 @@ def main():
             assert api("listProjects")["items"][0]["description"] == "Human-edited sample"
             stop()
             print("PASS: SQLite backed-up force reset, restored identity/data, private backup, demo hierarchy/Ideas, idempotent edits and owned-init refusal; zero model calls", flush=True)
+        except Exception:
+            if args.browser:
+                print(browser("eval", "JSON.stringify({trace:window.__ticketTrace,notice:document.querySelector('#notice')?.textContent,dialog:document.querySelector('#editor')?.open,calendar:typeof enhanceDate,fields:[...document.querySelectorAll('#editor input')].map(input=>({name:input.name,type:input.type,calendar:input.dataset.calendar}))})"), flush=True)
+                print(browser("errors"), flush=True)
+                browser("screenshot", "/tmp/teleport-init-browser-failure.png")
+            raise
         finally:
+            if args.browser:
+                subprocess.run(["agent-browser", "--session", browser_name, "close"], capture_output=True, timeout=15)
             stop()
 
 

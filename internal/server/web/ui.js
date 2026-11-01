@@ -133,7 +133,7 @@ function enhanceSelect(select) {
 }
 function enhanceControls() {
   document.querySelectorAll('select:not([data-custom-choice])').forEach(enhanceSelect);
-  document.querySelectorAll('input[type=date]').forEach(input => {input.type='text';input.inputMode='numeric';input.pattern='[0-9]{4}-[0-9]{2}-[0-9]{2}';input.placeholder='YYYY-MM-DD';});
+  if(typeof enhanceDate==='function')document.querySelectorAll('input[type=date]').forEach(enhanceDate);
   if (openChoice && !openChoice.button.isConnected) dismissChoice();
 }
 new MutationObserver(enhanceControls).observe(document.documentElement, {childList:true,subtree:true});

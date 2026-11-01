@@ -10,6 +10,8 @@ function applyAppearance(p) {
   if(typeof applyNavigation==='function')applyNavigation();
 }
 function clearPresentation() {
+  if(typeof ticketEditorPending!=='undefined')ticketEditorPending=null;
+  if(typeof cancelHumanTicketDrag==='function')cancelHumanTicketDrag();
   if (typeof dismissOverlays === 'function') dismissOverlays();
   if (typeof resetWelcome === 'function') resetWelcome();
   if (typeof resetTerminals === 'function') resetTerminals();

@@ -71,7 +71,10 @@ def main():
             if args.init_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "bootstrap")
                 bootstrap_url = "postgresql://teleport@/bootstrap?" + urlencode({"host": temporary, "sslmode": "disable"})
-                subprocess.run(["python3", "-B", "tools/init_check.py", "--database", bootstrap_url], cwd=ROOT, env=environment, check=True)
+                bootstrap_command = ["python3", "-B", "tools/init_check.py", "--database", bootstrap_url]
+                if args.browser:
+                    bootstrap_command.append("--browser")
+                subprocess.run(bootstrap_command, cwd=ROOT, env=environment, check=True)
                 return
             if not focused or args.smoke_only or args.shell_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "smoke")

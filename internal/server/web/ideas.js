@@ -23,12 +23,13 @@ function ideaForm(idea) {
   const requestId = crypto.randomUUID();
   const projectOptions = projects.filter(p => roleAllowsWrite(p.id)).map(p => `<option value="${p.id}" ${p.id === projectId ? 'selected' : ''}>${escapeHTML(p.name)}</option>`).join('');
   const dialog = openDialog(idea ? 'Edit idea' : 'New idea', `${!idea ? `<label>Placement<select name="projectId"><option value="0" ${!projectId ? 'selected' : ''}>Private inbox · creator and administrators</option>${projectOptions}</select></label><p class="form-help">Project placement shares the Idea and retained history with project members.</p>` : ''}<label>Title<input name="title" required maxlength="500" value="${escapeHTML(idea?.title || '')}"></label><label>Idea<textarea name="text" rows="7" maxlength="20000">${escapeHTML(idea?.text || '')}</textarea></label>`, idea ? 'Save idea' : 'Create idea');
+  const completion=captureDialogCompletion(dialog);
   byId('editor-form').onsubmit = async e => {
     e.preventDefault(); const data = Object.fromEntries(new FormData(e.currentTarget));
     if (!idea) data.projectId = Number(data.projectId);
     try {
       const saved = await api('saveIdea', { ...data, ...(idea ? { id: idea.id, expectedVersion: idea.version } : { requestId }) });
-      dialog.close(); await workspace(); await openIdea(saved.id); notice('Idea saved');
+      if(!completion.current())return;dialog.close(); await workspace();if(!completion.follow())return; await openIdea(saved.id); notice('Idea saved');
     } catch (error) { showError(error); }
   };
 }
@@ -59,6 +60,7 @@ function ideaProposalForm(idea) {
   const requestId = crypto.randomUUID();
   const writable = projects.filter(p => roleAllowsWrite(p.id));
   const dialog = openDialog('Draft a work proposal', `<p>Keep ${escapeHTML(idea.id)} unchanged. Human acceptance will create or link the exact proposed work.</p><label>Proposal type<select id="idea-target-kind"><option value="create">Create a new Todo ticket</option><option value="link">Link an existing ticket</option></select></label><div id="idea-create-fields"><label>Destination project<select name="projectId">${writable.map(p => `<option value="${p.id}" ${p.id === idea.projectId ? 'selected' : ''}>${escapeHTML(p.name)}</option>`).join('')}</select></label><div class="form-grid"><label>Type<select name="kind"><option value="task">Task</option><option value="epic">Epic</option><option value="goal">Goal</option></select></label><label>Intent<select name="intent"><option value="agent">Agent</option><option value="human">Human</option></select></label></div><label>Ticket title<input name="title" value="${escapeHTML(idea.title)}" maxlength="500"></label><label>Description<textarea name="description" rows="3">${escapeHTML(idea.text)}</textarea></label><label>Success criteria<textarea name="criteria" rows="2"></textarea></label><label>Existing parent ID (optional)<input name="parentId" type="number" min="1"></label></div><div id="idea-link-fields" hidden><label>Existing ticket ID<input id="idea-existing" type="number" min="1"></label></div>`, 'Save proposal');
+  const completion=captureDialogCompletion(dialog);
   on('idea-target-kind', 'change', e => { byId('idea-create-fields').hidden = e.target.value !== 'create'; byId('idea-link-fields').hidden = e.target.value !== 'link'; });
   byId('editor-form').onsubmit = async e => {
     e.preventDefault();
@@ -66,13 +68,14 @@ function ideaProposalForm(idea) {
       let target;
       if (byId('idea-target-kind').value === 'link') { const t = await api('getTicket', { id: Number(byId('idea-existing').value) }); target = { existingId: t.id, existingVersion: t.version }; }
       else { const data = Object.fromEntries(new FormData(e.currentTarget)); target = { create: { projectId: Number(data.projectId), parentId: Number(data.parentId) || 0, kind: data.kind, title: data.title, description: data.description, criteria: data.criteria, agent: data.intent === 'agent' } }; }
-      await api('submitIdeaProposal', { id: idea.id, expectedVersion: idea.version, requestId, targets: [target] }); dialog.close(); await workspace(); await openIdea(idea.id); notice('Proposal saved; no work created');
+      await api('submitIdeaProposal', { id: idea.id, expectedVersion: idea.version, requestId, targets: [target] }); if(!completion.current())return;dialog.close(); await workspace();if(!completion.follow())return; await openIdea(idea.id); notice('Proposal saved; no work created');
     } catch (error) { showError(error); }
   };
 }
 function ideaAcceptanceForm(idea, proposal) {
   const dialog = openDialog('Accept this exact work proposal', `${proposalTargetsHTML(proposal)}<p>The Idea stays visible. New tickets start Todo; implementation readiness and code approval remain separate decisions.</p><label class="checkbox-label"><input id="idea-agree" type="checkbox" required>Create or link this exact proposed work</label>`, 'Accept proposal');
-  byId('editor-form').onsubmit = async e => { e.preventDefault(); if (!byId('idea-agree').checked) return; try { await api('acceptIdeaProposal', { id: idea.id, expectedVersion: idea.version, proposalId: proposal.id }); dialog.close(); await workspace(); await openIdea(idea.id); notice('Proposal accepted; Idea retained'); } catch (error) { showError(error); } };
+  const completion=captureDialogCompletion(dialog);
+  byId('editor-form').onsubmit = async e => { e.preventDefault(); if (!byId('idea-agree').checked) return; try { await api('acceptIdeaProposal', { id: idea.id, expectedVersion: idea.version, proposalId: proposal.id }); if(!completion.current())return;dialog.close(); await workspace();if(!completion.follow())return; await openIdea(idea.id); notice('Proposal accepted; Idea retained'); } catch (error) { showError(error); } };
 }
 function ideaPlacementForm(idea) {
   const dialog = openDialog('Change Idea placement', `<label>Destination<select id="idea-placement"><option value="0">Creator's private inbox</option>${projects.filter(p => roleAllowsWrite(p.id)).map(p => `<option value="${p.id}" ${p.id === idea.projectId ? 'selected' : ''}>${escapeHTML(p.name)}</option>`).join('')}</select></label><p id="idea-publication-warning">Preview the access change before committing.</p><button type="button" class="secondary" id="idea-preview-placement">Preview access change</button><label class="checkbox-label"><input id="idea-publish-agree" type="checkbox" required disabled>Apply this publication/access change</label>`, 'Apply placement');

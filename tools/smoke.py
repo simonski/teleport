@@ -58,6 +58,11 @@ def main():
             assert ticket["status"] == "Doing"
             if args.browser:
                 def browser(*arguments):
+                    if arguments[0] == "click" and len(arguments) == 2:
+                        # Native-driver visibility can include a few clipped pixels;
+                        # centre the actual control inside its scroll container.
+                        expression = f"document.querySelector({json.dumps(arguments[1])})?.scrollIntoView({{block:'center',inline:'nearest'}})"
+                        subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", "eval", expression], text=True, capture_output=True, timeout=40, check=True)
                     result = subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", *arguments], text=True, capture_output=True, timeout=40)
                     if result.returncode:
                         raise RuntimeError(result.stderr or result.stdout)
@@ -236,12 +241,46 @@ def main():
                     browser("eval", "window.__nativeContext=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...args){return kind.startsWith('webgl')?null:window.__nativeContext.call(this,kind,...args)}")
                     browser("find", "role", "button", "click", "--name", "Graph", "--exact")
                     browser("wait", "--fn", "document.querySelector('#graph-stage')?.innerText.includes('WebGL is unavailable')")
+                    browser("wait", f'[data-node="ticket:{idea_ticket["id"]}"]')
                     browser("click", f'[data-node="ticket:{idea_ticket["id"]}"]')
                     browser("wait", "#graph-apply-position")
                     browser("eval", "HTMLCanvasElement.prototype.getContext=window.__nativeContext")
                     browser("screenshot", "/tmp/teleport-graph-fallback.png")
+                    browser("find", "role", "button", "click", "--name", "Goals", "--exact")
+                    browser("click", "#new-hierarchy")
+                    browser("find", "label", "Title", "fill", "Reduce boarding delay")
+                    browser("find", "role", "button", "click", "--name", "Create ticket", "--exact")
+                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    goals = json.loads(tk("getGoalView", "--data", json.dumps({"projectId": project["id"]})))["items"]
+                    goal_id = next(g["id"] for g in goals if g["title"] == "Reduce boarding delay")
+                    browser("wait", f'[data-ticket="{goal_id}"]')
+                    browser("click", f'[data-ticket="{goal_id}"]')
+                    browser("wait", "#goal-configure")
+                    browser("click", "#goal-configure")
+                    browser("wait", "#add-objective")
+                    browser("click", "#add-objective")
+                    browser("fill", '[data-objective="0"] [data-field="title"]', "Median delay")
+                    browser("select", '[data-objective="0"] [data-field="direction"]', "atMost")
+                    browser("fill", '[data-objective="0"] [data-field="target"]', "5")
+                    browser("fill", '[data-objective="0"] [data-field="unit"]', "minutes")
+                    browser("eval", "document.querySelector('#editor button[type=submit]').scrollIntoView({block:'center'})")
+                    browser("find", "role", "button", "click", "--name", "Save goal configuration", "--exact")
+                    browser("wait", "#goal-review")
+                    browser("click", "#goal-review")
+                    browser("eval", "{const date=document.querySelector('#goal-review-date');date.value='2026-01-31';date.dispatchEvent(new Event('input',{bubbles:true}));date.dispatchEvent(new Event('change',{bubbles:true}));if(date.value!=='2026-01-31')throw new Error('Review date was not set')}")
+                    browser("fill", "#goal-review-note", "Delivery alone does not prove less waiting.")
+                    browser("eval", "document.querySelector('#editor button[type=submit]').scrollIntoView({block:'center'})")
+                    browser("find", "role", "button", "click", "--name", "Save human review", "--exact")
+                    browser("wait", ".goal-review")
+                    browser("screenshot", "/tmp/teleport-goal-review.png")
+                    goals = json.loads(tk("getGoalView", "--data", json.dumps({"projectId": project["id"]})))["items"]
+                    reviewed_goal = next(g for g in goals if g["title"] == "Reduce boarding delay")
+                    reviews = json.loads(tk("listGoalReviews", "--data", json.dumps({"id": reviewed_goal["id"]})))["items"]
+                    assert reviews[0]["assessment"] == "unknown" and reviews[0]["nextReview"] == "2026-02-28"
                 except Exception:
                     print(browser("snapshot", "-i"))
+                    print(browser("eval", "document.querySelector('#notice')?.innerText"))
+                    browser("screenshot", "/tmp/teleport-failure.png")
                     print(browser("errors"))
                     raise
                 finally:

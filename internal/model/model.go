@@ -55,6 +55,7 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
+	GoalReviews     map[int64][]GoalReview    `json:"goalReviews"`
 	GraphLayouts    map[string]GraphLayout    `json:"graphLayouts"`
 	Preferences     map[string]Preferences    `json:"preferences"`
 	NextIdeaID      int64                     `json:"nextIdeaId"`
@@ -112,6 +113,7 @@ type Agreement struct {
 	BasisVersion         int64           `json:"basisVersion"`
 }
 type Ticket struct {
+	GoalPlan           *GoalPlan    `json:"goalPlan,omitempty"`
 	Delivery           *Delivery    `json:"delivery,omitempty"`
 	RoutingHold        string       `json:"routingHold,omitempty"`
 	PhaseEnteredAt     time.Time    `json:"phaseEnteredAt"`

@@ -30,6 +30,12 @@ Graph shows each project/ticket once, with hierarchy/dependency edges and dashed
 
 Settings offers Paper/Instrument styles, each in Light/Dark mode, plus personal sign-in defaults. Preferences synchronize without redirecting another open client or replacing foreground edits. Sign-out clears actor-bound presentation state. Cost currently explains the absence of observed provider usage; it reports no invented token or money total.
 
+## Goals and outcome reviews
+
+Goals and Epics use the same hierarchy IDs and child-based delivery rollups as Board/Graph. Open a goal to configure up to 20 success measures while it is Todo; cadence can be monthly or quarterly. Record human review freezes the current goal/objectives, direct-child versions and delivery snapshot, alongside observed values, evidence notes, sources, as-of dates and an explicit human assessment. Missing evidence remains visible; Done never implies the objective was achieved.
+
+Reviews are immutable and remain unchanged when later work reopens or objective criteria change. The next review adds one/three calendar months with month-end clamping. Reviews do not change delivery status or start follow-up work. Periodic reviews are on demand; background reminders are not yet implemented.
+
 ## Ideas
 
 Ideas keeps planning thoughts separate from tickets. Create a private inbox Idea under All projects, or a project Idea in the selected scope. Private inbox content is visible only to its creator and installation administrators. Project placement shares retained content/history under that project's permissions; Change placement previews the access change and requires explicit confirmation.

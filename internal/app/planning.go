@@ -398,5 +398,5 @@ func planningOperations(st *model.State, a model.Account, operation string, raw 
 		result, err := readCalendar(st, a, in)
 		return result, false, err
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return welcomeOperations(st, a, operation, raw)
 }

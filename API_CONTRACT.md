@@ -10,6 +10,14 @@ Responses use the operation's JSON result. Failures use `{"error":{"code":"stabl
 
 ## Operations
 
+### Welcome setup
+
+Additive authenticated operations use the same typed transport/error envelope. `getWelcomeSetup {}` returns `{setup:WelcomeSetup,canCreateProject:true,canBindRepository:boolean,harnesses:[{id,title,available}]}` for the initiating account only; installed executable discovery does not start a process. `getSession` includes that account's `welcomeSetup`. `WelcomeSetup` contains server-owned `id,version,completed` and `step` (0–5), `projectId,projectName,projectKey,repository,storageRoot,harness,attention`. Defaults are incomplete step 0, Codex and questions/approvals attention. Harness choices are `codex` or empty (configure later); attention is `questions`, `all` or `quiet` (badges remain visible).
+
+`saveWelcomeSetup` accepts `{expectedVersion,step,projectId,projectName,projectKey,repository,storageRoot,harness,attention}`. It saves only a bounded private draft; no project, filesystem grant, process or paid call is created. Name/key limits are 200/80 bytes, paths 4096 each, total strings reject NUL; project references require current Viewer access. Paths may remain incomplete while editing. Stale versions return 409 without mutation. Completed setup is immutable through this operation.
+
+Project creation and repository grants use their existing canonical operations with explicit Next/Grant actions. A server-issued setup ID scopes a stable `createProject` request ID so retries reuse the same project. `completeWelcomeSetup {expectedVersion,confirm:true}` requires a selected currently accessible project; supplied repository/storage roots must exactly match its current grant. Completion requires step 5 and stores a durable completion record without enabling execution. Repeating completion returns the already-completed record without effects. Unavailable harness selection is retained as a preference, never claimed executable. Dismissal does not complete setup; the account menu resumes it.
+
 | Operation | Input | Result | Authority |
 | --- | --- | --- | --- |
 | `login` | `{username:string,password:string}` | `{token:string,account:{id,username,administrator,suspended}}` plus cookie | Public; password verified; throttled |

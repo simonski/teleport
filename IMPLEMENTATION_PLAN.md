@@ -19,7 +19,7 @@ Deliver usable vertical phases from the agreed specification. Start each phase f
 | P07/P08 local mode | P06 | Joint native-local execution and terminal milestone, split below. Native harness permissions govern OS commands; central per-command enforcement remains a later distinct mode. Live paid evidence remains separately authorized. A167–A173. | In progress |
 | P07/08a `phase/07-08-local-contracts` | P06 | Reconcile native-local authority, session lifecycle, robot attention, custom controls and onboarding contracts. | Verified documentation |
 | P07/08b `phase/07-08-workspace-controls` | P07/08a | CSS controls/dialogs, uniform dismissal, concise copy, rocket login, profile-only Settings and autosave. | Verified |
-| P07/08c `phase/07-08-welcome` | P07/08b | Durable tailored first-login project/harness/attention wizard; no implicit execution. | Pending |
+| P07/08c `phase/07-08-welcome` | P07/08b | Durable tailored first-login project/harness/attention wizard; no implicit execution. | Verified |
 | P07/08d `phase/07-08-local-sessions` | P07/08a | Owned local daemon/PTY, durable stable identity, authenticated reconnect/input/resize/stop, bounded replay and real terminal UI with fake-process lifecycle proof. | Pending |
 | P07/08e `phase/07-08-native-harness` | P07/08c/d | Verified installed-harness interpreter, ticket/free-console attachment, robot attention, ticket Q&A and intervention audit; real acceptance separately authorized. | Pending |
 | P07/08f `phase/07-08-javascript-console` | P07/08d | Slash console with isolated durable jobs and canonical versioned tk bindings, retaining explicit human confirmations. | Pending |
@@ -43,6 +43,8 @@ Each phase freezes the affected data/API/event contracts before implementation a
 The hardest boundaries are process ownership/recovery, human acceptance of exact Git candidates, command-policy enforcement, database concurrency and isolation. Stop the dependent feature when its proof is unavailable; continue independent phases. Parked analysis-budget and price-publication decisions remain parked.
 
 ## Engineering contracts and boundaries
+
+P07/08c: private expected-version Welcome progress survives API restart and account reauthentication. `make check` passes the full Go race suite and 15 browser-state tests. `tools/smoke.py --browser` proves first-login presentation, dismissal/resumption, new-project creation, chosen harness/attention and no implicit execution. A deliberately lost successful project response followed by dismissal/resume reuses the durable creation receipt without duplication. `tools/postgres_check.py --browser` passes the same fresh suite/browser path on PostgreSQL 17.7. Tests reject stale/oversized/private/incorrect filesystem basis and confirm idempotent completion. The Welcome screenshot was inspected. Harness installation discovery starts no process; actual session capability remains P07/08d/e.
 
 P01 supplies durable installation/authentication and bounded authenticated tool calls. P02 supplies project membership, stable hierarchy IDs, versioned mutations and immutable revisions. P03 supplies admission/dependency/transfer guards. P04 supplies pinned workflow definitions and deterministic routing. P05 consumes those contracts to reserve stage visits/attempts without bypassing human gates. P06 adds real Git evidence. P07/P08 add verified process/PTY authority. P10 proves backend parity; P11 adds isolation before enabling multi-user execution. P12 integrates clients and packaging without changing domain policy.
 

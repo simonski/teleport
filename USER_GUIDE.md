@@ -6,6 +6,8 @@ Run `make build`, then `bin/tk init` and `bin/tk serve`. SQLite defaults to `~/.
 
 Sign in through the browser with initial `admin` / `password`. CLI login reads the password from standard input: `bin/tk login --password-stdin`. `TELEPORT_SERVER` selects the server; `TELEPORT_CONFIG` selects the private mode-0600 client credential file. All CLI operations except init and server hosting use HTTP APIs. `bin/tk logout` revokes that sign-in session.
 
+First browser sign-in opens Welcome to teleport: create/select a project, optionally grant a committed local repository and separate worktree directory, choose Codex or configure later, then select attention preferences. Progress is private and saved between steps and while editing. Escape, outside click or Later dismisses; Finish setup in the account menu resumes it. Repository access requires explicit confirmation, and finishing setup starts no harness or paid work. Missing Codex installation is shown without claiming readiness. Attention preferences are retained for the local-session notification path; current ticket badges remain visible.
+
 ## Support boundary
 
 Projects creates projects and their Unassigned hierarchy. New creates Goal/Epic/Task tickets; choose Human intent or use Todos for its human default. Click a ticket to edit it or inspect history. Original content changes require Todo; Done asks for explicit completion acceptance. Todos has exactly Todo/Doing/Done; Board defaults to agent intent and offers Human/Both lenses. Home shows actual latest/upcoming work. Keyboard N creates, Q/Shift+Q switches views, and Escape dismisses the current dialog without applying changes. Browser changes poll committed state while preserving open editors.

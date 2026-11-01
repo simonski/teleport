@@ -87,9 +87,9 @@ export function createGraphScene(element, graph, callbacks, retained = {}) {
   }
   function aim(event) { const rect = renderer.domElement.getBoundingClientRect(); pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); raycaster.setFromCamera(pointer, camera); return raycaster.intersectObjects([...objects.values()])[0]?.object; }
   function pointerDown(event) {
-    down = { x: event.clientX, y: event.clientY };
+    down = { x: event.clientX, y: event.clientY, button:event.button };
     const hit = aim(event);
-    if (hit && event.shiftKey && graph.canSave) {
+    if (hit && event.button===0 && event.shiftKey && graph.canSave) {
       controls.enabled = false; select(hit.userData.nodeId);
       dragging = { id: selected, original: hit.position.clone(), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), hit.position) };
       renderer.domElement.setPointerCapture(event.pointerId); event.stopImmediatePropagation(); callbacks.interacting(true);
@@ -98,11 +98,12 @@ export function createGraphScene(element, graph, callbacks, retained = {}) {
   function pointerMove(event) { if (!dragging) return; aim(event); const point = raycaster.ray.intersectPlane(dragging.plane, new THREE.Vector3()); if (point && [point.x, point.y, point.z].every(v => Math.abs(v) <= 100000)) move(dragging.id, point); }
   function pointerUp(event) {
     if (dragging) { dragging = null; controls.enabled = true; callbacks.interacting(false); }
-    else if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) < 5) { const hit = aim(event); select(hit?.userData.nodeId || ''); }
+    else if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) < 5) { const hit = aim(event); select(hit?.userData.nodeId || '');if(down.button===2&&hit&&event.type==='pointerup'){const id=hit.userData.nodeId,point={x:event.clientX,y:event.clientY};queueMicrotask(()=>{if(!disposed)callbacks.context?.(id,renderer.domElement,point);});} }
     down = null;
   }
   function keyDown(event) {
     const ids = [...objects.keys()];
+    if(event.key==='F10'&&event.shiftKey&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.isComposing&&selected){event.preventDefault();callbacks.context?.(selected,renderer.domElement);return;}
     if (event.key === 'Escape') { if (dragging) { move(dragging.id, dragging.original); dragging = null; controls.enabled = true; callbacks.interacting(false); } else select(''); event.preventDefault(); return; }
     if (event.key === 'Enter' && selected) { event.preventDefault(); callbacks.open(selected); return; }
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(event.key)) return;

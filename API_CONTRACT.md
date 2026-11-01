@@ -59,4 +59,18 @@ New tickets use a unique Todo phase in their selected pin, or explicit `phaseId`
 
 ## Installation aggregate
 
+## Deterministic demo execution
+
+`setExecutionMode` accepts `{mode:"off"|"demo",expectedVersion}` using `getSession.settings.version`; administrator only. Saved mode is honored at server startup. Demo mode executes deterministic in-process outcomes every 500 ms, with zero model calls, OS-process claims or source writes. It is distinct from real Codex execution. Shared per-project pools default to one Refine/Doing worker; `setLaneCapacity` accepts `{projectId,expectedVersion,refineWorkers,doingWorkers}` in 0–20. `setHandbrake` accepts `{projectId?,expectedVersion,workflowKey?,phaseId?,engaged}` for administrator system or Maintainer project/stable-phase controls. Its result is the changed Settings or Project object.
+
+`requestRefinement` takes `{id,expectedVersion}` on a visible unclaimed agent Todo task/epic. A successful Refine result retains original content and proposes an exact scope/basis. `acceptRefinement` takes `{id,expectedVersion,proposalId,decompose?}`; human Contributor-or-higher acceptance enters Ready or Decompose. Task decomposition promotes in place and closes planning after atomic Todo child creation. Open epic planning remains separate from child delivery rollups; closed container rollups never become executable implementation work.
+
+`runDemoStage` accepts `{id,expectedVersion,requestId,outcome?,question?}`, with success/failure/question outcomes. Results are `{ticket,simulated:true,attemptId?,blockedReason?}`. Each new automated visit consumes one cumulative attempt (default 20); matching request retries do not rerun it. Questions save origin/workflow/basis and retire the in-process adapter immediately without inventing an OS exit. `answerQuestion` takes `{id,expectedVersion,questionId,answer}` and resumes the unchanged origin under the same attempt; a configured different destination counts anew. Unknown/live external execution remains blocked rather than adopted by the demo adapter.
+
+`setExecutionBudget` accepts `{id,expectedVersion,limit,resume?}` from a Maintainer, 1–1,000 total attempts, preserving consumption. An unbudgeted next attempt records a visible block and resume hold; the last admitted attempt may complete. `pauseTicket`/`resumeTicket` take `{id,expectedVersion}` and retain independent guards. Pending unsuspended question continuations block migration/transfer/visibility changes until separately paused.
+
+Demo Implementation/Review results contain no real commit/check evidence. Review is read-only and separately recorded; `approveTicket` currently rejects with `delivery_evidence_required` even for a Maintainer. `rejectTicket` accepts `{id,expectedVersion,revisionKind:"implementation"|"scope",feedback?,confirm?}` and uses the declared Ready/Todo revision path without implicit acceptance or reset. Real code approval remains dependent on verified Git delivery and a real candidate-bound review.
+
+## Storage envelope
+
 Schema 1 stores a versioned installation aggregate transactionally in the selected SQL backend. A serialized server owns mutations and snapshots; PostgreSQL additionally locks the row. SQLite uses WAL and an exclusive OS installation lock; PostgreSQL uses a connection-held advisory lock. Unsupported schema versions refuse operation. The aggregate is an initial local implementation, not a claim of large-workspace performance. Clients do not import the store. This representation may migrate behind stable domain contracts as capacity evidence requires.

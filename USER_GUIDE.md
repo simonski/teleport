@@ -16,7 +16,13 @@ This is an incremental local implementation. Agents and registrations start disa
 
 Ticket details offer prerequisites, cancellation and permitted reopen/transfer/archive/delete controls. Visibility changes affect only that record; Settings → Hidden tickets provides restoration. Container cancellation affects unfinished descendants, while container reopening affects only the selection. Transfers require ownership (Maintainer) in both projects and refuse cross-project prerequisite links. Settings → Change password verifies the current password and signs out every session; repeat init never resets it.
 
-Settings → Workflow editor shows published definitions and drafts. New from this workflow creates a project-owned draft; edit phase titles, roles, instructions, agentic settings and outcome rules in the keyboard-accessible lists. Canvas node dragging saves layout only. Save draft before previewing a route or activating it for a selected project. Activation changes future tickets; existing Board sections retain their published version. The CLI also exposes stopped same-role migration, while runtime agent attempts and real execution remain unavailable.
+Settings → Workflow editor shows published definitions and drafts. New from this workflow creates a project-owned draft; edit phase titles, roles, instructions, agentic settings and outcome rules in the keyboard-accessible lists. Canvas node dragging saves layout only. Save draft before previewing a route or activating it for a selected project. Activation changes future tickets; existing Board sections retain their published version. The CLI also exposes stopped same-role migration.
+
+## Demo workflow
+
+Settings → Execution → Demo enables automatic deterministic outcomes with no paid calls or source writes. Create an agent Todo ticket, open it and request refinement. Accept the displayed proposal explicitly; the demo proceeds through Implementation and read-only Review to Approval. Its evidence is labelled simulated and cannot complete real agent work. Human ticket completion remains independently available in Todos. Revision buttons retain scope or return to Todo for scope changes.
+
+Questions retain their origin and consumed attempt. Answers automatically continue eligible work; pause/resume, handbrakes, prerequisites and finite attempt limits remain enforced. Project handbrake controls appear in Settings for Maintainers. The profile dot/dropdown lists active attention, and Board attention cards precede ordinary cards. Demo stage events and question/proposal history remain inspectable. Live process ownership/recovery, actual Codex permission enforcement and exact code integration remain unverified and disabled.
 
 ## Development
 

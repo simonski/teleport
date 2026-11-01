@@ -550,7 +550,7 @@ func workflowOperations(st *model.State, a model.Account, operation string, raw 
 			if err = expected(t, record.ExpectedVersion); err != nil {
 				return nil, false, err
 			}
-			if seen[t.ID] || t.Workflow != in.SourceKey || busy(t) {
+			if seen[t.ID] || t.Workflow != in.SourceKey || busy(t) || hasContinuation(t) {
 				return nil, false, failure(409, "migration_blocked", "Select unique stopped/unclaimed source-pinned work")
 			}
 			seen[t.ID] = true
@@ -574,5 +574,5 @@ func workflowOperations(st *model.State, a model.Account, operation string, raw 
 		}
 		return result, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return agentOperations(st, a, operation, raw)
 }

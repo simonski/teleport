@@ -31,7 +31,18 @@ var contracts = map[string]contract{
 	}{}},
 }
 
-func schema(value any) map[string]any { return schemaType(reflect.TypeOf(value)) }
+type oneOf []any
+
+func schema(value any) map[string]any {
+	if alternatives, ok := value.(oneOf); ok {
+		items := []any{}
+		for _, item := range alternatives {
+			items = append(items, schema(item))
+		}
+		return map[string]any{"oneOf": items}
+	}
+	return schemaType(reflect.TypeOf(value))
+}
 func schemaType(t reflect.Type) map[string]any {
 	if t == nil {
 		return map[string]any{}

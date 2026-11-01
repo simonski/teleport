@@ -16,9 +16,11 @@ type Session struct {
 	Expires   time.Time `json:"expires"`
 }
 type Settings struct {
-	Agents        bool `json:"agents"`
-	Registrations bool `json:"registrations"`
-	Handbrake     bool `json:"handbrake"`
+	Version       int64  `json:"version"`
+	ExecutionMode string `json:"executionMode"`
+	Agents        bool   `json:"agents"`
+	Registrations bool   `json:"registrations"`
+	Handbrake     bool   `json:"handbrake"`
 }
 type Phase struct {
 	ID           string `json:"id"`
@@ -69,17 +71,21 @@ type State struct {
 }
 
 type Project struct {
-	ID             int64             `json:"id"`
-	Version        int64             `json:"version"`
-	Key            string            `json:"key"`
-	Name           string            `json:"name"`
-	Creator        string            `json:"creator"`
-	Members        map[string]string `json:"members"`
-	UnassignedGoal int64             `json:"unassignedGoal"`
-	UnassignedEpic int64             `json:"unassignedEpic"`
-	HumanWorkflow  string            `json:"humanWorkflow"`
-	AgentWorkflow  string            `json:"agentWorkflow"`
-	Handbrake      bool              `json:"handbrake"`
+	RefineWorkers      int               `json:"refineWorkers"`
+	DoingWorkers       int               `json:"doingWorkers"`
+	CapacityConfigured bool              `json:"capacityConfigured"`
+	LaneLocks          map[string]bool   `json:"laneLocks,omitempty"`
+	ID                 int64             `json:"id"`
+	Version            int64             `json:"version"`
+	Key                string            `json:"key"`
+	Name               string            `json:"name"`
+	Creator            string            `json:"creator"`
+	Members            map[string]string `json:"members"`
+	UnassignedGoal     int64             `json:"unassignedGoal"`
+	UnassignedEpic     int64             `json:"unassignedEpic"`
+	HumanWorkflow      string            `json:"humanWorkflow"`
+	AgentWorkflow      string            `json:"agentWorkflow"`
+	Handbrake          bool              `json:"handbrake"`
 }
 type Agreement struct {
 	Kind         string    `json:"kind"`
@@ -89,41 +95,50 @@ type Agreement struct {
 	BasisVersion int64     `json:"basisVersion"`
 }
 type Ticket struct {
-	ID                 int64       `json:"id"`
-	Version            int64       `json:"version"`
-	ProjectID          int64       `json:"projectId"`
-	ParentID           int64       `json:"parentId"`
-	Kind               string      `json:"kind"`
-	Title              string      `json:"title"`
-	Description        string      `json:"description"`
-	Criteria           string      `json:"criteria"`
-	Status             string      `json:"status"`
-	Phase              string      `json:"phase"`
-	Workflow           string      `json:"workflow"`
-	Agent              bool        `json:"agent"`
-	Assignee           string      `json:"assignee,omitempty"`
-	Creator            string      `json:"creator"`
-	Priority           string      `json:"priority"`
-	Labels             []string    `json:"labels"`
-	Start              string      `json:"start,omitempty"`
-	ETA                string      `json:"eta,omitempty"`
-	Due                string      `json:"due,omitempty"`
-	Progress           int         `json:"progress"`
-	Archived           bool        `json:"archived"`
-	Deleted            bool        `json:"deleted"`
-	Protected          bool        `json:"protected"`
-	Planning           bool        `json:"planning"`
-	Active             bool        `json:"active"`
-	Claim              string      `json:"claim,omitempty"`
-	Execution          string      `json:"execution,omitempty"`
-	StopRequested      bool        `json:"stopRequested"`
-	ResumeHold         bool        `json:"resumeHold"`
-	CancellationBatch  string      `json:"cancellationBatch,omitempty"`
-	CancellationReason string      `json:"cancellationReason,omitempty"`
-	Dependencies       []int64     `json:"dependencies"`
-	Agreements         []Agreement `json:"agreements"`
-	CreatedAt          time.Time   `json:"createdAt"`
-	UpdatedAt          time.Time   `json:"updatedAt"`
+	AttemptLimit       int          `json:"attemptLimit"`
+	Attempts           int          `json:"attempts"`
+	StageVisit         int64        `json:"stageVisit"`
+	ResumeAttempt      string       `json:"resumeAttempt,omitempty"`
+	Attention          string       `json:"attention,omitempty"`
+	Refinement         *Refinement  `json:"refinement,omitempty"`
+	Question           *Question    `json:"question,omitempty"`
+	AgentReview        *AgentReview `json:"agentReview,omitempty"`
+	StageEvents        []StageEvent `json:"stageEvents,omitempty"`
+	ID                 int64        `json:"id"`
+	Version            int64        `json:"version"`
+	ProjectID          int64        `json:"projectId"`
+	ParentID           int64        `json:"parentId"`
+	Kind               string       `json:"kind"`
+	Title              string       `json:"title"`
+	Description        string       `json:"description"`
+	Criteria           string       `json:"criteria"`
+	Status             string       `json:"status"`
+	Phase              string       `json:"phase"`
+	Workflow           string       `json:"workflow"`
+	Agent              bool         `json:"agent"`
+	Assignee           string       `json:"assignee,omitempty"`
+	Creator            string       `json:"creator"`
+	Priority           string       `json:"priority"`
+	Labels             []string     `json:"labels"`
+	Start              string       `json:"start,omitempty"`
+	ETA                string       `json:"eta,omitempty"`
+	Due                string       `json:"due,omitempty"`
+	Progress           int          `json:"progress"`
+	Archived           bool         `json:"archived"`
+	Deleted            bool         `json:"deleted"`
+	Protected          bool         `json:"protected"`
+	Planning           bool         `json:"planning"`
+	Active             bool         `json:"active"`
+	Claim              string       `json:"claim,omitempty"`
+	Execution          string       `json:"execution,omitempty"`
+	StopRequested      bool         `json:"stopRequested"`
+	ResumeHold         bool         `json:"resumeHold"`
+	CancellationBatch  string       `json:"cancellationBatch,omitempty"`
+	CancellationReason string       `json:"cancellationReason,omitempty"`
+	Dependencies       []int64      `json:"dependencies"`
+	Agreements         []Agreement  `json:"agreements"`
+	CreatedAt          time.Time    `json:"createdAt"`
+	UpdatedAt          time.Time    `json:"updatedAt"`
 }
 type Revision struct {
 	Version  int64     `json:"version"`
@@ -131,6 +146,45 @@ type Revision struct {
 	Action   string    `json:"action"`
 	At       time.Time `json:"at"`
 	Snapshot Ticket    `json:"snapshot"`
+}
+type Refinement struct {
+	ID         string    `json:"id"`
+	Text       string    `json:"text"`
+	Criteria   string    `json:"criteria"`
+	Basis      string    `json:"basis"`
+	AcceptedBy string    `json:"acceptedBy,omitempty"`
+	AcceptedAt time.Time `json:"acceptedAt,omitempty"`
+	Simulated  bool      `json:"simulated"`
+}
+type Question struct {
+	ID            string    `json:"id"`
+	Text          string    `json:"text"`
+	OriginPhase   string    `json:"originPhase"`
+	OriginAttempt string    `json:"originAttempt"`
+	Workflow      string    `json:"workflow"`
+	Basis         string    `json:"basis"`
+	Answer        string    `json:"answer,omitempty"`
+	Resolved      bool      `json:"resolved"`
+	Obsolete      bool      `json:"obsolete"`
+	AskedAt       time.Time `json:"askedAt"`
+	AnsweredAt    time.Time `json:"answeredAt,omitempty"`
+}
+type AgentReview struct {
+	ID        string    `json:"id"`
+	Outcome   string    `json:"outcome"`
+	Findings  string    `json:"findings"`
+	Candidate string    `json:"candidate,omitempty"`
+	Simulated bool      `json:"simulated"`
+	At        time.Time `json:"at"`
+}
+type StageEvent struct {
+	AttemptID string    `json:"attemptId"`
+	Phase     string    `json:"phase"`
+	Outcome   string    `json:"outcome"`
+	Actor     string    `json:"actor"`
+	At        time.Time `json:"at"`
+	Continues bool      `json:"continues"`
+	Simulated bool      `json:"simulated"`
 }
 type Receipt struct {
 	Fingerprint string `json:"fingerprint"`

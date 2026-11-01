@@ -83,19 +83,39 @@ func run(args []string) error {
 			fmt.Printf("Storage: %s\nInitialization complete. Run: tk serve\n", redactLocation(*dbPath))
 			return nil
 		}
-		if _, err = db.Read(ctx); err != nil {
+		initialState, err := db.Read(ctx)
+		if err != nil {
 			return err
 		}
-		httpServer := server.HTTP(*addr, server.New(app.New(db), version))
+		service := app.New(db)
+		httpServer := server.HTTP(*addr, server.New(service, version))
 		stopCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer cancel()
+		go func() {
+			ticker := time.NewTicker(500 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopCtx.Done():
+					return
+				case <-ticker.C:
+					if err := service.PumpDemo(stopCtx); err != nil && stopCtx.Err() == nil {
+						slog.Error("demo scheduler failed", "error", err)
+					}
+				}
+			}
+		}()
 		go func() {
 			<-stopCtx.Done()
 			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			httpServer.Shutdown(shutdown)
 		}()
-		slog.Info("teleport listening", "address", *addr, "version", version, "agents", "off")
+		mode := initialState.Settings.ExecutionMode
+		if mode == "" {
+			mode = "off"
+		}
+		slog.Info("teleport listening", "address", *addr, "version", version, "agents", mode)
 		err = httpServer.ListenAndServe()
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil

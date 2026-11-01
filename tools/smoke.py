@@ -95,6 +95,32 @@ def main():
                     new_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Fresh workflow pin", "agent": False, "requestId": "new-pin"})))
                     assert new_ticket["workflow"] == draft["id"] + "@1"
                     assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["workflow"] == "human@1"
+                    agent_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Demonstrate supervised delivery", "requestId": "agent-ticket"})))
+                    configuration = json.loads(tk("getSession"))["settings"]
+                    tk("setExecutionMode", "--data", json.dumps({"mode": "demo", "expectedVersion": configuration["version"]}))
+                    tk("requestRefinement", "--data", json.dumps({"id": agent_ticket["id"], "expectedVersion": agent_ticket["version"]}))
+                    def wait_ticket(predicate):
+                        deadline = time.monotonic() + 12
+                        while time.monotonic() < deadline:
+                            current = json.loads(tk("getTicket", "--data", json.dumps({"id": agent_ticket["id"]})))
+                            if predicate(current):
+                                return current
+                            time.sleep(0.1)
+                        raise AssertionError("agent ticket did not reach expected state")
+                    wait_ticket(lambda current: current.get("refinement") is not None)
+                    browser("find", "role", "button", "click", "--name", "Board", "--exact")
+                    browser("wait", "--fn", "document.body.innerText.includes('Demonstrate supervised delivery')")
+                    browser("find", "role", "button", "click", "--name", "Demonstrate supervised delivery")
+                    browser("wait", '[data-agent="accept"]')
+                    browser("click", '[data-agent="accept"]')
+                    browser("find", "label", "Accept this exact scope and basis", "check")
+                    browser("find", "role", "button", "click", "--name", "Accept scope", "--exact")
+                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    candidate = wait_ticket(lambda current: current["status"] == "Approval")
+                    assert candidate["attempts"] == 3 and candidate["agentReview"]["simulated"]
+                    tk("approveTicket", "--data", json.dumps({"id": candidate["id"], "expectedVersion": candidate["version"], "confirm": True}), success=False)
+                    configuration = json.loads(tk("getSession"))["settings"]
+                    tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
                 except Exception:
                     print(browser("snapshot", "-i"))
                     print(browser("errors"))

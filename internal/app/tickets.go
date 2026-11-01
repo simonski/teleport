@@ -136,6 +136,13 @@ func newTicket(st *model.State, p model.Project, a model.Account, kind, title st
 		workflow = p.AgentWorkflow
 	}
 	t := model.Ticket{ID: allocate(st), ProjectID: p.ID, Kind: kind, Title: title, Agent: agent, Protected: protected, Workflow: workflow, Status: "Todo", Phase: "Todo", Creator: a.ID, Priority: "medium", Labels: []string{}, Dependencies: []int64{}, Agreements: []model.Agreement{}}
+	if agent {
+		t.AttemptLimit = 20
+	}
+	t.StageVisit = 1
+	if initial, ok := phaseForRole(st.Workflows[workflow], "Todo"); ok {
+		t.Phase = initial.ID
+	}
 	if !agent && kind == "task" {
 		t.Assignee = a.ID
 	}
@@ -243,8 +250,14 @@ func reconcile(st *model.State, parent int64, a model.Account) {
 		if total > 0 && total == done && !p.Planning {
 			status = "Done"
 		}
+		phaseID := p.Phase
+		if p.Planning {
+			status = p.Status
+		} else if phase, ok := phaseForRole(st.Workflows[p.Workflow], status); ok {
+			phaseID = phase.ID
+		}
 		if p.Progress != progress || p.Status != status {
-			p.Progress, p.Status, p.Phase = progress, status, status
+			p.Progress, p.Status, p.Phase = progress, status, phaseID
 			saveTicket(st, &p, a, "reconcileHierarchy")
 		}
 		parent = p.ParentID

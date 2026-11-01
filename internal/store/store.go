@@ -100,14 +100,21 @@ func Open(location string, initialize bool) (*Store, error) {
 }
 
 func (s *Store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.postgres && s.release != nil {
+		s.release()
+		s.release = nil
+	}
+	var err error
+	if s.db != nil {
+		err = s.db.Close()
+	}
 	if s.release != nil {
 		s.release()
 		s.release = nil
 	}
-	if s.db != nil {
-		return s.db.Close()
-	}
-	return nil
+	return err
 }
 func (s *Store) Bind(query string) string {
 	if !s.postgres {

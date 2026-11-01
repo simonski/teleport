@@ -16,6 +16,7 @@ test:
 lint:
 	@test -z "$$(gofmt -l cmd internal)"
 	go vet ./...
+	python3 -B tools/web_check.py
 check: lint
 	python3 -B tools/spec_sources.py --verify
 	go test -race ./...

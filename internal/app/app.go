@@ -130,7 +130,7 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		collections(st)
 		switch operation {
 		case "getSession":
-			result = map[string]any{"account": publicAccount(a), "installationId": st.InstallationID, "revision": st.Revision, "settings": st.Settings}
+			result = map[string]any{"account": publicAccount(a), "installationId": st.InstallationID, "revision": st.Revision, "settings": st.Settings, "preferences": personalPreferences(st, a)}
 			return false, nil
 		case "logout":
 			delete(st.Sessions, digest(token))

@@ -554,5 +554,5 @@ func ideaOperations(st *model.State, a model.Account, operation string, raw json
 		saveIdea(st, &i, a, operation)
 		return i, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return presentationOperations(st, a, operation, raw)
 }

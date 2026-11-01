@@ -55,6 +55,8 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
+	GraphLayouts    map[string]GraphLayout    `json:"graphLayouts"`
+	Preferences     map[string]Preferences    `json:"preferences"`
 	NextIdeaID      int64                     `json:"nextIdeaId"`
 	Ideas           map[string]Idea           `json:"ideas"`
 	IdeaHistory     map[string][]IdeaRevision `json:"ideaHistory"`

@@ -20,10 +20,11 @@ Preserve the Goal → Epic → Task hierarchy. SQLite is the default database; P
 
 ## Build, Test, and Development Commands
 
-Go 1.26.1+, Python 3 and Make are required to build; Node.js is also required for browser-source development checks. Supported commands:
+Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required for browser-source development checks. Supported commands:
 
 - `make build`: produce `bin/tk` with build version metadata.
 - `make install`: install the executable.
+- `make sbom`: generate `sbom.cdx.json` with Go and bundled browser dependencies, licenses and hashes.
 - `go test ./...`: run Go tests.
 - `go test -race ./...`: check Go code for data races.
 - `make check`: verify formatting, vet, documentation and race tests.

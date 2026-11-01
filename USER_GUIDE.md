@@ -2,7 +2,7 @@
 
 ## Local setup
 
-Building requires Go 1.26.1+, a C compiler with CGO enabled, Python 3 and Make. Node.js is used for development browser checks. The installed executable includes the JavaScript engine.
+Building requires Go 1.27.3+, a C compiler with CGO enabled, Python 3 and Make. Node.js is used for development browser checks. The installed executable includes the JavaScript engine.
 
 Run `make build`, then `bin/tk init` and `bin/tk serve`. SQLite defaults to `~/.teleport/database.db`; `--db PATH` or `TELEPORT_DB` selects an isolated installation. The local server defaults to `localhost:9999`; `serve --addr HOST:PORT` overrides it. Repeated init preserves identity and credentials, refuses a running installation, and starts nothing.
 

@@ -1,6 +1,6 @@
 module teleport
 
-go 1.26.1
+go 1.27.3
 
 require (
 	github.com/buke/quickjs-go v0.7.7

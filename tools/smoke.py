@@ -56,7 +56,7 @@ def main():
             assert ticket["status"] == "Doing"
             if args.browser:
                 def browser(*arguments):
-                    result = subprocess.run(["agent-browser", "--session", "teleport-smoke", *arguments], text=True, capture_output=True, timeout=40)
+                    result = subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", *arguments], text=True, capture_output=True, timeout=40)
                     if result.returncode:
                         raise RuntimeError(result.stderr or result.stdout)
                     return result.stdout
@@ -176,6 +176,27 @@ def main():
                     assert done.get("agentReview") is None
                     assert (repository / "README.md").read_text() == "Delivered fixture\n"
                     browser("screenshot", "/tmp/teleport-delivery.png")
+                    browser("find", "role", "button", "click", "--name", "Ideas", "--exact")
+                    browser("click", "#new-idea")
+                    browser("find", "label", "Title", "fill", "A calmer boarding process")
+                    browser("find", "label", "Idea", "fill", "Keep the initial thought while creating a separate plan.", "--exact")
+                    browser("find", "role", "button", "click", "--name", "Create idea", "--exact")
+                    browser("wait", "#idea-propose")
+                    browser("click", "#idea-propose")
+                    browser("fill", '[name="title"]', "Prepare the boarding checklist")
+                    browser("select", '[name="intent"]', "human")
+                    browser("find", "role", "button", "click", "--name", "Save proposal", "--exact")
+                    browser("wait", "[data-accept-proposal]")
+                    browser("click", "[data-accept-proposal]")
+                    browser("find", "label", "Create or link this exact proposed work", "check")
+                    browser("find", "role", "button", "click", "--name", "Accept proposal", "--exact")
+                    browser("wait", ".accepted-label")
+                    browser("screenshot", "/tmp/teleport-ideas.png")
+                    source_idea = json.loads(tk("listIdeas", "--data", json.dumps({"projectId": project["id"]})))["items"][0]
+                    assert source_idea["title"] == "A calmer boarding process" and source_idea["acceptedCount"] == 1
+                    targets = json.loads(tk("getIdeaLinks", "--data", json.dumps({"id": source_idea["id"]})))["items"]
+                    idea_ticket = json.loads(tk("getTicket", "--data", json.dumps({"id": targets[0]["ticketId"]})))
+                    assert idea_ticket["title"] == "Prepare the boarding checklist" and idea_ticket["status"] == "Todo"
                 except Exception:
                     print(browser("snapshot", "-i"))
                     print(browser("errors"))

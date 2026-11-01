@@ -100,5 +100,5 @@ func agreementOperations(st *model.State, a model.Account, operation string, raw
 		saveTicket(st, &t, a, operation)
 		return t, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return ideaOperations(st, a, operation, raw)
 }

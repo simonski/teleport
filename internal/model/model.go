@@ -55,19 +55,25 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
-	Schema         int                  `json:"schema"`
-	InstallationID string               `json:"installationId"`
-	Revision       int64                `json:"revision"`
-	Accounts       map[string]Account   `json:"accounts"`
-	Sessions       map[string]Session   `json:"sessions"`
-	Settings       Settings             `json:"settings"`
-	Workflows      map[string]Workflow  `json:"workflows"`
-	NextTicketID   int64                `json:"nextTicketId"`
-	NextProjectID  int64                `json:"nextProjectId"`
-	Projects       map[int64]Project    `json:"projects"`
-	Tickets        map[int64]Ticket     `json:"tickets"`
-	History        map[int64][]Revision `json:"history"`
-	Receipts       map[string]Receipt   `json:"receipts"`
+	NextIdeaID      int64                     `json:"nextIdeaId"`
+	Ideas           map[string]Idea           `json:"ideas"`
+	IdeaHistory     map[string][]IdeaRevision `json:"ideaHistory"`
+	IdeaProposals   map[string]IdeaProposal   `json:"ideaProposals"`
+	IdeaAcceptances map[string]IdeaAcceptance `json:"ideaAcceptances"`
+	IdeaLinks       []IdeaLink                `json:"ideaLinks"`
+	Schema          int                       `json:"schema"`
+	InstallationID  string                    `json:"installationId"`
+	Revision        int64                     `json:"revision"`
+	Accounts        map[string]Account        `json:"accounts"`
+	Sessions        map[string]Session        `json:"sessions"`
+	Settings        Settings                  `json:"settings"`
+	Workflows       map[string]Workflow       `json:"workflows"`
+	NextTicketID    int64                     `json:"nextTicketId"`
+	NextProjectID   int64                     `json:"nextProjectId"`
+	Projects        map[int64]Project         `json:"projects"`
+	Tickets         map[int64]Ticket          `json:"tickets"`
+	History         map[int64][]Revision      `json:"history"`
+	Receipts        map[string]Receipt        `json:"receipts"`
 }
 
 type Project struct {

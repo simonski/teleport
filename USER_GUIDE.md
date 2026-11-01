@@ -24,6 +24,12 @@ Settings → Execution → Demo enables automatic deterministic outcomes with no
 
 Questions retain their origin and consumed attempt. Answers automatically continue eligible work; pause/resume, handbrakes, prerequisites and finite attempt limits remain enforced. Project handbrake controls appear in Settings for Maintainers. The profile dot/dropdown lists active attention, and Board attention cards precede ordinary cards. Demo stage events and question/proposal history remain inspectable. Live process ownership/recovery and actual Codex permission enforcement remain unverified and disabled.
 
+## Ideas
+
+Ideas keeps planning thoughts separate from tickets. Create a private inbox Idea under All projects, or a project Idea in the selected scope. Private inbox content is visible only to its creator and installation administrators. Project placement shares retained content/history under that project's permissions; Change placement previews the access change and requires explicit confirmation.
+
+Draft work proposal saves an immutable human proposal without creating tickets. Review acceptance shows exact proposed work; acceptance creates normal Todo tickets or links existing records atomically and retains the original Idea. Linked work does not inherit readiness or code approval. Existing work keeps its status/content. History and authorized links preserve the accepted versions. Archive/delete/restore affects only the Idea, with source-owner/Maintainer controls. Agent curation remains unavailable until verified live execution; CLI/API proposals support up to 20 targets, while the browser creates or links one per proposal.
+
 ## Local Git delivery
 
 In Settings, select a project and grant its exact local repository and separate worktree storage directory as administrator. Use a committed `main` checkout. Turn demo execution off before real delivery. After accepting an agent task's refinement, open Ready work and choose Prepare owned worktree. Commit external changes on the displayed task branch, then choose Capture committed delivery. The controller reads the actual commit/diff and runs Git whitespace checks; separately supplied check reports do not become controller evidence.

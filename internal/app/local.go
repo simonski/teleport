@@ -123,7 +123,7 @@ func (s *Service) localSnapshot(ctx context.Context, token, id string) (*model.S
 	if err != nil {
 		return nil, model.Account{}, model.LocalSession{}, err
 	}
-	a, err := actor(st, token)
+	a, err := executionActor(ctx, st, token)
 	if err != nil {
 		return nil, a, model.LocalSession{}, err
 	}
@@ -373,6 +373,7 @@ func intervention(item model.LocalInput) SessionIntervention {
 	return SessionIntervention{SessionID: item.SessionID, RequestID: item.RequestID, Actor: item.Actor, Sequence: item.Sequence, State: item.State, Written: item.Written, At: item.At}
 }
 func (s *Service) openLocal(ctx context.Context, token, operation string, in OpenLocalSessionInput) (any, error) {
+	_, managed := ctx.Value(managedOwnerKey{}).(string)
 	nativePath := ""
 	if in.Harness == "codex" {
 		var available bool
@@ -416,7 +417,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	fingerprint := digest(fmt.Sprintf("%s:%d:%d:%d:%s", operation, in.ProjectID, in.TicketID, in.ExpectedVersion, in.Harness))
 	var row model.LocalSession
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
-		a, err := actor(st, token)
+		a, err := executionActor(ctx, st, token)
 		if err != nil {
 			return false, err
 		}
@@ -460,45 +461,75 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			if err = expected(t, in.ExpectedVersion); err != nil {
 				return false, err
 			}
-			if t.ProjectID != in.ProjectID || t.Kind != "task" || !t.Agent || t.Status != "Doing" || busy(t) || t.Delivery == nil || t.Delivery.Worktree.Path == "" || !acceptedScope(st, t) || !dependenciesDone(st, t) || t.ResumeHold || t.StopRequested || t.Archived || t.Deleted {
-				return false, failure(409, "ticket_session_blocked", "Use an unblocked accepted task with its prepared owned Implementation worktree")
-			}
-			p := st.Projects[t.ProjectID]
-			repeated := false
-			for _, other := range st.LocalSessions {
-				if other.TicketID == t.ID {
-					repeated = true
+			if managed {
+				phase, ok := phaseByID(st.Workflows[t.Workflow], t.Phase)
+				if !ok {
+					return false, failure(409, "phase_gate", "Pinned phase is unavailable")
 				}
-			}
-			if p.LaneLocks[st.Workflows[t.Workflow].ID+"#*"] || p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+t.Phase] {
-				return false, failure(409, "capacity_blocked", "Implementation capacity is unavailable or the phase is locked")
-			}
-			phase, ok := phaseByID(st.Workflows[t.Workflow], t.Phase)
-			if !ok || !phase.Agentic {
-				return false, failure(409, "phase_gate", "A ticket harness requires its pinned agentic phase")
-			}
-			if err := phaseCapacity(st, t, phase); err != nil {
-				return false, err
-			}
-			if repeated {
-				limit := t.AttemptLimit
-				if limit == 0 {
-					limit = 20
+				if err := managedAdmission(st, a, t, phase); err != nil {
+					return false, err
 				}
-				if t.Attempts >= limit {
-					return false, failure(409, "budget_exhausted", "Extend the finite attempt limit before another harness starts")
+				attempt := t.ResumeAttempt
+				continues := attempt != ""
+				if !continues {
+					attempt = randomID()
+					t.Attempts++
 				}
-				t.Attempts++
+				t.ResumeAttempt = ""
+				row.Managed = &model.ManagedLaunch{RequestID: in.RequestID, RequestVersion: in.ExpectedVersion, Workflow: t.Workflow, Phase: t.Phase, Role: phase.Role, Visit: t.StageVisit, Basis: executionBasis(st, t), Attempt: attempt, Continues: continues, Prompt: composeManagedPrompt(st, t, phase)}
+				if len(row.Managed.Prompt.Text) > 128<<10 {
+					return false, failure(409, "prompt_too_large", "Ticket context exceeds the bounded launch prompt")
+				}
+				if t.Delivery != nil {
+					row.Worktree = t.Delivery.Worktree
+				}
+				if phase.Role == "Review" {
+					row.Managed.Candidate = t.Delivery.Candidate.Fingerprint
+				}
+				t.Execution, t.Claim, t.Active = "local:"+row.ID, row.LaunchID, true
+				t.Attention = "Local phase launch pending"
+				saveTicket(st, &t, a, "nativePhaseReserved")
+			} else {
+				if t.ProjectID != in.ProjectID || t.Kind != "task" || !t.Agent || t.Status != "Doing" || busy(t) || t.Delivery == nil || t.Delivery.Worktree.Path == "" || !acceptedScope(st, t) || !dependenciesDone(st, t) || t.ResumeHold || t.StopRequested || t.Archived || t.Deleted {
+					return false, failure(409, "ticket_session_blocked", "Use an unblocked accepted task with its prepared owned Implementation worktree")
+				}
+				p := st.Projects[t.ProjectID]
+				repeated := false
+				for _, other := range st.LocalSessions {
+					if other.TicketID == t.ID {
+						repeated = true
+					}
+				}
+				if p.LaneLocks[st.Workflows[t.Workflow].ID+"#*"] || p.LaneLocks[st.Workflows[t.Workflow].ID+"#"+t.Phase] {
+					return false, failure(409, "capacity_blocked", "Implementation capacity is unavailable or the phase is locked")
+				}
+				phase, ok := phaseByID(st.Workflows[t.Workflow], t.Phase)
+				if !ok || !phase.Agentic {
+					return false, failure(409, "phase_gate", "A ticket harness requires its pinned agentic phase")
+				}
+				if err := phaseCapacity(st, t, phase); err != nil {
+					return false, err
+				}
+				if repeated {
+					limit := t.AttemptLimit
+					if limit == 0 {
+						limit = 20
+					}
+					if t.Attempts >= limit {
+						return false, failure(409, "budget_exhausted", "Extend the finite attempt limit before another harness starts")
+					}
+					t.Attempts++
+				}
+				if t.Delivery.BindingVersion != row.BindingVersion {
+					return false, failure(409, "launch_basis_changed", "Retained worktree binding changed")
+				}
+				row.Worktree = t.Delivery.Worktree
+				t.Execution = "local:" + row.ID
+				t.Claim = row.LaunchID
+				t.Active = true
+				t.Attention = "Local harness launch pending"
+				saveTicket(st, &t, a, "localSessionReserved")
 			}
-			if t.Delivery.BindingVersion != row.BindingVersion {
-				return false, failure(409, "launch_basis_changed", "Retained worktree binding changed")
-			}
-			row.Worktree = t.Delivery.Worktree
-			t.Execution = "local:" + row.ID
-			t.Claim = row.LaunchID
-			t.Active = true
-			t.Attention = "Local harness launch pending"
-			saveTicket(st, &t, a, "localSessionReserved")
 		}
 		st.LocalSessions[row.ID] = row
 		b, _ := json.Marshal(row.ID)
@@ -526,7 +557,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "launch_basis_changed", "Repository authorization changed")
 	}
 	binding := gitwork.Binding{Repository: p.Repository.Repository, StorageRoot: p.Repository.StorageRoot}
-	if row.TicketID == 0 {
+	if row.TicketID == 0 || row.Managed != nil && row.Managed.Role == "Refine" {
 		var work gitwork.Worktree
 		work, err = gitwork.PrepareConsole(ctx, binding, row.LaunchID[:24], row.ID)
 		row.Worktree = modelWorktree(work)
@@ -546,7 +577,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		row.CredentialHash = hash
 	}
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
-		a, err := actor(st, token)
+		a, err := executionActor(ctx, st, token)
 		if err != nil {
 			return false, err
 		}
@@ -569,7 +600,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, err
 	}
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
-		a, err := actor(st, token)
+		a, err := executionActor(ctx, st, token)
 		if err != nil {
 			return false, err
 		}
@@ -578,12 +609,21 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			return false, err
 		}
 		p := st.Projects[row.ProjectID]
+		if row.Managed != nil && st.Settings.ExecutionMode != "local" {
+			return false, failure(409, "execution_disabled", "Automatic local admission was disabled")
+		}
 		if current.LaunchID != row.LaunchID || current.State != "preparing" || p.Repository == nil || p.Repository.Version != row.BindingVersion || len(st.Accounts) > 1 || st.Settings.Agents || st.Settings.Handbrake || p.Handbrake {
 			return false, failure(409, "launch_basis_changed", "Launch authority or repository changed")
 		}
 		if row.TicketID != 0 {
 			t := st.Tickets[row.TicketID]
-			if t.Execution != "local:"+row.ID || t.StopRequested || t.ResumeHold || t.Archived || t.Deleted || t.Status != "Doing" || !acceptedScope(st, t) || !dependenciesDone(st, t) {
+			basisValid := t.Status == "Doing" && acceptedScope(st, t)
+			if row.Managed != nil {
+				basisValid = t.Workflow == row.Managed.Workflow && t.Phase == row.Managed.Phase && t.StageVisit == row.Managed.Visit && executionBasis(st, t) == row.Managed.Basis && (row.Managed.Role == "Refine" || acceptedScope(st, t))
+			}
+			p := st.Projects[t.ProjectID]
+			w := st.Workflows[t.Workflow]
+			if t.Execution != "local:"+row.ID || t.StopRequested || t.ResumeHold || t.Archived || t.Deleted || !basisValid || !dependenciesDone(st, t) || p.LaneLocks[w.ID+"#*"] || p.LaneLocks[w.ID+"#"+t.Phase] {
 				return false, failure(409, "launch_basis_changed", "Ticket admission changed")
 			}
 		}
@@ -594,9 +634,15 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			if row.TicketID != 0 {
 				role = "Doing"
 			}
+			if row.Managed != nil {
+				role = row.Managed.Role
+			}
 			launch.Native = true
 			launch.Args = []string{"_codex-session", "--runtime-dir", s.localClient.Root, "--session", row.ID, "--launch", row.LaunchID, "--generation", row.Generation, "--codex", nativePath, "--role", role}
 			launch.Env = map[string]string{"TELEPORT_CONFIG": filepath.Join(s.localClient.Root, row.ID+".client.json"), "TELEPORT_SERVER": s.localEndpoint, "TELEPORT_SESSION_ID": row.ID}
+			if row.Managed != nil {
+				launch.Env["TELEPORT_MANAGED_PROMPT"] = row.Managed.Prompt.Text
+			}
 		}
 		out, err := s.localClient.Call(ctx, localruntime.Request{Operation: "launch", Launch: launch})
 		if err != nil {
@@ -732,6 +778,25 @@ func (s *Service) PumpLocal(ctx context.Context) error {
 			}
 			status, ok := observed[id]
 			if observedErr == nil && !ok && out.Generation == row.Generation && row.State == "preparing" {
+				a := st.Accounts[row.Creator]
+				p := st.Projects[row.ProjectID]
+				t := st.Tickets[row.TicketID]
+				withdrawn := row.StopRequested || a.ID == "" || a.Suspended || len(st.Accounts) > 1 || require(st, a, row.ProjectID, "Contributor") != nil || p.Repository == nil || p.Repository.Version != row.BindingVersion
+				if row.TicketID != 0 {
+					withdrawn = withdrawn || t.StopRequested || t.ResumeHold || t.Deleted || t.Archived || t.Status == "Cancelled" || t.Execution != "local:"+row.ID
+				}
+				if withdrawn {
+					now := time.Now().UTC()
+					row.State, row.ErrorCode, row.ExitedAt = "failed", "launch_cancelled_before_dispatch", &now
+					st.LocalSessions[id] = row
+					changed = true
+					if row.TicketID != 0 && t.Execution == "local:"+row.ID {
+						t.Execution, t.Claim, t.Active = "", "", false
+						t.ResumeHold = true
+						t.Attention = "Local launch cancelled before dispatch"
+						saveTicket(st, &t, model.Account{ID: "local-runtime"}, "localLaunchCancelled")
+					}
+				}
 				continue
 			}
 			if observedErr != nil || !ok || status.LaunchID != row.LaunchID || status.Generation != row.Generation {
@@ -766,6 +831,9 @@ func (s *Service) PumpLocal(ctx context.Context) error {
 					if t.Execution == "local:"+id {
 						t.Execution, t.Claim, t.Active = "", "", false
 						t.Attention = "Harness exited; inspect retained work before continuing"
+						if row.Managed == nil {
+							t.ResumeHold = true
+						}
 						saveTicket(st, &t, model.Account{ID: "local-runtime"}, "localSessionExitObserved")
 					}
 				}

@@ -113,6 +113,7 @@ type Service struct {
 	scriptMu       sync.Mutex
 	localEndpoint  string
 	localMu        sync.Mutex
+	nativeMu       sync.Mutex
 	localClient    *localruntime.Client
 	fixtureHarness bool
 	controllerID   string

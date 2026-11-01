@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -49,6 +51,7 @@ func engine() {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 65536), 8<<20)
 	var turn int
+	var managedRole string
 	for scanner.Scan() {
 		var m message
 		if json.Unmarshal(scanner.Bytes(), &m) != nil {
@@ -56,7 +59,11 @@ func engine() {
 		}
 		if m.Method == "" {
 			event("serverRequest/resolved", map[string]any{"threadId": "fixture-thread", "requestId": m.ID})
-			event("item/completed", map[string]any{"threadId": "fixture-thread", "turnId": fmt.Sprint(turn), "item": map[string]any{"type": "agentMessage", "text": "Native fixture completed", "phase": "final_answer"}})
+			answer := "Native fixture completed"
+			if managedRole != "" {
+				answer = `{"outcome":"success","proposal":"Update fixture.txt in the owned worktree","criteria":"fixture.txt contains delivered and main changes only after human approval"}`
+			}
+			event("item/completed", map[string]any{"threadId": "fixture-thread", "turnId": fmt.Sprint(turn), "item": map[string]any{"type": "agentMessage", "text": answer, "phase": "final_answer"}})
 			event("turn/completed", map[string]any{"threadId": "fixture-thread", "turn": map[string]any{"id": fmt.Sprint(turn), "status": "completed"}})
 			continue
 		}
@@ -68,6 +75,22 @@ func engine() {
 			result = map[string]any{"thread": map[string]any{"id": "fixture-thread"}}
 		case "turn/start":
 			turn++
+			var params struct {
+				Input []struct {
+					Text string `json:"text"`
+				} `json:"input"`
+			}
+			_ = json.Unmarshal(m.Params, &params)
+			if len(params.Input) > 0 && strings.HasPrefix(params.Input[0].Text, "[system]") {
+				prompt := params.Input[0].Text
+				managedRole = "Refine"
+				if strings.Contains(prompt, "[phase]\nImplement only") {
+					managedRole = "Doing"
+				}
+				if strings.Contains(prompt, "[phase]\nReview is") {
+					managedRole = "Review"
+				}
+			}
 			result = map[string]any{"turn": map[string]any{"id": fmt.Sprint(turn)}}
 		}
 		if len(m.ID) > 0 {
@@ -78,11 +101,30 @@ func engine() {
 			event("thread/started", map[string]any{"thread": map[string]any{"id": "fixture-thread"}})
 		case "turn/start":
 			event("turn/started", map[string]any{"threadId": "fixture-thread", "turn": map[string]any{"id": fmt.Sprint(turn)}})
+			if managedRole == "Doing" || managedRole == "Review" {
+				if managedRole == "Doing" {
+					if err := os.WriteFile(filepath.Join(".", "fixture.txt"), []byte("delivered\n"), 0600); err != nil {
+						panic(err)
+					}
+					for _, args := range [][]string{{"add", "fixture.txt"}, {"-c", "user.name=Fixture", "-c", "user.email=fixture@localhost", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + os.DevNull, "commit", "-m", "Implement fixture"}} {
+						if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+							panic(string(out))
+						}
+					}
+				}
+				event("item/completed", map[string]any{"threadId": "fixture-thread", "turnId": fmt.Sprint(turn), "item": map[string]any{"type": "agentMessage", "text": `{"outcome":"success","findings":"Fixture inspected the exact candidate; fixture.txt contains delivered"}`, "phase": "final_answer"}})
+				event("turn/completed", map[string]any{"threadId": "fixture-thread", "turn": map[string]any{"id": fmt.Sprint(turn), "status": "completed"}})
+				continue
+			}
 			send(map[string]any{"id": fmt.Sprintf("ask-%d", turn), "method": "item/tool/requestUserInput", "params": map[string]any{"threadId": "fixture-thread", "turnId": fmt.Sprint(turn), "itemId": "fixture-item", "isBlocking": true, "questions": []any{map[string]any{"id": "direction", "header": "Direction", "question": "Fixture direction?", "isOther": false, "options": []any{map[string]any{"label": "Continue", "description": "Continue fixture"}, map[string]any{"label": "Stop", "description": "Stop fixture"}}}, map[string]any{"id": "secret", "header": "Secret", "question": "Fixture secret?", "isSecret": true}}}})
 		}
 	}
 }
 func tui(path string) {
+	prompt := ""
+	if last := os.Args[len(os.Args)-1]; strings.HasPrefix(last, "[system]") {
+		prompt = last
+	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", path)
 	}}
@@ -100,7 +142,11 @@ func tui(path string) {
 		_ = connection.Write(context.Background(), websocket.MessageText, data)
 	}
 	request := func(id, method string) {
-		send(map[string]any{"id": id, "method": method, "params": map[string]any{"threadId": "fixture-thread"}})
+		params := map[string]any{"threadId": "fixture-thread"}
+		if method == "turn/start" && prompt != "" {
+			params["input"] = []any{map[string]any{"type": "text", "text": prompt}}
+		}
+		send(map[string]any{"id": id, "method": method, "params": params})
 	}
 	request("init", "initialize")
 	var pending json.RawMessage

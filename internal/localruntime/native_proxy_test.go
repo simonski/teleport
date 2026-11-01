@@ -12,6 +12,24 @@ import (
 
 type nativeInput struct{ bytes.Buffer }
 
+func TestReadOnlyPhaseCannotOverrideTurnPermissions(t *testing.T) {
+	for _, role := range []string{"Refine", "Review"} {
+		params := map[string]any{"permissions": "unrestricted-profile", "approvalPolicy": "on-request", "cwd": "/foreign", "sandboxPolicy": map[string]any{"type": "dangerFullAccess"}}
+		constrainNativePhase(role, "turn/start", "/owned", params)
+		if _, ok := params["permissions"]; ok {
+			t.Fatal("named permissions override survived")
+		}
+		if params["cwd"] != "/owned" || params["approvalPolicy"] != "never" || params["sandboxPolicy"].(map[string]any)["type"] != "readOnly" {
+			t.Fatal("read-only turn authority was broadened", params)
+		}
+	}
+	params := map[string]any{"permissions": "native-profile"}
+	constrainNativePhase("Doing", "turn/start", "/owned", params)
+	if params["permissions"] != "native-profile" {
+		t.Fatal("implementation native permissions were replaced")
+	}
+}
+
 func (*nativeInput) Close() error { return nil }
 
 func TestNativeProxyRejectsOldTurnAndSerializesReplies(t *testing.T) {

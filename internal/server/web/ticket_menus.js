@@ -17,6 +17,7 @@ function menuTicketSource(target){
 function attachedRunningSession(ticket,rows){return rows.find(row=>row.ticketId===ticket.id&&row.projectId===ticket.projectId&&row.state==='running'&&ticket.execution==='local:'+row.id);}
 function ticketMenuEntries(ticket,rows,nativePending=false){
   const entries=[{id:'open',label:'Open ticket'}],attached=attachedRunningSession(ticket,rows);
+  if(ticket.agent&&view!=='Todos')entries.push({id:'prompt',label:'Prompt',sessionId:attached?.id});
   if(typeof roleAllowsWrite==='function'&&roleAllowsWrite(ticket.projectId)){
     if(view==='Todos'&&!ticket.agent)for(const move of humanMoves(ticket))entries.push({id:'move-'+move.target,label:'Move to '+move.role,target:move.target});
     if(canQueueRefinement(ticket)&&ticket.status==='Todo')entries.push({id:'refine',label:'Send to refine'});
@@ -46,9 +47,18 @@ async function showTicketMenu(id,source,point=null){
       if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const index=buttons.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}
       else if(e.key==='Tab')dismissTicketMenu(true);
     });
-    element.addEventListener('click',e=>{const button=e.target.closest('[data-ticket-menu]'),entry=entries.find(item=>item.id===button?.dataset.ticketMenu);if(!entry)return;dismissTicketMenu(true);if(entry.target)moveHumanTicket(ticket,entry.target);else if(entry.id==='refine'||entry.id==='return-todo')changeRefinementQueue(ticket,entry.id==='refine'?'requestRefinement':'returnRefinementToTodo');else if(entry.id==='teleport')teleportTicketSession(id,entry.sessionId).catch(showError);else editTicket(id);});
+    element.addEventListener('click',e=>{const button=e.target.closest('[data-ticket-menu]'),entry=entries.find(item=>item.id===button?.dataset.ticketMenu);if(!entry)return;dismissTicketMenu(true);if(entry.target)moveHumanTicket(ticket,entry.target);else if(entry.id==='refine'||entry.id==='return-todo')changeRefinementQueue(ticket,entry.id==='refine'?'requestRefinement':'returnRefinementToTodo');else if(entry.id==='teleport')teleportTicketSession(id,entry.sessionId).catch(showError);else if(entry.id==='prompt')showTicketPrompt(id,entry.sessionId).catch(showError);else editTicket(id);});
   }catch(error){if(current())showError(error);}
   finally{if(ticketMenuEpoch===epoch)ticketMenuPending=false;}
+}
+async function showTicketPrompt(id,sessionId){
+  const actor=session?.account.id,generation=loadGeneration,detail=++detailEpoch;
+  const input={id};if(sessionId)input.sessionId=sessionId;
+  let result;
+  try{result=await api('getPrompt',input);}catch(error){if(!sessionId)throw error;result=await api('getPrompt',{id});}
+  if(session?.account.id!==actor||loadGeneration!==generation||detailEpoch!==detail||menuForeground())return;
+  const dialog=openDialog('Prompt · #'+id,`<p>${result.saved?'Saved launch · '+escapeHTML(result.sessionId):'Current composition · preview'}</p><details open><summary>Complete prompt</summary><pre class="criteria-box">${escapeHTML(result.prompt.text)}</pre></details>${result.prompt.contributions.map(part=>`<details><summary>${escapeHTML(part.source)} · ${escapeHTML(part.version)}</summary><pre class="criteria-box">${escapeHTML(part.text)}</pre></details>`).join('')}`,'Close');
+  byId('cancel').hidden=true;byId('editor-form').onsubmit=e=>{e.preventDefault();dialog.close();};
 }
 async function teleportTicketSession(id,sessionId){
   const actor=session?.account.id,generation=loadGeneration,detail=++detailEpoch;

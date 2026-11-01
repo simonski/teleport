@@ -44,12 +44,12 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 	if readErr != nil {
 		return nil, readErr
 	}
-	if a, err := actor(st, token); err != nil {
+	if a, err := executionActor(ctx, st, token); err != nil {
 		return nil, err
 	} else if a.ServiceSessionID != "" {
 		return nil, failure(403, "service_scope", "Managed context credentials cannot deliver or approve code")
 	}
-	if a, err := actor(st, token); err != nil {
+	if a, err := executionActor(ctx, st, token); err != nil {
 		return nil, err
 	} else if err = checkScriptDispatch(ctx, st, &a, operation, raw); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 	var binding model.RepositoryBinding
 	var replay []byte
 	err := s.db.Update(ctx, func(st *model.State) (bool, error) {
-		a, err := actor(st, token)
+		a, err := executionActor(ctx, st, token)
 		if err != nil {
 			return false, err
 		}
@@ -137,7 +137,7 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 			if err := requireReadyReview(st, t); err != nil {
 				return false, err
 			}
-			if t.Delivery != nil && t.Delivery.Worktree.Path != "" {
+			if t.Delivery != nil && t.Delivery.Worktree.Path != "" && t.Status != "Ready" {
 				reserved = t
 				return false, nil
 			}
@@ -171,8 +171,18 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 			if err = enterPhase(&t, st.Workflows[t.Workflow], target.ID); err != nil {
 				return false, err
 			}
-			t.Attempts++
-			t.Delivery = &model.Delivery{BindingVersion: binding.Version, ScopeBasis: executionBasis(st, t), SourcePhase: t.Phase, Source: "external", Worktree: model.Worktree{Owner: randomID()[:24], TicketID: t.ID}}
+			if _, managed := ctx.Value(managedOwnerKey{}).(string); !managed {
+				t.Attempts++
+			}
+			if t.Delivery == nil {
+				t.Delivery = &model.Delivery{BindingVersion: binding.Version, ScopeBasis: executionBasis(st, t), SourcePhase: t.Phase, Source: "external", Worktree: model.Worktree{Owner: randomID()[:24], TicketID: t.ID}}
+			} else {
+				t.Delivery.BindingVersion = binding.Version
+				t.Delivery.ScopeBasis = executionBasis(st, t)
+				t.Delivery.SourcePhase = t.Phase
+				t.Delivery.Candidate = nil
+				t.AgentReview = nil
+			}
 		} else {
 			if t.Delivery == nil || t.Delivery.Worktree.Path == "" || !contains([]string{"Doing", "Review", "Approval"}, t.Status) || t.Delivery.BindingVersion != binding.Version || t.Delivery.ScopeBasis != executionBasis(st, t) {
 				return false, failure(409, "worktree_required", "Use the matching retained worktree and current accepted basis")
@@ -209,14 +219,14 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 	} else {
 		candidate, err = gitwork.Snapshot(runCtx, controller, work)
 	}
-	finalCtx, finalCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	finalCtx, finalCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer finalCancel()
 	gitErr := err
 	if err = s.recordGitExit(finalCtx, reserved.ID, reserved.Delivery.Operation.ID); err != nil {
 		return nil, err
 	}
 	err = s.db.Update(finalCtx, func(st *model.State) (bool, error) {
-		a, err := actor(st, token)
+		a, err := executionActor(ctx, st, token)
 		if err != nil {
 			return false, err
 		}

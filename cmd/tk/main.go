@@ -194,6 +194,9 @@ func run(args []string) error {
 					if err := service.PumpLocal(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("local runtime reconciliation failed", "error", err)
 					}
+					if err := service.PumpNative(stopCtx); err != nil && stopCtx.Err() == nil {
+						slog.Error("native workflow reconciliation failed", "error", err)
+					}
 					if err := service.PumpDemo(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("demo scheduler failed", "error", err)
 					}

@@ -20,7 +20,8 @@ function openPersonalSettings() {
 
 function openSystemSettings() {
   const settings=session.settings,admin=session.account.administrator;
-  closeOnlyDialog('System',`<div class="settings-list"><section><h2>Execution</h2>${admin?`<label>Mode<select id="execution-mode"><option value="off" ${settings.executionMode!=='demo'?'selected':''}>Off</option><option value="demo" ${settings.executionMode==='demo'?'selected':''}>Demo · simulated outcomes</option></select></label><p id="execution-save-status" class="save-status" role="status"></p><button type="button" class="secondary" id="system-brake">${settings.handbrake?'Release system handbrake':'Pause system admissions'}</button>`:`<p>${settings.executionMode==='demo'?'Demo · simulated outcomes':'Agents off'}</p><p>${settings.handbrake?'System admissions paused':'System handbrake released'}</p>`}</section><section><h2>Registration</h2><p>${settings.registrations?'Enabled':'Disabled'}</p></section></div>`);
+  const modes=[['off','Off'],['demo','Demo · simulated outcomes'],['local','Local · native Codex workflows']];
+  closeOnlyDialog('System',`<div class="settings-list"><section><h2>Execution</h2>${admin?`<label>Mode<select id="execution-mode">${modes.map(([value,label])=>`<option value="${value}" ${settings.executionMode===value?'selected':''}>${label}</option>`).join('')}</select></label><p id="execution-save-status" class="save-status" role="status"></p><p>Local mode runs queued agent work using native Codex permissions and model credits.</p><button type="button" class="secondary" id="system-brake">${settings.handbrake?'Release system handbrake':'Pause system admissions'}</button>`:`<p>${runtimeModeLabel()}</p><p>${settings.handbrake?'System admissions paused':'System handbrake released'}</p>`}</section><section><h2>Registration</h2><p>${settings.registrations?'Enabled':'Disabled'}</p></section></div>`);
   on('execution-mode','change',async()=>{await setMode();syncRuntimeLabel();});
   on('system-brake','click',systemBrakeForm);
 }
@@ -60,8 +61,9 @@ function systemBrakeForm() {
 
 function syncRuntimeLabel() {
   const label=document.querySelector('.runtime .muted');
-  if(label)label.textContent='/ '+(session.settings.executionMode==='demo'?'DEMO · simulated':'agents off');
+  if(label)label.textContent='/ '+runtimeModeLabel();
 }
+function runtimeModeLabel(){return session.settings.executionMode==='local'?'native workflows':session.settings.executionMode==='demo'?'DEMO · simulated':'agents off';}
 
 function syncConsoleAttention(){
   const button=byId('harness-console');if(!button)return;

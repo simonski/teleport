@@ -47,6 +47,11 @@ func phaseCapacity(st *model.State, t model.Ticket, phase model.Phase) error {
 			if other.Delivery != nil && other.Delivery.SourcePhase != "" {
 				other.Phase = other.Delivery.SourcePhase
 			}
+			for _, row := range st.LocalSessions {
+				if other.Execution == "local:"+row.ID && row.Managed != nil {
+					other.Workflow, other.Phase = row.Managed.Workflow, row.Managed.Phase
+				}
+			}
 		}
 		count(other)
 	}
@@ -57,6 +62,9 @@ func phaseCapacity(st *model.State, t model.Ticket, phase model.Phase) error {
 		other := st.Tickets[row.TicketID]
 		if other.Delivery != nil && other.Delivery.SourcePhase != "" {
 			other.Phase = other.Delivery.SourcePhase
+		}
+		if row.Managed != nil {
+			other.Workflow, other.Phase = row.Managed.Workflow, row.Managed.Phase
 		}
 		count(other)
 	}

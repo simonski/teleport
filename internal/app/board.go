@@ -147,6 +147,10 @@ func (s *Service) boardExecution(ctx context.Context, token string, raw json.Raw
 			if t.Delivery != nil && t.Delivery.SourcePhase != "" {
 				source = t.Delivery.SourcePhase
 			}
+			if native, ok := sessions[id]; ok && native.Managed != nil {
+				source = native.Managed.Phase
+				other = st.Workflows[native.Managed.Workflow]
+			}
 			if other.ID != w.ID || source != phase.ID {
 				continue
 			}

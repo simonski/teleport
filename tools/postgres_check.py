@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--browser", action="store_true")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--native-only", action="store_true", help="Run only the native fixture against a fresh database")
+    selection.add_argument("--workflows-only", action="store_true", help="Run automatic native workflow fixtures against a fresh database")
     selection.add_argument("--scripts-only", action="store_true", help="Run only isolated script jobs against a fresh database")
     selection.add_argument("--terminal-only", action="store_true", help="Run only the plain PTY fixture against a fresh database")
     selection.add_argument("--smoke-only", action="store_true", help="Run only the application smoke against a fresh database")
@@ -58,7 +59,7 @@ def main():
             started = True
             connection = "postgresql://teleport@/postgres?" + urlencode({"host": temporary, "sslmode": "disable"})
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
-            focused = args.native_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only or args.init_only
+            focused = args.native_only or args.workflows_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only or args.init_only
             if not focused:
                 test_command = ["go", "test", "-race", "-count=1"]
                 if args.test_pattern:
@@ -68,6 +69,14 @@ def main():
                 print("PASS: PostgreSQL Go test selection", flush=True)
                 return
             subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
+            if args.workflows_only:
+                pg("createdb", "--host", temporary, "--username", "teleport", "workflows")
+                workflow_url = "postgresql://teleport@/workflows?" + urlencode({"host": temporary, "sslmode": "disable"})
+                command = ["python3", "-B", "tools/native_workflow_check.py", "--database", workflow_url]
+                if args.browser:
+                    command.append("--browser")
+                subprocess.run(command, cwd=ROOT, env=environment, check=True)
+                return
             if args.init_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "bootstrap")
                 bootstrap_url = "postgresql://teleport@/bootstrap?" + urlencode({"host": temporary, "sslmode": "disable"})

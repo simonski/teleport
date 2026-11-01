@@ -17,8 +17,8 @@ func main() {
 	folder := flag.String("fixture", "", "explicit owned fixture directory")
 	stop := flag.Bool("stop", false, "request owned stops and idle shutdown")
 	flag.Parse()
-	if !filepath.IsAbs(*folder) || !strings.HasPrefix(filepath.Base(*folder), "teleport-terminal-proof-") && !strings.HasPrefix(filepath.Base(*folder), "teleport-script-proof-") {
-		fail("Select the exact owned terminal/script fixture directory")
+	if !filepath.IsAbs(*folder) || !strings.HasPrefix(filepath.Base(*folder), "teleport-terminal-proof-") && !strings.HasPrefix(filepath.Base(*folder), "teleport-script-proof-") && !strings.HasPrefix(filepath.Base(*folder), "teleport-workflow-proof-") {
+		fail("Select the exact owned terminal/script/workflow fixture directory")
 	}
 	root := filepath.Join(*folder, "runtime")
 	info, err := os.Lstat(root)

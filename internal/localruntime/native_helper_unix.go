@@ -63,6 +63,20 @@ type nativeProxy struct {
 	role            string
 }
 
+func constrainNativePhase(role, method, cwd string, params map[string]any) {
+	if role != "Refine" && role != "Review" {
+		return
+	}
+	delete(params, "permissions")
+	params["approvalPolicy"] = "never"
+	params["cwd"] = cwd
+	if method == "thread/start" {
+		params["sandbox"] = "read-only"
+	} else if method == "turn/start" {
+		params["sandboxPolicy"] = map[string]any{"type": "readOnly"}
+	}
+}
+
 func nativeSocket(root, id string) string { return socketPath(filepath.Join(root, "native-"+id)) }
 func (p *nativeProxy) report(server bool, message []byte, captured ...string) {
 	if server {
@@ -215,8 +229,7 @@ func (p *nativeProxy) accept(w http.ResponseWriter, r *http.Request) {
 					instructions, _ := params["developerInstructions"].(string)
 					params["developerInstructions"] = instructions + "\nThis is an owned teleport local harness. Read tk skill for supported context APIs. Work only in the provided worktree. Teleport human scope/code approval is never supplied by native OS permission or an agent. Direct terminal input is outside normal ticket supervision."
 					if p.role == "Refine" || p.role == "Review" {
-						params["approvalPolicy"] = "never"
-						params["sandbox"] = "read-only"
+						constrainNativePhase(p.role, message.Method, p.cwd, params)
 					}
 					message.Params, _ = json.Marshal(params)
 					data, _ = json.Marshal(message)
@@ -226,6 +239,14 @@ func (p *nativeProxy) accept(w http.ResponseWriter, r *http.Request) {
 				if requested, _ := params["threadId"].(string); requested != "" && (p.threadID == "" || requested != p.threadID) {
 					deny = "Only this teleport session's native thread is available"
 				}
+			}
+			if message.Method == "turn/start" && (p.role == "Refine" || p.role == "Review") {
+				if params == nil {
+					params = map[string]any{}
+				}
+				constrainNativePhase(p.role, message.Method, p.cwd, params)
+				message.Params, _ = json.Marshal(params)
+				data, _ = json.Marshal(message)
 			}
 			if message.Method == "thread/fork" {
 				deny = "Fork requires a separate teleport session"
@@ -593,6 +614,9 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 	defer server.Close()
 	go server.Serve(listener)
 	tui = exec.Command(codex, "--remote", "unix://"+nativeSocket(root, id), "--no-alt-screen", "-C", cwd)
+	if prompt := os.Getenv("TELEPORT_MANAGED_PROMPT"); prompt != "" {
+		tui.Args = append(tui.Args, prompt)
+	}
 	tui.Dir, tui.Env = cwd, environment
 	tui.Stdin, tui.Stdout, tui.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err = tui.Start(); err != nil {

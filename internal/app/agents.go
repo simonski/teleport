@@ -369,6 +369,8 @@ func (s *Service) PumpDemo(ctx context.Context) error {
 
 func agentOperations(st *model.State, a model.Account, operation string, raw json.RawMessage) (any, bool, error) {
 	switch operation {
+	case "getPrompt":
+		return ticketPrompt(st, a, raw)
 	case "setExecutionMode":
 		var in ExecutionModeInput
 		if err := parse(raw, &in); err != nil {
@@ -380,8 +382,18 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		if in.ExpectedVersion != st.Settings.Version {
 			return nil, false, failure(409, "version_conflict", "Execution settings changed")
 		}
-		if !contains([]string{"off", "demo"}, in.Mode) {
-			return nil, false, failure(422, "unsupported_adapter", "Only off and deterministic demo modes have verification evidence")
+		if !contains([]string{"off", "demo", "local"}, in.Mode) {
+			return nil, false, failure(422, "unsupported_adapter", "Choose off, demo or trusted local execution")
+		}
+		if in.Mode == "local" && len(st.Accounts) != 1 {
+			return nil, false, failure(409, "local_mode_required", "Automatic local execution requires one human account")
+		}
+		if in.Mode == "demo" {
+			for _, row := range st.LocalSessions {
+				if row.Managed != nil && (activeLocal(row) || !row.Managed.Applied) {
+					return nil, false, failure(409, "native_work_pending", "Drain or stop and reconcile native phases before selecting simulation")
+				}
+			}
 		}
 		if st.Settings.ExecutionMode == in.Mode {
 			return st.Settings, false, nil

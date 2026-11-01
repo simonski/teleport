@@ -49,6 +49,10 @@ def main():
             assert len(json.loads(tk("listWorkflows"))["items"]) == 2
             assert len(json.loads(tk("tools"))["items"]) >= 4
             assert "passwordHash" not in json.dumps(session)
+            project = json.loads(tk("createProject", "--data", json.dumps({"name": "Smoke flight", "key": "smoke-flight", "requestId": "smoke-project"})))
+            ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Pack the flight case", "agent": False, "requestId": "smoke-ticket"})))
+            ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
+            assert ticket["status"] == "Doing"
             if args.browser:
                 def browser(*arguments):
                     result = subprocess.run(["agent-browser", "--session", "teleport-smoke", *arguments], text=True, capture_output=True, timeout=40)
@@ -60,14 +64,21 @@ def main():
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
-                    browser("wait", "--fn", "document.body.innerText.includes('Sign out')")
-                    assert "Sign out" in browser("snapshot", "-i")
+                    browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
+                    browser("find", "role", "button", "click", "--name", "Todos", "--exact")
+                    browser("find", "role", "button", "click", "--name", "Pack the flight case")
+                    browser("wait", "--fn", "document.querySelector('dialog')?.open")
+                    browser("find", "role", "button", "click", "--name", "Move to Done", "--exact")
+                    browser("find", "label", "Accept these completion criteria", "check")
+                    browser("find", "role", "button", "click", "--name", "Complete ticket", "--exact")
+                    browser("wait", "--fn", "!document.querySelector('dialog')?.open")
+                    assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["status"] == "Done"
                     browser("screenshot", "/tmp/teleport-smoke.png")
                 finally:
                     browser("close")
             tk("logout")
             tk("getSession", success=False)
-            print("PASS: real binary init/serve/login/discovery/logout and exclusive storage ownership" + ("; browser login verified" if args.browser else ""))
+            print("PASS: real binary init/serve/login/project/ticket/discovery/logout and exclusive storage ownership" + ("; browser Todos completion verified" if args.browser else ""))
         finally:
             process.terminate()
             try:

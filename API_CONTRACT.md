@@ -21,4 +21,18 @@ Public discovery: `GET /healthz`, `/openapi.json`, `/api/actions`, `/skill.md`; 
 
 ## Persistence
 
+## Projects and human tickets
+
+`createProject` accepts `{name,key?,requestId}` and atomically returns a project, creator Maintainer membership and protected Unassigned goal/epic IDs. Keys are lowercase ASCII letters/digits/underscore/hyphen, 1–80 characters; names are 1–200 bytes. Stable creation `requestId` is mandatory (1–100 bytes), scoped to actor and operation; matching retries return the original result, conflicting reuse returns 409. `createTicket` accepts `{projectId,parentId?,kind?,title,description?,criteria?,agent?,priority?,requestId}`; omitted kind/intent/priority are task/agent/medium. Parent defaults are project-local; wrong types/projects/hidden immediate parents fail.
+
+`listProjects` and `listTickets` return `{items,nextCursor}`. Default limit is 100, maximum 200; cursors encode the last ID and results are ordered ascending. Ticket filters: `projectId,kind,agent,status,query,includeHidden`. All pages enforce current project rights. `getTicket` takes `{id}`. `listTicketHistory` takes `{id,cursor?,limit?}` and returns immutable snapshots in ascending version order.
+
+`updateTicket` takes `{id,expectedVersion}` and optional title/description/criteria/priority/labels/start/eta/due/progress fields. Omission preserves values; empty text/date clears where valid. Content changes require preexisting Todo; protected default titles cannot change. Dates use YYYY-MM-DD, ETA cannot precede start. Scalar agent progress is a report; human status uses explicit transitions in this phase. No-op edits create no revision.
+
+`transitionTicket` accepts `{id,expectedVersion,target,confirm?}` for declared human routes. Done requires explicit `confirm:true` and records current criteria/actor/time/basis. Agent transitions refuse this generic route. Nonempty containers derive completion from non-deleted children; archived children still count. Percentage rounds to the nearest integer. Empty containers remain incomplete; epic open planning prevents Done. Every mutation reconciles its affected hierarchy within the same SQL transaction. Stale writes return 409 without partial changes. Current Contributor-or-higher rights are required to create/edit tickets; Viewers read only.
+
+The generated OpenAPI contains complete concrete project/ticket/history and operation schemas. UI and CLI call the same tool routes. Alias names such as `createProject` and `listTicketHistory` map to the corresponding canonical specification actions.
+
+## Persistence representation
+
 Schema 1 stores a versioned installation aggregate transactionally in the selected SQL backend. A serialized server owns mutations and snapshots; PostgreSQL additionally locks the row. SQLite uses WAL and an exclusive OS installation lock; PostgreSQL uses a connection-held advisory lock. Unsupported schema versions refuse operation. The aggregate is an initial local implementation, not a claim of large-workspace performance. Clients do not import the store. This representation may migrate behind stable domain contracts as capacity evidence requires.

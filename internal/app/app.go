@@ -122,6 +122,7 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		if err != nil {
 			return false, err
 		}
+		collections(st)
 		switch operation {
 		case "getSession":
 			result = map[string]any{"account": publicAccount(a), "installationId": st.InstallationID, "revision": st.Revision, "settings": st.Settings}
@@ -134,7 +135,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			result = map[string]any{"items": []model.Workflow{st.Workflows["human@1"], st.Workflows["agent@1"]}, "nextCursor": ""}
 			return false, nil
 		default:
-			return false, failure(404, "unsupported_operation", "Operation is not available in this build")
+			var changed bool
+			result, changed, err = projectOperations(st, a, operation, raw)
+			return changed, err
 		}
 	})
 	return result, err

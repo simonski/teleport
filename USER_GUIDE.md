@@ -8,7 +8,11 @@ Sign in through the browser with initial `admin` / `password`. CLI login reads t
 
 ## Support boundary
 
-This is an incremental local implementation. Agents and registrations start disabled. Only operations listed by `tk tools` are shipped; unsupported actions fail explicitly. Published human and agent workflow definitions are seeded. Real model execution, Git integration, PTY/remote hosts, multi-user activation, external sign-in, TUI, Graph, automation and release publication are not yet implemented. PostgreSQL has a driver path but requires real parity evidence before support is claimed. Never use demo evidence as proof of real code delivery.
+Projects creates projects and their Unassigned hierarchy. New creates Goal/Epic/Task tickets; choose Human intent or use Todos for its human default. Click a ticket to edit it or inspect history. Original content changes require Todo; Done asks for explicit completion acceptance. Todos has exactly Todo/Doing/Done; Board defaults to agent intent and offers Human/Both lenses. Home shows actual latest/upcoming work. Keyboard N creates, Q/Shift+Q switches views, and Escape dismisses the current dialog without applying changes. Browser changes poll committed state while preserving open editors.
+
+For example, `bin/tk createProject --data '{"name":"Flight","key":"flight","requestId":"create-flight-1"}'`, then `bin/tk createTicket --data '{"projectId":1,"title":"Pack case","agent":false,"requestId":"pack-1"}'`. Supply the current `expectedVersion` for edits/transitions. `bin/tk listTickets --data '{"projectId":1,"limit":100}'` reads a bounded page. `tk spec` publishes all shipped schemas.
+
+This is an incremental local implementation. Agents and registrations start disabled. Only operations listed by `tk tools` are shipped; unsupported actions fail explicitly. Published human and agent workflow definitions are seeded. Real model execution, Git integration, PTY/remote hosts, multi-user activation, external sign-in, TUI, Graph, automation and release publication are not yet implemented. Private project-draft autosave and broad drag/layout controls remain pending. PostgreSQL has a driver path but requires real parity evidence before support is claimed. Never use demo evidence as proof of real code delivery.
 
 ## Development
 

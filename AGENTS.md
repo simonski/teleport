@@ -35,7 +35,7 @@ Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. 
 
 Follow `SDLC.md`: use objective or imperative language without first-person pronouns. Prefer Go or Python for development tooling; create reusable tools rather than inline Python scripts, and avoid `curl` where possible.
 
-For new Go code, use `gofmt` formatting, including tab indentation, idiomatic package names, and `*_test.go` test files. No formatter or lint configuration currently exists.
+Use `gofmt`, tab indentation, idiomatic Go package names and `*_test.go` files. Keep HTTP schemas and shipped-action discovery synchronized with services.
 
 ## Testing Guidelines
 

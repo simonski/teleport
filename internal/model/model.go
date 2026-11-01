@@ -46,13 +46,82 @@ type Workflow struct {
 	Rules     []Rule  `json:"rules"`
 }
 type State struct {
-	Schema         int                 `json:"schema"`
-	InstallationID string              `json:"installationId"`
-	Revision       int64               `json:"revision"`
-	Accounts       map[string]Account  `json:"accounts"`
-	Sessions       map[string]Session  `json:"sessions"`
-	Settings       Settings            `json:"settings"`
-	Workflows      map[string]Workflow `json:"workflows"`
+	Schema         int                  `json:"schema"`
+	InstallationID string               `json:"installationId"`
+	Revision       int64                `json:"revision"`
+	Accounts       map[string]Account   `json:"accounts"`
+	Sessions       map[string]Session   `json:"sessions"`
+	Settings       Settings             `json:"settings"`
+	Workflows      map[string]Workflow  `json:"workflows"`
+	NextTicketID   int64                `json:"nextTicketId"`
+	NextProjectID  int64                `json:"nextProjectId"`
+	Projects       map[int64]Project    `json:"projects"`
+	Tickets        map[int64]Ticket     `json:"tickets"`
+	History        map[int64][]Revision `json:"history"`
+	Receipts       map[string]Receipt   `json:"receipts"`
+}
+
+type Project struct {
+	ID             int64             `json:"id"`
+	Version        int64             `json:"version"`
+	Key            string            `json:"key"`
+	Name           string            `json:"name"`
+	Creator        string            `json:"creator"`
+	Members        map[string]string `json:"members"`
+	UnassignedGoal int64             `json:"unassignedGoal"`
+	UnassignedEpic int64             `json:"unassignedEpic"`
+	HumanWorkflow  string            `json:"humanWorkflow"`
+	AgentWorkflow  string            `json:"agentWorkflow"`
+	Handbrake      bool              `json:"handbrake"`
+}
+type Agreement struct {
+	Kind         string    `json:"kind"`
+	Actor        string    `json:"actor"`
+	At           time.Time `json:"at"`
+	Criteria     string    `json:"criteria"`
+	BasisVersion int64     `json:"basisVersion"`
+}
+type Ticket struct {
+	ID           int64       `json:"id"`
+	Version      int64       `json:"version"`
+	ProjectID    int64       `json:"projectId"`
+	ParentID     int64       `json:"parentId"`
+	Kind         string      `json:"kind"`
+	Title        string      `json:"title"`
+	Description  string      `json:"description"`
+	Criteria     string      `json:"criteria"`
+	Status       string      `json:"status"`
+	Phase        string      `json:"phase"`
+	Workflow     string      `json:"workflow"`
+	Agent        bool        `json:"agent"`
+	Assignee     string      `json:"assignee,omitempty"`
+	Creator      string      `json:"creator"`
+	Priority     string      `json:"priority"`
+	Labels       []string    `json:"labels"`
+	Start        string      `json:"start,omitempty"`
+	ETA          string      `json:"eta,omitempty"`
+	Due          string      `json:"due,omitempty"`
+	Progress     int         `json:"progress"`
+	Archived     bool        `json:"archived"`
+	Deleted      bool        `json:"deleted"`
+	Protected    bool        `json:"protected"`
+	Planning     bool        `json:"planning"`
+	Active       bool        `json:"active"`
+	Dependencies []int64     `json:"dependencies"`
+	Agreements   []Agreement `json:"agreements"`
+	CreatedAt    time.Time   `json:"createdAt"`
+	UpdatedAt    time.Time   `json:"updatedAt"`
+}
+type Revision struct {
+	Version  int64     `json:"version"`
+	Actor    string    `json:"actor"`
+	Action   string    `json:"action"`
+	At       time.Time `json:"at"`
+	Snapshot Ticket    `json:"snapshot"`
+}
+type Receipt struct {
+	Fingerprint string `json:"fingerprint"`
+	Result      []byte `json:"result"`
 }
 
 func SeedWorkflows() map[string]Workflow {

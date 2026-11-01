@@ -11,8 +11,7 @@ def main():
     if not node:
         raise SystemExit("Node.js is required for development JavaScript checks (not for running tk)")
     sources = sorted((ROOT / "internal/server/web").glob("*.js"))
-    for source in sources:
-        subprocess.run([node, "--check", str(source)], check=True)
+    subprocess.run([node, "--experimental-vm-modules", "--no-warnings", str(ROOT / "tools/web_syntax.cjs"), *map(str, sources)], check=True)
     tests = sorted((ROOT / "internal/server/webtests").glob("*_test.cjs"))
     subprocess.run([node, "--test", *map(str, tests)], check=True)
     subprocess.run(["python3", "-B", str(ROOT / "tools/vendor_web.py"), "--verify"], check=True)

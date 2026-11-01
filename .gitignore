@@ -10,3 +10,5 @@ __pycache__/
 /test-results/
 /sbom.cdx.json
 /tool_calls_history.csv
+/tool_calls_stages.csv
+/.cache/

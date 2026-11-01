@@ -108,18 +108,27 @@ function enhanceSelect(select) {
     const maxHeight = Math.min(280, innerHeight - 24); list.style.maxHeight = `${maxHeight}px`;
     const height = Math.min(list.scrollHeight, maxHeight);
     list.style.top = `${rect.bottom + height + 8 < innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4)}px`;
+    function focusChoice() {
+      const option=available[active];if(!option)return;
+      // Keep focus scrolling inside the popup. Scrolling its owning dialog
+      // dismisses the popup through the outside-scroll handler.
+      option.focus({preventScroll:true});
+      const box=option.getBoundingClientRect(),bounds=list.getBoundingClientRect();
+      if(box.top<bounds.top)list.scrollTop+=box.top-bounds.top;
+      else if(box.bottom>bounds.bottom)list.scrollTop+=box.bottom-bounds.bottom;
+    }
     function navigateChoice(key) {
       if (!available.length) return;
       active = key === 'Home' ? 0 : key === 'End' ? available.length - 1 : (active + (key === 'ArrowDown' ? 1 : -1) + available.length) % available.length;
-      available[active].focus();
+      focusChoice();
     }
-    openChoice = {button, list, navigate:navigateChoice}; available[active]?.focus();
+    openChoice = {button, list, anchor:{left:rect.left,top:rect.top}, navigate:navigateChoice}; focusChoice();
     let search = '', lastKey = 0;
     list.onkeydown = e => {
       if (e.key === 'Escape') {e.preventDefault();e.stopPropagation();dismissChoice(true);return;}
       if (e.key === 'Tab') {dismissChoice(true);return;}
       if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {e.preventDefault();navigateChoice(e.key);}
-      else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && e.key !== ' ') {e.preventDefault();search = performance.now() - lastKey < 700 ? search + e.key : e.key;lastKey = performance.now();const found = available.findIndex(o => o.textContent.toLowerCase().startsWith(search.toLowerCase()));if (found >= 0) {active = found;available[active].focus();}}
+      else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && e.key !== ' ') {e.preventDefault();search = performance.now() - lastKey < 700 ? search + e.key : e.key;lastKey = performance.now();const found = available.findIndex(o => o.textContent.toLowerCase().startsWith(search.toLowerCase()));if (found >= 0) {active = found;focusChoice();}}
     };
   });
   button.addEventListener('keydown', e => {
@@ -140,7 +149,12 @@ new MutationObserver(enhanceControls).observe(document.documentElement, {childLi
 document.addEventListener('submit', e => { if (e.target.closest('tk-dialog') && e.target.getAttribute('method') === 'dialog') e.preventDefault(); }, true);
 document.addEventListener('pointerdown', e => {if (openChoice && !openChoice.list.contains(e.target) && !openChoice.button.contains(e.target)) dismissChoice();}, true);
 window.addEventListener('resize', () => dismissChoice());
-window.addEventListener('scroll', e => {if (openChoice && !openChoice.list.contains(e.target)) dismissChoice();}, true);
+window.addEventListener('scroll', e => {
+  if(!openChoice||openChoice.list.contains(e.target))return;
+  const rect=openChoice.button.getBoundingClientRect(),anchor=openChoice.anchor;
+  // A scroll event queued before opening cannot invalidate the new position.
+  if(!anchor||Math.abs(rect.left-anchor.left)>.5||Math.abs(rect.top-anchor.top)>.5)dismissChoice();
+}, true);
 document.addEventListener('focusin', e => {
   const top = modalStack.at(-1);
   if (top && !top.contains(e.target)) (modalFocusables(top)[0] || top).focus();

@@ -15,6 +15,8 @@ Executable tools append UTC start/end times, monotonic durations, outcomes and e
 
 Run `python3 tool/timing.py` to print each recorded invocation and its duration in seconds. Supply a CSV path as the optional positional argument to inspect another history file.
 
+Smoke stage and action-category timings append to ignored `tool_calls_stages.csv`; `run_id` links to the invocation history. `TELEPORT_TOOL_STAGES` selects an isolated stage file. Profiles distinguish database, acceptance slice and browser driver. Stage totals include action times; parallel slices overlap, so summing rows does not give suite wall time. Selectors, arguments and typed values are excluded.
+
 ## Requirements & Architecture
 
 Read the authority and change-control rules in `SPECIFICATION.md` before proposing changes. Distinguish requirements, engineering-owned contracts, and open choices. Workflows are directed graphs with configurable outcome rules and backward routes; preserve finite attempts and human approval gates. Seed manual and agentic defaults. The specification alone does not authorize implementation, deployment, or destructive resets.
@@ -28,6 +30,7 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 - `make build`: produce `bin/tk` with build version metadata.
 - `make install`: install the executable.
 - `make sbom`: generate `sbom.cdx.json` with Go and bundled browser dependencies, licenses and hashes.
+- `make browser-tools`: prepare a cached, pinned Python Playwright client and its matching headless Chromium for browser acceptance checks.
 - `go test ./...`: run Go tests.
 - `go test -race ./...`: check Go code for data races.
 - `make check`: verify formatting, vet, documentation and race tests.
@@ -38,6 +41,10 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations.
 
 Every `tools/smoke.py` invocation has a 30-second wall-clock budget, including those launched by the PostgreSQL runner. Six seconds are reserved for owned-process/browser cleanup. Expiry exits with status 124 and records outcome `timeout` in the history CSV.
+
+The default SQLite browser suite runs isolated `core`, `shell` and `views` slices concurrently inside that single budget and owned process group. The shell slice retains profile, navigation, keyboard and project checks; core retains ticket delivery, workflows, supervised demonstration and Git; views retains Ideas, Graph, Goals and Calendar. `--browser-slice core|shell|views` selects one slice. The PostgreSQL runner creates a separate disposable database for each slice. `--browser-driver cli` retains the previous command driver for comparisons; `python3 -B tools/browser_benchmark.py` compares identical, successful fill/click/read actions with both drivers.
+
+`make build` always creates a new build identity. `python3 -B tools/build.py --reuse` reuses an artifact only when source and embedded bytes, module files/replacements, toolchain, target, flags, Git identity and binary hash match. PostgreSQL checks use this mode. Workspace/overlay builds disable reuse. `make sbom` caches the Go inventory with a content fingerprint, verifies browser assets and runtime licenses again, and refreshes source identity, timestamp and serial number. `python3 -B tools/sbom.py --refresh` forces inventory regeneration. Remove `.cache/tools` to clear these caches.
 
 ## Coding Style & Naming Conventions
 

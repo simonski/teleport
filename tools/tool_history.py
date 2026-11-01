@@ -91,6 +91,10 @@ class ToolTimeout(SystemExit):
     """A supervised tool exhausted its wall-clock budget (exit status 124)."""
 
 
+def current_invocation_id():
+    return _current.identity if _current else ""
+
+
 def record_handoff():
     """Record an exec handoff; the replacement process owns its eventual result."""
     if _current is not None:

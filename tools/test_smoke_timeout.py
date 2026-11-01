@@ -1,5 +1,6 @@
 """Prove smoke deadlines preserve status, record timeouts and stop owned children."""
 import csv
+import json
 import os
 from pathlib import Path
 import signal
@@ -51,6 +52,20 @@ class SmokeTimeoutTest(unittest.TestCase):
         status = subprocess.run(["ps", "-o", "stat=", "-p", str(child)], capture_output=True, text=True)
         self.assertTrue(status.returncode != 0 or status.stdout.strip().startswith("Z"), status.stdout)
 
+    @unittest.skipIf(os.name == "nt", "POSIX owned-process-group contract")
+    def test_timeout_stops_real_owned_chromium_processes(self):
+        from browser_setup import browser_python
+        try:
+            browser_python()
+        except SystemExit:
+            self.skipTest("requires make browser-tools")
+        result, row, elapsed = self.invoke("browser-hang")
+        self.assertEqual((result.returncode, row["outcome"]), (124, "timeout"), result.stderr)
+        self.assertLess(elapsed, 6)
+        for pid in json.loads((self.folder / "browser-pids.json").read_text()):
+            status = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+            self.assertTrue(status.returncode != 0 or status.stdout.strip().startswith("Z"), f"owned browser PID {pid}: {status.stdout}")
+
 
 def fixture(folder):
     mode, output = sys.argv[-2], Path(sys.argv[-1])
@@ -60,6 +75,14 @@ def fixture(folder):
         child = subprocess.Popen(["sleep", "60"])
         (output / "child.pid").write_text(str(child.pid))
         time.sleep(60)
+    if mode == "browser-hang":
+        from browser_driver import Browser
+        browser = Browser("teleport-deadline-fixture", dict(os.environ))
+        browser("open", "about:blank")
+        protocol = browser.connection.new_browser_cdp_session()
+        rows = protocol.send("SystemInfo.getProcessInfo")["processInfo"]
+        (output / "browser-pids.json").write_text(json.dumps([int(row["id"]) for row in rows]))
+        time.sleep(60)
 
 
 if __name__ == "__main__":
@@ -68,6 +91,11 @@ if __name__ == "__main__":
         if worker is not None:
             execute_worker(fixture, worker)
         else:
-            run(lambda: supervise(__file__, timeout_seconds=1 if sys.argv[-2] == "hang" else 3))
+            def launch():
+                mode = sys.argv[-2]
+                from browser_setup import browser_python
+                supervise(__file__, timeout_seconds=5 if mode == "browser-hang" else 1 if mode == "hang" else 3,
+                          python_executable=browser_python() if mode == "browser-hang" else None)
+            run(launch)
     else:
         run(unittest.main)

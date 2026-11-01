@@ -7,7 +7,7 @@ def verify_ticket_keyboard(browser, tk, project_id):
         return json.loads(tk(operation, "--data", json.dumps(data)))
 
     def focused(ticket):
-        browser("eval", f"if(document.activeElement?.dataset.ticket!=={json.dumps(str(ticket['id']))})throw new Error('Wrong ticket focus')")
+        browser("eval", f"if(document.activeElement?.dataset.ticket!=={json.dumps(str(ticket['id']))})throw new Error('Wrong ticket focus '+JSON.stringify({{actual:document.activeElement?.dataset.ticket,expected:{ticket['id']},foreground:!!foregroundOpen(),lanes:[...document.querySelectorAll('.board .lane')].map(lane=>[...lane.querySelectorAll('.ticket-open')].map(node=>node.dataset.ticket))}}))")
 
     before = call("listTickets", {"projectId": project_id})["items"]
     for view, kind, intent in [("Goals", "goal", "agent"), ("Epics", "epic", "agent"), ("Todos", "task", "human")]:
@@ -32,6 +32,7 @@ def verify_ticket_keyboard(browser, tk, project_id):
     browser("eval", "if(document.querySelector('[name=kind]').value!=='task'||document.querySelector('[name=intent]').value!=='human')throw new Error('Board lens ignored')")
     browser("press", "Escape")
     browser("wait", f'.ticket-open[data-ticket="{created[0]["id"]}"]')
+    browser("wait", "--fn", json.dumps([str(ticket["id"]) for ticket in created]) + ".every(id=>document.querySelector('.ticket-open[data-ticket=\"'+id+'\"]'))")
     browser("eval", f'document.querySelector(\'.ticket-open[data-ticket="{created[0]["id"]}"]\').focus()')
     browser("press", "ArrowDown"); focused(created[1])
     browser("press", "ArrowDown"); focused(created[1])

@@ -68,7 +68,7 @@ def main():
             if args.tests_only:
                 print("PASS: PostgreSQL Go test selection", flush=True)
                 return
-            subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
+            subprocess.run(["python3", "-B", "tools/build.py", "--reuse"], cwd=ROOT, env=environment, check=True)
             if args.workflows_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "workflows")
                 workflow_url = "postgresql://teleport@/workflows?" + urlencode({"host": temporary, "sslmode": "disable"})
@@ -86,14 +86,22 @@ def main():
                 subprocess.run(bootstrap_command, cwd=ROOT, env=environment, check=True)
                 return
             if not focused or args.smoke_only or args.shell_only:
-                pg("createdb", "--host", temporary, "--username", "teleport", "smoke")
-                smoke_url = "postgresql://teleport@/smoke?" + urlencode({"host": temporary, "sslmode": "disable"})
-                command = ["python3", "-B", "tools/smoke.py", "--database", smoke_url]
-                if args.browser:
-                    command.append("--browser")
-                if args.shell_only:
-                    command.append("--shell-only")
-                subprocess.run(command, cwd=ROOT, env=environment, check=True)
+                commands = []
+                for part in (("core", "shell", "views") if args.browser and not args.shell_only else (None,)):
+                    database = "smoke_" + part if part else "smoke"
+                    pg("createdb", "--host", temporary, "--username", "teleport", database)
+                    smoke_url = "postgresql://teleport@/" + database + "?" + urlencode({"host": temporary, "sslmode": "disable"})
+                    command = ["python3", "-B", "tools/smoke.py", "--database", smoke_url]
+                    if args.browser:
+                        command.append("--browser")
+                    if args.shell_only:
+                        command.append("--shell-only")
+                    if part:
+                        command.extend(("--browser-slice", part))
+                    commands.append(command)
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=3) as checks:
+                    list(checks.map(lambda command: subprocess.run(command, cwd=ROOT, env=environment, check=True), commands))
             if not args.shell_only and not args.smoke_only and not args.native_only and not args.scripts_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
                 terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})

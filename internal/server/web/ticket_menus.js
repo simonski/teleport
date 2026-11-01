@@ -39,10 +39,10 @@ async function showTicketMenu(id,source,point=null){
     const element=document.createElement('div');element.className='ticket-context-menu';element.setAttribute('role','menu');element.setAttribute('aria-label','Ticket #'+id+' actions');
     const entries=ticketMenuEntries(ticket,rows,requests.some(group=>(group.items||[]).some(request=>request.state==='pending')));
     element.innerHTML=`<div class="ticket-context-title">#${id} · ${escapeHTML(phaseTitle(ticket))}</div>${entries.map(entry=>`<button type="button" role="menuitem" data-ticket-menu="${entry.id}">${escapeHTML(entry.label)}</button>`).join('')}`;
-    document.body.append(element);ticketMenu={element,source};ticketMenuPending=false;
+    document.body.append(element);ticketMenu={element,source,anchor:source.getBoundingClientRect(),width:innerWidth,height:innerHeight};ticketMenuPending=false;
     const anchor=source.getBoundingClientRect(),x=point?.x??anchor.left,y=point?.y??anchor.bottom;
     element.style.left=Math.max(8,Math.min(x,innerWidth-element.offsetWidth-8))+'px';element.style.top=Math.max(8,Math.min(y,innerHeight-element.offsetHeight-8))+'px';
-    const buttons=[...element.querySelectorAll('button')];buttons[0].focus();
+    const buttons=[...element.querySelectorAll('button')];buttons[0].focus({preventScroll:true});
     element.addEventListener('keydown',e=>{
       if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const index=buttons.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}
       else if(e.key==='Tab')dismissTicketMenu(true);
@@ -76,5 +76,5 @@ document.addEventListener('keydown',e=>{
   if(e.key==='F10'&&e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing){const target=menuTicketSource(e.target);if(target&&!menuForeground()){e.preventDefault();showTicketMenu(target.id,target.source);}}
 },true);
 document.addEventListener('pointerdown',e=>{if(ticketMenuPending||ticketMenu&&!ticketMenu.element.contains(e.target))dismissTicketMenu();},true);
-window.addEventListener('resize',()=>dismissTicketMenu());
-window.addEventListener('scroll',e=>{if(ticketMenu&&!ticketMenu.element.contains(e.target))dismissTicketMenu();},true);
+window.addEventListener('resize',()=>{if(ticketMenu&&(ticketMenu.width!==innerWidth||ticketMenu.height!==innerHeight))dismissTicketMenu();});
+window.addEventListener('scroll',e=>{if(ticketMenu&&!ticketMenu.element.contains(e.target)){const rect=ticketMenu.source.getBoundingClientRect(),anchor=ticketMenu.anchor;if(Math.abs(rect.left-anchor.left)>.5||Math.abs(rect.top-anchor.top)>.5)dismissTicketMenu();}},true);

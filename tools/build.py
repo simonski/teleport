@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from source_cache import source_identity, verified_artifact, record_artifact
+from tool_history import locked_history
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -15,15 +17,29 @@ def local_version(root, count):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--install-only", action="store_true")
+    parser.add_argument("--reuse", action="store_true", help="Reuse a verified binary with identical inputs and source identity")
     args = parser.parse_args()
     binary = ROOT / "bin" / "tk"
+    manifest = ROOT / ".cache/tools/build.json"
+    with locked_history(manifest):
+        build(args, binary, manifest)
+
+
+def build(args, binary, manifest):
     if not args.install_only:
+        identity = source_identity(ROOT, "build-v1")
+        # Metadata changes on commits or dirty transitions even if Go inputs do not.
+        identity = identity + local_version(ROOT, 0) if identity else None
+        if args.reuse and verified_artifact(manifest, identity, binary):
+            print("PASS: reused verified bin/tk (source, toolchain, target and flags unchanged)")
+            return
         counter = ROOT / ".build-count"
         count = int(counter.read_text()) + 1 if counter.exists() else 1
         build_version = os.environ.get("TELEPORT_BUILD_VERSION") or local_version(ROOT, count)
         binary.parent.mkdir(exist_ok=True)
         subprocess.run(["go", "build", "-trimpath", "-ldflags", f"-X main.version={build_version}", "-o", str(binary), "./cmd/tk"], cwd=ROOT, check=True)
         counter.write_text(str(count))
+        record_artifact(manifest, identity, binary)
         print(f"Built {binary.relative_to(ROOT)} ({build_version})")
     else:
         env = subprocess.check_output(["go", "env", "GOBIN", "GOPATH"], text=True).splitlines()

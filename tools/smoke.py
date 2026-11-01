@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -14,14 +15,17 @@ from ticket_browser import verify_ticket_keyboard
 from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
-from graph_browser import verify_graph
+from graph_browser import verify_graph, verify_camera_retained
 from smoke_timeout import TIMEOUT_SECONDS
+from smoke_profile import Profile
 
 ROOT = Path(__file__).resolve().parents[1]
 
 def main(temporary_root=None):
     parser = argparse.ArgumentParser(description=__doc__, epilog=f"Total wall-clock budget: {TIMEOUT_SECONDS} seconds, including cleanup.")
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--browser-driver", choices=("persistent", "cli"), default="persistent", help="Keep the CLI driver for identical-workload comparisons")
+    parser.add_argument("--browser-slice", choices=("core", "shell", "views"), help="Run one isolated part of the full browser suite")
     parser.add_argument("--shell-only", action="store_true", help="Verify only the shared shell and profile popups; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
@@ -29,15 +33,22 @@ def main(temporary_root=None):
     parser.add_argument("--graph-only", action="store_true", help="Verify the bundled graph renderer, persistence and fallback; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only) and not args.browser:
+    if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     with context as temporary:
         folder = Path(temporary)
+        if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only)):
+            from smoke_suite import run_suite
+            run_suite(__file__, folder)
+            return
+        focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        profile = Profile(("postgres" if args.database else "sqlite") + "/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
+        profile.start("setup")
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
-        if args.browser:
+        if args.browser and args.browser_driver == "cli":
             (folder / "smoke-control.json").write_text(json.dumps({"browserSession": f"teleport-smoke-{port}"}))
         endpoint = f"http://127.0.0.1:{port}"
         environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
@@ -48,7 +59,7 @@ def main(temporary_root=None):
             "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
         ])))
         def tk(*arguments, input=None, success=True):
-            result = subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, input=input, text=True, capture_output=True, timeout=30)
+            result = profile.call("tk", lambda: subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, input=input, text=True, capture_output=True, timeout=3))
             if success and result.returncode:
                 raise RuntimeError(result.stderr)
             if not success and not result.returncode:
@@ -82,6 +93,14 @@ def main(temporary_root=None):
             ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
             assert ticket["status"] == "Doing"
             if args.browser:
+                seeded_browser = args.browser_slice in ("core", "views")
+                if seeded_browser:
+                    setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
+                    assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
+                driver = None
+                if args.browser_driver == "persistent":
+                    from browser_driver import Browser
+                    driver = Browser(f"teleport-smoke-{port}", browser_environment)
                 def browser(*arguments):
                     if arguments[0] == "select":
                         browser("click", arguments[1] + " + .choice-button")
@@ -89,297 +108,319 @@ def main(temporary_root=None):
                     if len(arguments)>=6 and arguments[:5] == ("find", "role", "button", "click", "--name") and arguments[5] in ("Settings", "System", "Project settings"):
                         browser("click", "#account")
                         return browser("click", {"Settings":"#account-settings", "System":"#account-system", "Project settings":"#account-project-settings"}[arguments[5]])
+                    if driver is not None:
+                        return profile.call("browser." + arguments[0], lambda: driver(*arguments))
                     if arguments[0] == "click" and len(arguments) == 2:
                         # Native-driver visibility can include a few clipped pixels;
                         # centre the actual control inside its scroll container.
                         expression = f"document.querySelector({json.dumps(arguments[1])})?.scrollIntoView({{block:'center',inline:'nearest'}})"
-                        subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", "eval", expression], env=browser_environment, text=True, capture_output=True, timeout=40, check=True)
-                    result = subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", *arguments], env=browser_environment, text=True, capture_output=True, timeout=40)
+                        profile.call("browser.scroll", lambda: subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", "eval", expression], env=browser_environment, text=True, capture_output=True, timeout=3, check=True))
+                    result = profile.call("browser." + arguments[0], lambda: subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", *arguments], env=browser_environment, text=True, capture_output=True, timeout=3))
                     if result.returncode:
                         raise RuntimeError(result.stderr or result.stdout)
                     return result.stdout
                 try:
+                    profile.start("landing")
                     browser("open", endpoint)
                     browser("wait", "--fn", "document.querySelector('#build-version')?.textContent===document.querySelector('meta[name=teleport-build-version]')?.content")
                     assert json.loads(browser("eval", "document.querySelector('#build-version').textContent")) == server_version
-                    if not (args.graph_only or args.navigation_only):
+                    if not (seeded_browser or args.graph_only or args.navigation_only):
                         verify_landing(browser)
+                    profile.start("login" if seeded_browser else "welcome")
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
-                    browser("wait", "#welcome-status")
-                    browser("screenshot", "/tmp/teleport-welcome.png")
-                    browser("press", "Escape")
-                    assert not json.loads(tk("getWelcomeSetup"))["setup"]["completed"]
-                    if args.graph_only:
-                        verify_graph(browser, tk, project["id"], ticket)
-                        return
-                    browser("click", "#account")
-                    browser("click", "#account-welcome")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", '#editor [name="projectId"]')
-                    browser("fill", '#editor [name="projectName"]', " smoke   FLIGHT ")
-                    browser("wait", "--fn", "document.querySelector('#welcome-project-status')?.innerText.includes('Project name already exists')")
-                    assert len(json.loads(tk("listProjects"))["items"]) == 1
-                    browser("fill", '#editor [name="projectName"]', "Welcome project")
-                    browser("wait", "--fn", "document.querySelector('#editor [name=projectKey]')?.value==='welc'")
-                    browser("screenshot", "/tmp/teleport-welcome-project.png")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", '#editor [name="harness"]')
-                    assert len(json.loads(tk("listProjects"))["items"]) == 1
-                    browser("eval", "if(document.querySelector('[name=repository],[name=storageRoot],#welcome-grant'))throw new Error('Wizard still requests filesystem access')")
-                    browser("press", "Escape")
-                    browser("click", "#account")
-                    browser("click", "#account-welcome")
-                    browser("wait", '#editor [name="harness"]')
-                    browser("select", '#editor [name="harness"]', "codex")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", '#editor [name="attention"]')
-                    browser("select", '#editor [name="attention"]', "quiet")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", ".setup-summary")
-                    assert len(json.loads(tk("listProjects"))["items"]) == 1
-                    browser("eval", "{const original=window.fetch;let lose=true;window.welcomeTrace=[];window.fetch=async(...args)=>{const stack=new Error().stack;const response=await original(...args);if(/WelcomeSetup$/.test(String(args[0])))window.welcomeTrace.push({op:String(args[0]),input:JSON.parse(args[1].body),stack,status:response.status,result:await response.clone().json()});if(lose&&String(args[0]).endsWith('/completeWelcomeSetup')){lose=false;throw new Error('Simulated lost completion response');}return response;};}")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "document.querySelector('#welcome-status')?.innerText.includes('Simulated lost completion response')")
-                    assert len(json.loads(tk("listProjects"))["items"]) == 2
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    setup = json.loads(tk("getWelcomeSetup"))["setup"]
-                    assert setup["completed"] and setup["attention"] == "quiet"
-                    assert len(json.loads(tk("listProjects"))["items"]) == 2
-                    assert not json.loads(tk("getSession"))["settings"]["agents"]
+                    if not seeded_browser:
+                        browser("wait", "#welcome-status")
+                        browser("screenshot", "/tmp/teleport-welcome.png")
+                        browser("press", "Escape")
+                        assert not json.loads(tk("getWelcomeSetup"))["setup"]["completed"]
+                        if args.graph_only:
+                            profile.start("graph")
+                            verify_graph(browser, tk, project["id"], ticket)
+                            return
+                        browser("click", "#account")
+                        browser("click", "#account-welcome")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", '#editor [name="projectId"]')
+                        browser("fill", '#editor [name="projectName"]', " smoke   FLIGHT ")
+                        browser("wait", "--fn", "document.querySelector('#welcome-project-status')?.innerText.includes('Project name already exists')")
+                        assert len(json.loads(tk("listProjects"))["items"]) == 1
+                        browser("fill", '#editor [name="projectName"]', "Welcome project")
+                        browser("wait", "--fn", "document.querySelector('#editor [name=projectKey]')?.value==='welc'")
+                        browser("screenshot", "/tmp/teleport-welcome-project.png")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", '#editor [name="harness"]')
+                        assert len(json.loads(tk("listProjects"))["items"]) == 1
+                        browser("eval", "if(document.querySelector('[name=repository],[name=storageRoot],#welcome-grant'))throw new Error('Wizard still requests filesystem access')")
+                        browser("press", "Escape")
+                        browser("click", "#account")
+                        browser("click", "#account-welcome")
+                        browser("wait", '#editor [name="harness"]')
+                        browser("select", '#editor [name="harness"]', "codex")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", '#editor [name="attention"]')
+                        browser("select", '#editor [name="attention"]', "quiet")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", ".setup-summary")
+                        assert len(json.loads(tk("listProjects"))["items"]) == 1
+                        browser("eval", "{const original=window.fetch;let lose=true;window.welcomeTrace=[];window.fetch=async(...args)=>{const stack=new Error().stack;const response=await original(...args);if(/WelcomeSetup$/.test(String(args[0])))window.welcomeTrace.push({op:String(args[0]),input:JSON.parse(args[1].body),stack,status:response.status,result:await response.clone().json()});if(lose&&String(args[0]).endsWith('/completeWelcomeSetup')){lose=false;throw new Error('Simulated lost completion response');}return response;};}")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", "--fn", "document.querySelector('#welcome-status')?.innerText.includes('Simulated lost completion response')")
+                        assert len(json.loads(tk("listProjects"))["items"]) == 2
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        setup = json.loads(tk("getWelcomeSetup"))["setup"]
+                        assert setup["completed"] and setup["attention"] == "quiet"
+                        assert len(json.loads(tk("listProjects"))["items"]) == 2
+                        assert not json.loads(tk("getSession"))["settings"]["agents"]
+                    browser("wait", "#project + .choice-button")
                     browser("select", "#project", str(project["id"]))
                     browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
                     if args.navigation_only:
+                        profile.start("navigation")
                         verify_navigation(browser, tk, project["id"])
                         return
-                    browser("eval", "if(document.querySelector('main h1,.board-heading>.eyebrow')||Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-59)>1)throw new Error('Shell is not compact');if(!document.querySelector('#javascript-console')||!document.querySelector('#harness-console'))throw new Error('Missing console buttons')")
-                    browser("screenshot", "/tmp/teleport-shell.png")
-                    verify_profile_dialogs(browser)
-                    browser("find", "role", "button", "click", "--name", "Settings", "--exact")
-                    browser("eval", "if(document.querySelector('#editor h2')?.textContent!=='Settings'||document.querySelector('#execution-mode,#configure-repository,#edit-workflows')||document.querySelector('[aria-current=page]')?.dataset.view!=='Home')throw new Error('Settings is not a personal popup over Home')")
-                    browser("screenshot", "/tmp/teleport-settings.png")
-                    browser("press", "Escape")
-                    browser("eval", "if(document.activeElement!==document.querySelector('#account'))throw new Error('Settings dismissal lost usable focus')")
-                    browser("find", "role", "button", "click", "--name", "System", "--exact")
-                    browser("eval", "if(!document.querySelector('#execution-mode')||document.querySelector('#appearance-style,#configure-repository'))throw new Error('System mixes personal/project configuration')")
-                    browser("click", "#system-brake")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    assert json.loads(tk("getSession"))["settings"]["handbrake"]
-                    browser("find", "role", "button", "click", "--name", "System", "--exact")
-                    browser("click", "#system-brake")
-                    browser("press", "Escape")
-                    assert json.loads(tk("getSession"))["settings"]["handbrake"]
-                    browser("find", "role", "button", "click", "--name", "System", "--exact")
-                    browser("click", "#system-brake")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    assert not json.loads(tk("getSession"))["settings"]["handbrake"]
-                    browser("click", "#javascript-console")
-                    browser("wait", "#script-source")
-                    browser("press", "Escape")
-                    assert not json.loads(tk("listScriptRuns"))["items"]
-                    browser("click", "#harness-console")
-                    browser("wait", "#new-console")
-                    browser("press", "Escape")
-                    assert not json.loads(tk("listSessions"))["items"]
-                    browser("set", "viewport", "390", "844")
-                    browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Mobile shell overflows');if(!document.querySelector('#build-version').textContent)throw new Error('Missing mobile version')")
-                    browser("screenshot", "/tmp/teleport-shell-mobile.png")
-                    browser("set", "viewport", "1280", "800")
-                    if args.shell_only:
-                        print("PASS: real build footer, compact desktop/mobile shell, separate profile popups, exact confirmed system handbrake and console viewers without execution")
-                        return
-                    if args.tickets_only:
+                    if args.browser_slice not in ("core", "views"):
+                        profile.start("shell")
+                        browser("eval", "if(document.querySelector('main h1,.board-heading>.eyebrow')||Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-59)>1)throw new Error('Shell is not compact');if(!document.querySelector('#javascript-console')||!document.querySelector('#harness-console'))throw new Error('Missing console buttons')")
+                        browser("screenshot", "/tmp/teleport-shell.png")
+                        verify_profile_dialogs(browser)
+                        browser("find", "role", "button", "click", "--name", "Settings", "--exact")
+                        browser("eval", "if(document.querySelector('#editor h2')?.textContent!=='Settings'||document.querySelector('#execution-mode,#configure-repository,#edit-workflows')||document.querySelector('[aria-current=page]')?.dataset.view!=='Home')throw new Error('Settings is not a personal popup over Home')")
+                        browser("screenshot", "/tmp/teleport-settings.png")
+                        browser("press", "Escape")
+                        browser("eval", "if(document.activeElement!==document.querySelector('#account'))throw new Error('Settings dismissal lost usable focus')")
+                        browser("find", "role", "button", "click", "--name", "System", "--exact")
+                        browser("eval", "if(!document.querySelector('#execution-mode')||document.querySelector('#appearance-style,#configure-repository'))throw new Error('System mixes personal/project configuration')")
+                        browser("click", "#system-brake")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        assert json.loads(tk("getSession"))["settings"]["handbrake"]
+                        browser("find", "role", "button", "click", "--name", "System", "--exact")
+                        browser("click", "#system-brake")
+                        browser("press", "Escape")
+                        assert json.loads(tk("getSession"))["settings"]["handbrake"]
+                        browser("find", "role", "button", "click", "--name", "System", "--exact")
+                        browser("click", "#system-brake")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        assert not json.loads(tk("getSession"))["settings"]["handbrake"]
+                        browser("click", "#javascript-console")
+                        browser("wait", "#script-source")
+                        browser("press", "Escape")
+                        assert not json.loads(tk("listScriptRuns"))["items"]
+                        browser("click", "#harness-console")
+                        browser("wait", "#new-console")
+                        browser("press", "Escape")
+                        assert not json.loads(tk("listSessions"))["items"]
+                        browser("set", "viewport", "390", "844")
+                        browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Mobile shell overflows');if(!document.querySelector('#build-version').textContent)throw new Error('Missing mobile version')")
+                        browser("screenshot", "/tmp/teleport-shell-mobile.png")
+                        browser("set", "viewport", "1280", "800")
+                        if args.shell_only:
+                            print("PASS: real build footer, compact desktop/mobile shell, separate profile popups, exact confirmed system handbrake and console viewers without execution")
+                            return
+                        if args.tickets_only:
+                            verify_ticket_keyboard(browser, tk, project["id"])
+                            return
+                        if args.projects_only:
+                            verify_project_directory(browser, tk, project["id"])
+                            return
+                        profile.start("navigation")
+                        verify_navigation(browser, tk, project["id"])
+                        if args.navigation_only:
+                            return
+                        profile.start("tickets")
                         verify_ticket_keyboard(browser, tk, project["id"])
-                        return
-                    if args.projects_only:
+                        profile.start("projects")
                         verify_project_directory(browser, tk, project["id"])
+                    if args.browser_slice == "shell":
                         return
-                    verify_navigation(browser, tk, project["id"])
-                    if args.navigation_only:
+                    if args.browser_slice != "views":
+                        profile.start("ticket-delivery")
+                        browser("eval", "if(document.querySelector('dialog,[data-view=Settings],#finder-open')||document.body.innerText.includes('Work, in motion'))throw new Error('Obsolete navigation or native dialog');if(!document.querySelector('.wordmark .rocket'))throw new Error('Missing rocket')")
+                        browser("click", "#project + .choice-button")
+                        browser("press", "ArrowDown")
+                        browser("press", "Escape")
+                        browser("eval", "if(document.querySelector('.choice-list')||document.activeElement!==document.querySelector('#project + .choice-button'))throw new Error('Choice keyboard dismissal lost focus')")
+                        browser("click", "#new")
+                        browser("fill", '[name="title"]', "Unsaved dismissal check")
+                        browser("eval", "document.querySelector('#editor button[type=submit]').focus()")
+                        browser("press", "Tab")
+                        browser("eval", "if(document.activeElement!==document.querySelector('#dismiss'))throw new Error('Modal focus escaped')")
+                        browser("press", "Escape")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!document.querySelector('#app').inert")
+                        browser("click", "#new")
+                        browser("mouse", "move", "3", "3")
+                        browser("mouse", "down", "left")
+                        browser("mouse", "up", "left")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        browser("find", "role", "button", "click", "--name", "Todos", "--exact")
+                        browser("find", "role", "button", "click", "--name", "Pack the flight case")
+                        browser("wait", "--fn", "document.querySelector('tk-dialog')?.open")
+                        browser("find", "role", "button", "click", "--name", "Move to Done", "--exact")
+                        browser("find", "label", "Accept these completion criteria", "check")
+                        browser("find", "role", "button", "click", "--name", "Complete ticket", "--exact")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog')?.open")
+                        assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["status"] == "Done"
+                        browser("screenshot", "/tmp/teleport-smoke.png")
+                        draft = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "human@1", "projectId": project["id"], "title": "Flight workflow", "requestId": "smoke-flow"})))
+                        profile.start("workflow")
+                        browser("select", "#project", str(project["id"]))
+                        browser("find", "role", "button", "click", "--name", "Project settings", "--exact")
+                        browser("find", "role", "button", "click", "--name", "Workflow editor", "--exact")
+                        browser("wait", "#flow-select")
+                        browser("eval", "if(view!=='Workflows'||!document.querySelector('main #workflow-editor')||document.querySelector('tk-dialog[open]'))throw new Error('Workflow editor is not in its own view')")
+                        browser("select", "#flow-select", draft["id"] + "@draft")
+                        browser("fill", '[data-phase="1"] [data-field="title"]', "Discard this local title")
+                        browser("click", '#nav-views [data-view="Home"]')
+                        browser("eval", "if(view!=='Workflows'||document.querySelector('[data-phase=\"1\"] [data-field=title]').value!=='Discard this local title')throw new Error('Navigation discarded unsaved workflow input')")
+                        browser("click", "#flow-discard")
+                        browser("wait", "--fn", "!workflowLoading&&document.querySelector('[data-phase=\"1\"] [data-field=title]')?.value==='Doing'")
+                        browser("fill", '[data-phase="1"] [data-field="title"]', "In flight")
+                        browser("click", "#flow-save")
+                        browser("wait", "--fn", "document.querySelector('#flow-message')?.innerText.includes('Draft saved')")
+                        saved_revision = json.loads(tk("getSession"))["revision"]
+                        browser("wait", "--fn", f"session.revision>={saved_revision}&&!workflowLoading&&document.querySelector('#flow-message')?.textContent.includes('Draft saved')")
+                        browser("select", "#preview-source", "Doing")
+                        browser("fill", "#preview-outcome", "return")
+                        browser("click", "#flow-preview")
+                        browser("wait", "--fn", "document.querySelector('#preview-result')?.innerText.includes('Todo')")
+                        browser("eval", "window.scrollTo(0,0)")
+                        browser("screenshot", "/tmp/teleport-workflow.png")
+                        browser("eval", "if(!document.querySelector('#flow-activate').disabled)throw new Error('Unpublished draft can be selected without publication')")
+                        browser("eval", "{const original=window.fetch;let lose=true;window.fetch=async(...args)=>{const response=await original(...args);if(lose&&String(args[0]).endsWith('/publishWorkflow')){lose=false;throw new Error('Simulated lost publication response');}return response;};}")
+                        browser("click", "#flow-publish")
+                        browser("wait", "--fn", "document.querySelector('#flow-message')?.textContent.includes('Simulated lost publication response')")
+                        browser("eval", "if(!workflowPublicationRecovery||flow.published)throw new Error('Unconfirmed publication did not preserve its exact retry context')")
+                        browser("click", "#flow-publish")
+                        browser("wait", "--fn", "document.querySelector('#flow-message')?.textContent.includes('Published v-1')")
+                        unchanged = next(item for item in json.loads(tk("listProjects"))["items"] if item["id"] == project["id"])
+                        assert unchanged["humanWorkflow"] == "human@1"
+                        publications = [item for item in json.loads(tk("listWorkflows", "--data", json.dumps({"projectId": project["id"]})))["items"] if item["id"] == draft["id"]]
+                        assert len(publications) == 1 and publications[0]["published"] and publications[0]["version"] == 1
+                        browser("screenshot", "/tmp/teleport-workflow-published.png")
+                        browser("click", "#flow-activate")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        new_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Fresh workflow pin", "agent": False, "requestId": "new-pin"})))
+                        assert new_ticket["workflow"] == draft["id"] + "@1"
+                        assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["workflow"] == "human@1"
+                        browser("wait", "#flow-draft")
+                        browser("click", "#flow-draft")
+                        browser("wait", "--fn", "!workflowMutation&&!flow.published&&flow.version===2")
+                        browser("fill", '[data-phase="1"] [data-field="title"]', "Retain after cancelled deletion")
+                        browser("click", "#flow-delete")
+                        browser("press", "Escape")
+                        browser("eval", "if(document.querySelector('[data-phase=\"1\"] [data-field=title]').value!=='Retain after cancelled deletion')throw new Error('Closing confirmation discarded the editor')")
+                        browser("click", "#flow-delete")
+                        browser("click", '#editor button[type="submit"]')
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!workflowLoading")
+                        retained_flows = [item for item in json.loads(tk("listWorkflows", "--data", json.dumps({"projectId": project["id"]})))["items"] if item["id"] == draft["id"]]
+                        assert len(retained_flows) == 1 and retained_flows[0]["published"] and retained_flows[0]["version"] == 1
+                        browser("set", "viewport", "390", "844")
+                        browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Workflow editor overflows mobile page')")
+                        browser("screenshot", "/tmp/teleport-workflows-mobile.png")
+                        browser("set", "viewport", "1280", "800")
+                        browser("find", "role", "button", "click", "--name", "Settings", "--exact")
+                        browser("select", "#preference-view", "Workflows")
+                        browser("select", "#preference-project", str(project["id"]))
+                        browser("wait", "--fn", "!preferenceSaving&&!Object.keys(preferenceDraft).length")
+                        browser("press", "Escape")
+                        browser("reload")
+                        browser("wait", "--fn", "view==='Workflows'&&!workflowLoading&&!!document.querySelector('#flow-select')")
+                        browser("screenshot", "/tmp/teleport-workflows-view.png")
+                        verify_workflow_lanes(browser, tk, project)
+                        browser("find", "role", "button", "click", "--name", "Settings", "--exact")
+                        browser("select", "#preference-view", "Home")
+                        browser("select", "#preference-project", "0")
+                        browser("wait", "--fn", "!preferenceSaving&&!Object.keys(preferenceDraft).length")
+                        browser("press", "Escape")
+                        agent_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Demonstrate supervised delivery", "requestId": "agent-ticket"})))
+                        configuration = json.loads(tk("getSession"))["settings"]
+                        tk("setExecutionMode", "--data", json.dumps({"mode": "demo", "expectedVersion": configuration["version"]}))
+                        tk("requestRefinement", "--data", json.dumps({"id": agent_ticket["id"], "expectedVersion": agent_ticket["version"]}))
+                        def wait_ticket(predicate):
+                            deadline = time.monotonic() + 12
+                            while time.monotonic() < deadline:
+                                current = json.loads(tk("getTicket", "--data", json.dumps({"id": agent_ticket["id"]})))
+                                if predicate(current):
+                                    return current
+                                time.sleep(0.1)
+                            raise AssertionError("agent ticket did not reach expected state")
+                        wait_ticket(lambda current: current.get("refinement") is not None)
+                        browser("find", "role", "button", "click", "--name", "Board", "--exact")
+                        browser("wait", "--fn", "document.body.innerText.includes('Demonstrate supervised delivery')")
+                        browser("find", "role", "button", "click", "--name", "Demonstrate supervised delivery")
+                        browser("wait", '[data-agent="accept"]')
+                        browser("click", '[data-agent="accept"]')
+                        browser("find", "label", "Accept this exact scope and basis", "check")
+                        browser("find", "role", "button", "click", "--name", "Accept scope", "--exact")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        candidate = wait_ticket(lambda current: current["status"] == "Approval")
+                        assert candidate["attempts"] == 3 and candidate["agentReview"]["simulated"]
+                        tk("approveTicket", "--data", json.dumps({"id": candidate["id"], "expectedVersion": candidate["version"], "confirm": True}), success=False)
+                        configuration = json.loads(tk("getSession"))["settings"]
+                        tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
+                        repository = folder / "repository"
+                        profile.start("git-delivery")
+                        repository.mkdir()
+                        git_environment = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="Smoke", GIT_AUTHOR_EMAIL="smoke@localhost", GIT_COMMITTER_NAME="Smoke", GIT_COMMITTER_EMAIL="smoke@localhost")
+                        def git(path, *arguments):
+                            subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}", "-c", "commit.gpgsign=false", "-C", str(path), *arguments], env=git_environment, check=True, capture_output=True, timeout=30)
+                        git(repository, "init", "-b", "main")
+                        (repository / "README.md").write_text("Original fixture\n")
+                        git(repository, "add", ".")
+                        git(repository, "commit", "-m", "Initial")
+                        project = next(item for item in json.loads(tk("listProjects"))["items"] if item["id"] == project["id"])
+                        external = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "agent@1", "projectId": project["id"], "title": "Explicit external delivery", "requestId": "external-flow"})))
+                        external["phases"] = [phase for phase in external["phases"] if phase["role"] != "Review"]
+                        external["rules"] = [rule for rule in external["rules"] if rule["source"] != "Review"]
+                        for rule in external["rules"]:
+                            if rule.get("target") == "Review":
+                                rule["target"] = "Approval"
+                        external = json.loads(tk("saveWorkflow", "--data", json.dumps({"definition": external, "expectedRevision": external["draftRevision"]})))
+                        project = json.loads(tk("activateWorkflowVersion", "--data", json.dumps({"workflowKey": external["id"] + "@draft", "expectedRevision": external["draftRevision"], "projectId": project["id"], "expectedProjectVersion": project["version"]})))
+                        project = json.loads(tk("configureLocalRepository", "--data", json.dumps({"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})))
+                        real = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Real external fixture", "requestId": "real-ticket"})))
+                        configuration = json.loads(tk("getSession"))["settings"]
+                        tk("setExecutionMode", "--data", json.dumps({"mode": "demo", "expectedVersion": configuration["version"]}))
+                        tk("requestRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": real["version"]}))
+                        agent_ticket = real
+                        refined = wait_ticket(lambda current: current.get("refinement") is not None)
+                        configuration = json.loads(tk("getSession"))["settings"]
+                        tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
+                        tk("acceptRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": refined["version"], "proposalId": refined["refinement"]["id"]}))
+                        browser("wait", "--fn", "document.body.innerText.includes('Real external fixture')")
+                        browser("click", f'[data-ticket="{real["id"]}"]')
+                        browser("wait", '[data-delivery="prepare"]')
+                        browser("click", '[data-delivery="prepare"]')
+                        browser("find", "role", "button", "click", "--name", "Prepare worktree", "--exact")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        prepared = wait_ticket(lambda current: current.get("delivery", {}).get("worktree", {}).get("path"))
+                        worktree = Path(prepared["delivery"]["worktree"]["path"])
+                        (worktree / "README.md").write_text("Delivered fixture\n")
+                        git(worktree, "add", ".")
+                        git(worktree, "commit", "-m", "Deliver external fixture")
+                        browser("click", f'[data-ticket="{real["id"]}"]')
+                        browser("wait", '[data-delivery="report"]')
+                        browser("click", '[data-delivery="report"]')
+                        browser("find", "role", "button", "click", "--name", "Capture candidate", "--exact")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        browser("click", f'[data-ticket="{real["id"]}"]')
+                        browser("wait", '[data-delivery="approve"]')
+                        browser("click", '[data-delivery="approve"]')
+                        browser("find", "label", "Approve this exact code and completion basis", "check")
+                        browser("find", "role", "button", "click", "--name", "Approve and fast-forward main", "--exact")
+                        browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                        done = wait_ticket(lambda current: current["status"] == "Done")
+                        assert done.get("agentReview") is None
+                        assert (repository / "README.md").read_text() == "Delivered fixture\n"
+                        browser("screenshot", "/tmp/teleport-delivery.png")
+                    if args.browser_slice == "core":
                         return
-                    verify_ticket_keyboard(browser, tk, project["id"])
-                    verify_project_directory(browser, tk, project["id"])
-                    browser("eval", "if(document.querySelector('dialog,[data-view=Settings],#finder-open')||document.body.innerText.includes('Work, in motion'))throw new Error('Obsolete navigation or native dialog');if(!document.querySelector('.wordmark .rocket'))throw new Error('Missing rocket')")
-                    browser("click", "#project + .choice-button")
-                    browser("press", "ArrowDown")
-                    browser("press", "Escape")
-                    browser("eval", "if(document.querySelector('.choice-list')||document.activeElement!==document.querySelector('#project + .choice-button'))throw new Error('Choice keyboard dismissal lost focus')")
-                    browser("click", "#new")
-                    browser("fill", '[name="title"]', "Unsaved dismissal check")
-                    browser("eval", "document.querySelector('#editor button[type=submit]').focus()")
-                    browser("press", "Tab")
-                    browser("eval", "if(document.activeElement!==document.querySelector('#dismiss'))throw new Error('Modal focus escaped')")
-                    browser("press", "Escape")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!document.querySelector('#app').inert")
-                    browser("click", "#new")
-                    browser("mouse", "move", "3", "3")
-                    browser("mouse", "down", "left")
-                    browser("mouse", "up", "left")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    browser("find", "role", "button", "click", "--name", "Todos", "--exact")
-                    browser("find", "role", "button", "click", "--name", "Pack the flight case")
-                    browser("wait", "--fn", "document.querySelector('tk-dialog')?.open")
-                    browser("find", "role", "button", "click", "--name", "Move to Done", "--exact")
-                    browser("find", "label", "Accept these completion criteria", "check")
-                    browser("find", "role", "button", "click", "--name", "Complete ticket", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog')?.open")
-                    assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["status"] == "Done"
-                    browser("screenshot", "/tmp/teleport-smoke.png")
-                    draft = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "human@1", "projectId": project["id"], "title": "Flight workflow", "requestId": "smoke-flow"})))
-                    browser("select", "#project", str(project["id"]))
-                    browser("find", "role", "button", "click", "--name", "Project settings", "--exact")
-                    browser("find", "role", "button", "click", "--name", "Workflow editor", "--exact")
-                    browser("wait", "#flow-select")
-                    browser("eval", "if(view!=='Workflows'||!document.querySelector('main #workflow-editor')||document.querySelector('tk-dialog[open]'))throw new Error('Workflow editor is not in its own view')")
-                    browser("select", "#flow-select", draft["id"] + "@draft")
-                    browser("fill", '[data-phase="1"] [data-field="title"]', "Discard this local title")
-                    browser("click", '#nav-views [data-view="Home"]')
-                    browser("eval", "if(view!=='Workflows'||document.querySelector('[data-phase=\"1\"] [data-field=title]').value!=='Discard this local title')throw new Error('Navigation discarded unsaved workflow input')")
-                    browser("click", "#flow-discard")
-                    browser("wait", "--fn", "!workflowLoading&&document.querySelector('[data-phase=\"1\"] [data-field=title]')?.value==='Doing'")
-                    browser("fill", '[data-phase="1"] [data-field="title"]', "In flight")
-                    browser("click", "#flow-save")
-                    browser("wait", "--fn", "document.querySelector('#flow-message')?.innerText.includes('Draft saved')")
-                    saved_revision = json.loads(tk("getSession"))["revision"]
-                    browser("wait", "--fn", f"session.revision>={saved_revision}&&!workflowLoading&&document.querySelector('#flow-message')?.textContent.includes('Draft saved')")
-                    browser("select", "#preview-source", "Doing")
-                    browser("fill", "#preview-outcome", "return")
-                    browser("click", "#flow-preview")
-                    browser("wait", "--fn", "document.querySelector('#preview-result')?.innerText.includes('Todo')")
-                    browser("eval", "window.scrollTo(0,0)")
-                    browser("screenshot", "/tmp/teleport-workflow.png")
-                    browser("eval", "if(!document.querySelector('#flow-activate').disabled)throw new Error('Unpublished draft can be selected without publication')")
-                    browser("eval", "{const original=window.fetch;let lose=true;window.fetch=async(...args)=>{const response=await original(...args);if(lose&&String(args[0]).endsWith('/publishWorkflow')){lose=false;throw new Error('Simulated lost publication response');}return response;};}")
-                    browser("click", "#flow-publish")
-                    browser("wait", "--fn", "document.querySelector('#flow-message')?.textContent.includes('Simulated lost publication response')")
-                    browser("eval", "if(!workflowPublicationRecovery||flow.published)throw new Error('Unconfirmed publication did not preserve its exact retry context')")
-                    browser("click", "#flow-publish")
-                    browser("wait", "--fn", "document.querySelector('#flow-message')?.textContent.includes('Published v-1')")
-                    unchanged = next(item for item in json.loads(tk("listProjects"))["items"] if item["id"] == project["id"])
-                    assert unchanged["humanWorkflow"] == "human@1"
-                    publications = [item for item in json.loads(tk("listWorkflows", "--data", json.dumps({"projectId": project["id"]})))["items"] if item["id"] == draft["id"]]
-                    assert len(publications) == 1 and publications[0]["published"] and publications[0]["version"] == 1
-                    browser("screenshot", "/tmp/teleport-workflow-published.png")
-                    browser("click", "#flow-activate")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    new_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Fresh workflow pin", "agent": False, "requestId": "new-pin"})))
-                    assert new_ticket["workflow"] == draft["id"] + "@1"
-                    assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["workflow"] == "human@1"
-                    browser("wait", "#flow-draft")
-                    browser("click", "#flow-draft")
-                    browser("wait", "--fn", "!workflowMutation&&!flow.published&&flow.version===2")
-                    browser("fill", '[data-phase="1"] [data-field="title"]', "Retain after cancelled deletion")
-                    browser("click", "#flow-delete")
-                    browser("press", "Escape")
-                    browser("eval", "if(document.querySelector('[data-phase=\"1\"] [data-field=title]').value!=='Retain after cancelled deletion')throw new Error('Closing confirmation discarded the editor')")
-                    browser("click", "#flow-delete")
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!workflowLoading")
-                    retained_flows = [item for item in json.loads(tk("listWorkflows", "--data", json.dumps({"projectId": project["id"]})))["items"] if item["id"] == draft["id"]]
-                    assert len(retained_flows) == 1 and retained_flows[0]["published"] and retained_flows[0]["version"] == 1
-                    browser("set", "viewport", "390", "844")
-                    browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Workflow editor overflows mobile page')")
-                    browser("screenshot", "/tmp/teleport-workflows-mobile.png")
-                    browser("set", "viewport", "1280", "800")
-                    browser("find", "role", "button", "click", "--name", "Settings", "--exact")
-                    browser("select", "#preference-view", "Workflows")
-                    browser("select", "#preference-project", str(project["id"]))
-                    browser("wait", "--fn", "!preferenceSaving&&!Object.keys(preferenceDraft).length")
-                    browser("press", "Escape")
-                    browser("reload")
-                    browser("wait", "--fn", "view==='Workflows'&&!workflowLoading&&!!document.querySelector('#flow-select')")
-                    browser("screenshot", "/tmp/teleport-workflows-view.png")
-                    verify_workflow_lanes(browser, tk, project)
-                    browser("find", "role", "button", "click", "--name", "Settings", "--exact")
-                    browser("select", "#preference-view", "Home")
-                    browser("select", "#preference-project", "0")
-                    browser("wait", "--fn", "!preferenceSaving&&!Object.keys(preferenceDraft).length")
-                    browser("press", "Escape")
-                    agent_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Demonstrate supervised delivery", "requestId": "agent-ticket"})))
-                    configuration = json.loads(tk("getSession"))["settings"]
-                    tk("setExecutionMode", "--data", json.dumps({"mode": "demo", "expectedVersion": configuration["version"]}))
-                    tk("requestRefinement", "--data", json.dumps({"id": agent_ticket["id"], "expectedVersion": agent_ticket["version"]}))
-                    def wait_ticket(predicate):
-                        deadline = time.monotonic() + 12
-                        while time.monotonic() < deadline:
-                            current = json.loads(tk("getTicket", "--data", json.dumps({"id": agent_ticket["id"]})))
-                            if predicate(current):
-                                return current
-                            time.sleep(0.1)
-                        raise AssertionError("agent ticket did not reach expected state")
-                    wait_ticket(lambda current: current.get("refinement") is not None)
-                    browser("find", "role", "button", "click", "--name", "Board", "--exact")
-                    browser("wait", "--fn", "document.body.innerText.includes('Demonstrate supervised delivery')")
-                    browser("find", "role", "button", "click", "--name", "Demonstrate supervised delivery")
-                    browser("wait", '[data-agent="accept"]')
-                    browser("click", '[data-agent="accept"]')
-                    browser("find", "label", "Accept this exact scope and basis", "check")
-                    browser("find", "role", "button", "click", "--name", "Accept scope", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    candidate = wait_ticket(lambda current: current["status"] == "Approval")
-                    assert candidate["attempts"] == 3 and candidate["agentReview"]["simulated"]
-                    tk("approveTicket", "--data", json.dumps({"id": candidate["id"], "expectedVersion": candidate["version"], "confirm": True}), success=False)
-                    configuration = json.loads(tk("getSession"))["settings"]
-                    tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
-                    repository = folder / "repository"
-                    repository.mkdir()
-                    git_environment = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="Smoke", GIT_AUTHOR_EMAIL="smoke@localhost", GIT_COMMITTER_NAME="Smoke", GIT_COMMITTER_EMAIL="smoke@localhost")
-                    def git(path, *arguments):
-                        subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}", "-c", "commit.gpgsign=false", "-C", str(path), *arguments], env=git_environment, check=True, capture_output=True, timeout=30)
-                    git(repository, "init", "-b", "main")
-                    (repository / "README.md").write_text("Original fixture\n")
-                    git(repository, "add", ".")
-                    git(repository, "commit", "-m", "Initial")
-                    project = next(item for item in json.loads(tk("listProjects"))["items"] if item["id"] == project["id"])
-                    external = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "agent@1", "projectId": project["id"], "title": "Explicit external delivery", "requestId": "external-flow"})))
-                    external["phases"] = [phase for phase in external["phases"] if phase["role"] != "Review"]
-                    external["rules"] = [rule for rule in external["rules"] if rule["source"] != "Review"]
-                    for rule in external["rules"]:
-                        if rule.get("target") == "Review":
-                            rule["target"] = "Approval"
-                    external = json.loads(tk("saveWorkflow", "--data", json.dumps({"definition": external, "expectedRevision": external["draftRevision"]})))
-                    project = json.loads(tk("activateWorkflowVersion", "--data", json.dumps({"workflowKey": external["id"] + "@draft", "expectedRevision": external["draftRevision"], "projectId": project["id"], "expectedProjectVersion": project["version"]})))
-                    project = json.loads(tk("configureLocalRepository", "--data", json.dumps({"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})))
-                    real = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Real external fixture", "requestId": "real-ticket"})))
-                    configuration = json.loads(tk("getSession"))["settings"]
-                    tk("setExecutionMode", "--data", json.dumps({"mode": "demo", "expectedVersion": configuration["version"]}))
-                    tk("requestRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": real["version"]}))
-                    agent_ticket = real
-                    refined = wait_ticket(lambda current: current.get("refinement") is not None)
-                    configuration = json.loads(tk("getSession"))["settings"]
-                    tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
-                    tk("acceptRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": refined["version"], "proposalId": refined["refinement"]["id"]}))
-                    browser("wait", "--fn", "document.body.innerText.includes('Real external fixture')")
-                    browser("click", f'[data-ticket="{real["id"]}"]')
-                    browser("wait", '[data-delivery="prepare"]')
-                    browser("click", '[data-delivery="prepare"]')
-                    browser("find", "role", "button", "click", "--name", "Prepare worktree", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    prepared = wait_ticket(lambda current: current.get("delivery", {}).get("worktree", {}).get("path"))
-                    worktree = Path(prepared["delivery"]["worktree"]["path"])
-                    (worktree / "README.md").write_text("Delivered fixture\n")
-                    git(worktree, "add", ".")
-                    git(worktree, "commit", "-m", "Deliver external fixture")
-                    browser("click", f'[data-ticket="{real["id"]}"]')
-                    browser("wait", '[data-delivery="report"]')
-                    browser("click", '[data-delivery="report"]')
-                    browser("find", "role", "button", "click", "--name", "Capture candidate", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    browser("click", f'[data-ticket="{real["id"]}"]')
-                    browser("wait", '[data-delivery="approve"]')
-                    browser("click", '[data-delivery="approve"]')
-                    browser("find", "label", "Approve this exact code and completion basis", "check")
-                    browser("find", "role", "button", "click", "--name", "Approve and fast-forward main", "--exact")
-                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    done = wait_ticket(lambda current: current["status"] == "Done")
-                    assert done.get("agentReview") is None
-                    assert (repository / "README.md").read_text() == "Delivered fixture\n"
-                    browser("screenshot", "/tmp/teleport-delivery.png")
+                    profile.start("ideas")
                     browser("find", "role", "button", "click", "--name", "Ideas", "--exact")
                     browser("click", "#new-idea")
                     browser("find", "label", "Title", "fill", "A calmer boarding process")
@@ -402,6 +443,7 @@ def main(temporary_root=None):
                     idea_ticket = json.loads(tk("getTicket", "--data", json.dumps({"id": targets[0]["ticketId"]})))
                     assert idea_ticket["title"] == "Prepare the boarding checklist" and idea_ticket["status"] == "Todo"
                     browser("click", "#dismiss")
+                    profile.start("graph")
                     browser("find", "role", "button", "click", "--name", "Graph", "--exact")
                     browser("wait", "--fn", "document.querySelector('#graph-state')?.innerText.includes('entities')")
                     browser("click", f'[data-node="ticket:{idea_ticket["id"]}"]')
@@ -415,7 +457,7 @@ def main(temporary_root=None):
                     browser("eval", "window.__graphCamera=JSON.stringify(graphRuntime.scene.snapshot())")
                     changed_ticket = json.loads(tk("updateTicket", "--data", json.dumps({"id": idea_ticket["id"], "expectedVersion": idea_ticket["version"], "priority": "high"})))
                     browser("wait", "--fn", f'tickets.some(t=>t.id==={idea_ticket["id"]}&&t.version==={changed_ticket["version"]})&&!!graphRuntime')
-                    browser("eval", "if(JSON.stringify(graphRuntime.scene.snapshot())!==window.__graphCamera)throw new Error('Graph update changed camera or selection')")
+                    verify_camera_retained(browser)
                     browser("eval", "window.scrollTo(0,0)")
                     browser("screenshot", "/tmp/teleport-graph.png")
                     browser("find", "role", "button", "click", "--name", "Settings", "--exact")
@@ -445,6 +487,7 @@ def main(temporary_root=None):
                     browser("wait", "#graph-apply-position")
                     browser("eval", "HTMLCanvasElement.prototype.getContext=window.__nativeContext")
                     browser("screenshot", "/tmp/teleport-graph-fallback.png")
+                    profile.start("goals-calendar")
                     browser("find", "role", "button", "click", "--name", "Goals", "--exact")
                     browser("click", "#new-hierarchy")
                     browser("find", "label", "Title", "fill", "Reduce boarding delay")
@@ -502,26 +545,41 @@ def main(temporary_root=None):
                     browser("wait", "#finder-query")
                     browser("click", "#dismiss")
                 except Exception:
-                    print(browser("snapshot", "-i"))
-                    print(browser("eval", "fetch('/api/tools/getSession',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(response=>({sessionReadStatus:response.status})).catch(()=>({sessionReadStatus:'network-error'}))"))
-                    print(browser("eval", "document.querySelector('#notice')?.innerText"))
-                    print(browser("eval", "({welcomeStatus:document.querySelector('#welcome-status')?.innerText,trace:window.welcomeTrace})"))
-                    browser("screenshot", "/tmp/teleport-failure.png")
-                    print(browser("errors"))
+                    profile.finish("failure")
+                    profile.start("diagnostics")
+                    try:
+                        print(browser("eval", "({view,projectId,detailEpoch,loadGeneration,notice:document.querySelector('#notice')?.textContent,active:document.activeElement?.id,preferenceError,preferenceConflict,preferenceVersion:preferences?.version,sessionRevision:session?.revision,hidden:document.hidden,refreshing,graphInteracting,foreground:!!foregroundOpen()})"))
+                        browser("screenshot", "/tmp/teleport-failure.png")
+                    except Exception as diagnostic_error:
+                        print("Smoke diagnostic unavailable: " + type(diagnostic_error).__name__, flush=True)
+                    profile.finish("failure")
                     raise
                 finally:
-                    browser("close")
+                    profile.start("browser-cleanup")
+                    failed = sys.exc_info()[0] is not None
+                    try:
+                        browser("close")
+                    except Exception:
+                        profile.finish("failure")
+                        if not failed:
+                            raise
+                    else:
+                        profile.finish()
             tk("logout")
             tk("getSession", success=False)
-            print("PASS: real binary init/serve/login/project/ticket/discovery/logout and exclusive storage ownership" + ("; browser Todos completion verified" if args.browser else ""))
+            print("PASS: real binary init/serve/login/project/ticket/discovery/logout and exclusive storage ownership" + ("; browser acceptance verified" if args.browser else ""))
         finally:
+            profile.start("server-cleanup")
             process.terminate()
             try:
-                process.wait(timeout=10)
+                process.wait(timeout=1)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+            profile.finish()
+        profile.start("reinitialization")
         assert "Initialization complete" in tk("init")
+        profile.finish()
 
 if __name__ == "__main__":
     from smoke_timeout import execute_worker, supervise, worker_directory
@@ -530,4 +588,5 @@ if __name__ == "__main__":
     if worker is not None:
         execute_worker(main, worker)
     else:
-        run(lambda: supervise(__file__))
+        from browser_setup import runtime_for_args
+        run(lambda: supervise(__file__, python_executable=runtime_for_args(sys.argv[1:])))

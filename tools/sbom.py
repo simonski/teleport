@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 from urllib.parse import quote
+from source_cache import source_identity, verified_artifact, record_artifact
+from tool_history import locked_history
 
 from vendor_web import DESTINATION as VENDOR, verify as verify_web
 from vendor_terminal import PACKAGES, verify as verify_terminal
@@ -98,13 +100,30 @@ def add_source_identity(bom):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "sbom.cdx.json")
+    parser.add_argument("--refresh", action="store_true", help="Regenerate the Go inventory even when verified inputs match")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="teleport-sbom-") as temporary:
-        output = Path(temporary) / "go.cdx.json"
-        subprocess.run(["go", "run", GENERATOR, "app", "-json", "-std", "-licenses",
+    identity = source_identity(ROOT, "sbom-v1/" + GENERATOR)
+    cache = ROOT / ".cache/tools/go-sbom.json"
+    manifest = cache.with_suffix(".manifest.json")
+    with locked_history(manifest):
+        if args.refresh or not verified_artifact(manifest, identity, cache):
+            with tempfile.TemporaryDirectory(prefix="teleport-sbom-") as temporary:
+                output = Path(temporary) / "go.cdx.json"
+                subprocess.run(["go", "run", GENERATOR, "app", "-json", "-std", "-licenses",
                         "-output-version", "1.6", "-main", "cmd/tk", "-output", str(output), str(ROOT)],
                        cwd=ROOT, check=True)
-        bom = add_source_identity(add_runtime_license(add_browser_components(json.loads(output.read_text()))))
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                staged_cache = cache.with_suffix(".tmp")
+                staged_cache.write_bytes(output.read_bytes())
+                staged_cache.replace(cache)
+                record_artifact(manifest, identity, cache)
+        # Browser bytes and licenses are always reverified. Source metadata is
+        # regenerated instead of returning a stale previously published SBOM.
+        bom = add_source_identity(add_runtime_license(add_browser_components(json.loads(cache.read_text()))))
+    from datetime import datetime, timezone
+    import uuid
+    bom["serialNumber"] = "urn:uuid:" + str(uuid.uuid4())
+    bom["metadata"]["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     # Publish only a complete document, preserving an existing SBOM on failure.
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", dir=args.output.parent, delete=False) as staged:

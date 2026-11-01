@@ -1,5 +1,16 @@
 """Focused browser acceptance for the bundled Three.js graph renderer."""
 import json
+import math
+
+
+def verify_camera_retained(browser):
+    before = json.loads(json.loads(browser("eval", "window.__graphCamera")))
+    after = json.loads(browser("eval", "graphRuntime.scene.snapshot()"))
+    assert before["selected"] == after["selected"], "Graph refresh changed selection"
+    for field in ("camera", "target"):
+        assert len(before[field]) == len(after[field]) == 3
+        assert all(math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-9)
+                   for a, b in zip(before[field], after[field])), "Graph refresh moved " + field
 
 
 def verify_graph(browser, tk, project_id, ticket):
@@ -20,7 +31,7 @@ def verify_graph(browser, tk, project_id, ticket):
     browser("eval", "window.__graphCamera=JSON.stringify(graphRuntime.scene.snapshot())")
     changed = call("updateTicket", {"id": ticket["id"], "expectedVersion": ticket["version"], "priority": "high"})
     browser("wait", "--fn", f'tickets.some(t=>t.id==={ticket["id"]}&&t.version==={changed["version"]})&&!!graphRuntime')
-    browser("eval", "if(JSON.stringify(graphRuntime.scene.snapshot())!==window.__graphCamera)throw new Error('Graph refresh changed camera or selection')")
+    verify_camera_retained(browser)
     browser("screenshot", "/tmp/teleport-dependency-graph.png")
     browser("find", "role", "button", "click", "--name", "Settings", "--exact")
     browser("select", "#appearance-style", "instrument")

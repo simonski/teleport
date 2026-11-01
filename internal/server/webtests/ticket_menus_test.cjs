@@ -5,10 +5,10 @@ const path=require('node:path');
 const vm=require('node:vm');
 
 function fixture(){
-  let release;const state={opened:null,notice:''};
-  const context=vm.createContext({session:{account:{id:'one'}},loadGeneration:1,detailEpoch:1,view:'Board',graphData:null,document:{querySelector:()=>null,activeElement:null,addEventListener(){}},window:{addEventListener(){}},api:()=>new Promise(resolve=>release=resolve),pages:async()=>[],openTerminal:async id=>state.opened=id,notice:text=>state.notice=text});
+  let release;const state={opened:null,notice:''},events={};
+  const context=vm.createContext({session:{account:{id:'one'}},loadGeneration:1,detailEpoch:1,view:'Board',graphData:null,document:{querySelector:()=>null,activeElement:null,addEventListener(){}},window:{addEventListener(type,fn){events[type]=fn;}},api:()=>new Promise(resolve=>release=resolve),pages:async()=>[],openTerminal:async id=>state.opened=id,notice:text=>state.notice=text});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/ticket_menus.js'),'utf8'),context);
-  return {context,state,run:source=>vm.runInContext(source,context),release:result=>release(result)};
+  return {context,state,events,run:source=>vm.runInContext(source,context),release:result=>release(result)};
 }
 
 test('Teleport is offered only for the exact running ticket attachment',()=>{
@@ -34,4 +34,14 @@ test('Teleport does not substitute another session after an attachment changes',
   const f=fixture();const request=f.run("teleportTicketSession(7,'H1')");
   f.release({id:7,projectId:2,execution:'local:H2'});await request;
   assert.equal(f.state.opened,null);assert.match(f.state.notice,/no longer running/);
+});
+
+test('queued scroll and resize events preserve a menu positioned after those changes',()=>{
+  const f=fixture(),rect={left:10,top:20};let removed=false;
+  f.context.menuElement={contains:()=>false,remove(){removed=true;}};
+  f.context.menuSource={getBoundingClientRect:()=>rect};
+  f.run('innerWidth=390;innerHeight=844;ticketMenu={element:menuElement,source:menuSource,anchor:{left:10,top:20},width:390,height:844}');
+  f.events.scroll({target:{}});f.events.resize();assert.equal(removed,false);
+  rect.top=40;f.events.scroll({target:{}});assert.equal(removed,true);
+  assert.equal(f.run('ticketMenu'),null);
 });

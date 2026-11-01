@@ -9,7 +9,7 @@ import sys
 import tempfile
 import time
 
-from tool_history import ToolTimeout
+from tool_history import ToolTimeout, current_invocation_id
 
 TIMEOUT_SECONDS = 30
 WORKER = "TELEPORT_SMOKE_WORKER"
@@ -27,6 +27,8 @@ def execute_worker(action, folder):
     try:
         action(folder)
     except BaseException as error:
+        from smoke_profile import record_interruption
+        record_interruption(folder, "failure")
         (folder / "smoke-result.json").write_text(json.dumps({"error_type": type(error).__name__}))
         raise
 
@@ -72,7 +74,7 @@ def close_browser(folder, deadline):
         print(f"smoke cleanup: browser close was not confirmed ({type(error).__name__})", file=sys.stderr)
 
 
-def supervise(script, timeout_seconds=TIMEOUT_SECONDS):
+def supervise(script, timeout_seconds=TIMEOUT_SECONDS, python_executable=None):
     started = time.monotonic()
     deadline = started + timeout_seconds
     # Stop test work early enough to keep cleanup inside the full budget.
@@ -80,9 +82,9 @@ def supervise(script, timeout_seconds=TIMEOUT_SECONDS):
     timed_out, code = False, None
     with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
         folder = Path(temporary)
-        environment = dict(os.environ, **{WORKER: str(Path(script).resolve()), DIRECTORY: temporary})
+        environment = dict(os.environ, **{WORKER: str(Path(script).resolve()), DIRECTORY: temporary, "TELEPORT_TOOL_RUN_ID": current_invocation_id()})
         options = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
-        process = subprocess.Popen([sys.executable, "-B", str(script), *sys.argv[1:]], env=environment, **options)
+        process = subprocess.Popen([python_executable or sys.executable, "-B", str(script), *sys.argv[1:]], env=environment, **options)
         try:
             code = process.wait(timeout=max(0.001, deadline - reserve - time.monotonic()))
         except subprocess.TimeoutExpired:
@@ -95,8 +97,14 @@ def supervise(script, timeout_seconds=TIMEOUT_SECONDS):
                     print(f"smoke cleanup: owned process stop was not confirmed ({type(error).__name__})", file=sys.stderr)
             finally:
                 if timed_out or code != 0:
-                    close_browser(folder, deadline)
+                    from concurrent.futures import ThreadPoolExecutor
+                    with ThreadPoolExecutor(max_workers=3) as cleanup:
+                        list(cleanup.map(lambda owned: close_browser(owned, deadline), [folder, *[path.parent for path in folder.glob("*/smoke-control.json")]]))
         if timed_out:
+            from smoke_profile import record_timeout
+            record_timeout(folder)
+            for progress in folder.glob("*/smoke-progress.json"):
+                record_timeout(progress.parent)
             print(f"Smoke timed out: {timeout_seconds:g}s total budget, including cleanup", file=sys.stderr)
             raise ToolTimeout(124)
         if code:

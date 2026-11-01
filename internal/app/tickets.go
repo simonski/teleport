@@ -525,6 +525,9 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		if !valid {
 			return nil, false, failure(409, "invalid_transition", "No declared workflow route to this phase")
 		}
+		if (in.Target == "Done" || in.Target == "Doing") && !dependenciesDone(st, t) {
+			return nil, false, failure(409, "unmet_prerequisite", "Every prerequisite must be Done")
+		}
 		if in.Target == "Done" {
 			if !in.Confirm {
 				return nil, false, failure(409, "agreement_required", "Explicitly confirm the current completion criteria")
@@ -541,9 +544,10 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		t.Status, t.Phase = in.Target, in.Target
 		saveTicket(st, &t, a, operation)
 		reconcile(st, t.ParentID, a)
+		reconcileDependencyStops(st, a)
 		return t, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return controlOperations(st, a, operation, raw)
 }
 func validParent(st *model.State, t model.Ticket) error {
 	if t.Kind == "goal" {

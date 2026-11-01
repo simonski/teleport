@@ -15,6 +15,11 @@ import (
 )
 
 func fixture(t *testing.T) (*app.Service, string) {
+	svc, token, _ := fixtureWithStore(t)
+	return svc, token
+}
+
+func fixtureWithStore(t *testing.T) (*app.Service, string, *store.Store) {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "database.db"), true)
 	if err != nil {
@@ -29,7 +34,7 @@ func fixture(t *testing.T) (*app.Service, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return svc, result.(app.LoginResult).Token
+	return svc, result.(app.LoginResult).Token, db
 }
 
 func TestNoOpAndConcurrentExpectedVersionUpdates(t *testing.T) {

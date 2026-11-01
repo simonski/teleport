@@ -14,6 +14,8 @@ For example, `bin/tk createProject --data '{"name":"Flight","key":"flight","requ
 
 This is an incremental local implementation. Agents and registrations start disabled. Only operations listed by `tk tools` are shipped; unsupported actions fail explicitly. Published human and agent workflow definitions are seeded. Real model execution, Git integration, PTY/remote hosts, multi-user activation, external sign-in, TUI, Graph, automation and release publication are not yet implemented. Private project-draft autosave and broad drag/layout controls remain pending. PostgreSQL has a driver path but requires real parity evidence before support is claimed. Never use demo evidence as proof of real code delivery.
 
+Ticket details offer prerequisites, cancellation and permitted reopen/transfer/archive/delete controls. Visibility changes affect only that record; Settings → Hidden tickets provides restoration. Container cancellation affects unfinished descendants, while container reopening affects only the selection. Transfers require ownership (Maintainer) in both projects and refuse cross-project prerequisite links. Settings → Change password verifies the current password and signs out every session; repeat init never resets it.
+
 ## Development
 
 `make check` verifies documentation, Go formatting/vet and race tests. `make build` increments only the ignored local build counter; checks do not. `TELEPORT_BUILD_VERSION` provides an explicit reproducible build version. `make install` installs the built binary. No command auto-starts a service or browser.

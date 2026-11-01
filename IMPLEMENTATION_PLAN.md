@@ -10,7 +10,7 @@ Deliver usable vertical phases from the agreed specification. Start each phase f
 | --- | --- | --- | --- |
 | P01 `phase/01-local-bootstrap` | — | Build one Go binary; explicit init/login/serve, seeded manual/agent workflows, persistent local credentials and API-only CLI. Repeat init preserves identity. A32/A33/A34/A165. | Verified |
 | P02 `phase/02-human-tickets` | P01 | Browser/CLI project creation with protected Unassigned hierarchy; human Todo/Doing/Done, immutable history, versions and rollups. A01–A05/A09/A11/A69. | Verified scoped path |
-| P03 `phase/03-work-controls` | P02 | Dependencies, cancellation/reopen, visibility and dual-owner subtree transfers, enforced in API and UI. A10/A25/A31/A63–A68/A147–A150. | Pending |
+| P03 `phase/03-work-controls` | P02 | Dependencies, cancellation/reopen, visibility and dual-owner subtree transfers, enforced in API and UI. A10/A25/A31/A63–A68/A147–A150. | Verified local path |
 | P04 `phase/04-workflow-editor` | P02 | Visual/list workflow editing, outcome conditions and backward routes, read-only preview, explicit immutable activation and new-work pins. A40/A97/A102–A105/A163/A164. | Pending |
 | P05 `phase/05-agent-orchestration` | P03/P04 | Deterministic adapter proves refinement acceptance, phase attempts/claims, question continuation, separate Review and human Approval guards; no invented delivery evidence. A07/A60/A61/A99/A166. | Pending |
 | P06 `phase/06-git-delivery` | P05 | Retained owned worktrees, pinned candidates, actual checks, rebase/review and serialized human-approved fast-forward integration. A11/A35/A78. | Pending |
@@ -32,6 +32,8 @@ The hardest boundaries are process ownership/recovery, human acceptance of exact
 P01 supplies durable installation/authentication and bounded authenticated tool calls. P02 supplies project membership, stable hierarchy IDs, versioned mutations and immutable revisions. P03 supplies admission/dependency/transfer guards. P04 supplies pinned workflow definitions and deterministic routing. P05 consumes those contracts to reserve stage visits/attempts without bypassing human gates. P06 adds real Git evidence. P07/P08 add verified process/PTY authority. P10 proves backend parity; P11 adds isolation before enabling multi-user execution. P12 integrates clients and packaging without changing domain policy.
 
 ## Execution evidence
+
+P03: behavior tests exercise subtree cancellation/selected reopening, hidden-parent discoverability, inherited/hierarchy dependency-cycle rejection, rollback of cross-project prerequisite violations and current dual-project ownership. Domain state records durable stop requests for future managed execution without asserting process exit. Browser ticket controls and hidden-ticket restoration use the same typed APIs. Password changes verify the old credential and revoke sessions. Real-process stop/recovery remains dependent on P07 evidence.
 
 P02: real CLI-created project/ticket completed through browser Todos and read back through the CLI. Screenshot inspected at `/tmp/teleport-smoke.png`. Domain tests cover retry-safe project creation, Todo locks, stale/no-op/concurrent writes, immutable history and derived completion. Responsive browser workspace exposes only working views/actions. Project-wizard draft autosave, broad metadata editing, drag/reorder and all remaining acceptance variants remain pending; phase anchors identify target coverage rather than blanket completion claims.
 

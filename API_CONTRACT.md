@@ -19,8 +19,6 @@ Responses use the operation's JSON result. Failures use `{"error":{"code":"stabl
 
 Public discovery: `GET /healthz`, `/openapi.json`, `/api/actions`, `/skill.md`; browser assets `/`, `/app.js`, `/style.css`. No domain database access is available over the client surface. OpenAPI publishes input/result/error schemas for every registered operation; the exact request/result contract above is normative for this build.
 
-## Persistence
-
 ## Projects and human tickets
 
 `createProject` accepts `{name,key?,requestId}` and atomically returns a project, creator Maintainer membership and protected Unassigned goal/epic IDs. Keys are lowercase ASCII letters/digits/underscore/hyphen, 1–80 characters; names are 1–200 bytes. Stable creation `requestId` is mandatory (1–100 bytes), scoped to actor and operation; matching retries return the original result, conflicting reuse returns 409. `createTicket` accepts `{projectId,parentId?,kind?,title,description?,criteria?,agent?,priority?,requestId}`; omitted kind/intent/priority are task/agent/medium. Parent defaults are project-local; wrong types/projects/hidden immediate parents fail.
@@ -34,5 +32,17 @@ Public discovery: `GET /healthz`, `/openapi.json`, `/api/actions`, `/skill.md`; 
 The generated OpenAPI contains complete concrete project/ticket/history and operation schemas. UI and CLI call the same tool routes. Alias names such as `createProject` and `listTicketHistory` map to the corresponding canonical specification actions.
 
 ## Persistence representation
+
+## Work controls
+
+`setDependencies` takes `{id,expectedVersion,dependencies:integer[]}` on unclaimed Todo tasks/epics, up to 200 direct IDs. New references must be unique same-project non-cancelled tasks/epics. Existing cancelled prerequisites remain blockers. Validate effective inherited prerequisites plus hierarchy-completion edges as one acyclic dependency graph; workflow cycles remain valid and separate. Human Doing/Done requires completed prerequisites.
+
+`cancelTicket` takes `{id,expectedVersion,reason?}`. Tasks cancel individually; containers cancel themselves and unfinished descendants, including hidden work, with one correlation ID. Done/already-cancelled descendants remain intact. `reopenTicket` takes `{id,expectedVersion}` and affects only the selected record. Agent tasks and containers require Maintainer; human tasks require Contributor. Agent reopening is inactive Todo with retained history and a resume hold. Containers recompute current child completion.
+
+`setTicketVisibility` takes `{id,expectedVersion,archived?,deleted?}` and requires Maintainer. Change only the selected record, preserve children and reject protected defaults or pending execution. Restore retains status and adds an agent resume hold. `transferTicket` takes `{id,expectedVersion,destinationProjectId,parentId?}` and requires current Maintainer authority in both projects, or installation administrator. Move the complete subtree including hidden descendants atomically, preserving IDs/history/pins; reject protected/busy records, incompatible assignees, invalid parents or resulting cross-project prerequisites. Omitted parents use destination defaults. `moveTicket` takes `{id,expectedVersion,parentId}` for same-project valid reparenting with Contributor rights.
+
+`changePassword` takes `{currentPassword,newPassword}`, verifies the current password, requires 12–1,024 new-password bytes and revokes all account sign-in sessions atomically. It returns `{signedOut:true}` and requires a fresh sign-in. The combined visibility and container-cancellation routes compose their corresponding permanent action variants; API discovery names the primary action.
+
+## Storage
 
 Schema 1 stores a versioned installation aggregate transactionally in the selected SQL backend. A serialized server owns mutations and snapshots; PostgreSQL additionally locks the row. SQLite uses WAL and an exclusive OS installation lock; PostgreSQL uses a connection-held advisory lock. Unsupported schema versions refuse operation. The aggregate is an initial local implementation, not a claim of large-workspace performance. Clients do not import the store. This representation may migrate behind stable domain contracts as capacity evidence requires.

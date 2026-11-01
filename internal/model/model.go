@@ -37,13 +37,20 @@ type Rule struct {
 	Conditions map[string]string `json:"conditions,omitempty"`
 }
 type Workflow struct {
-	ID        string  `json:"id"`
-	Version   int64   `json:"version"`
-	Title     string  `json:"title"`
-	Family    string  `json:"family"`
-	Published bool    `json:"published"`
-	Phases    []Phase `json:"phases"`
-	Rules     []Rule  `json:"rules"`
+	ProjectID     int64            `json:"projectId"`
+	DraftRevision int64            `json:"draftRevision"`
+	ID            string           `json:"id"`
+	Version       int64            `json:"version"`
+	Title         string           `json:"title"`
+	Family        string           `json:"family"`
+	Published     bool             `json:"published"`
+	Phases        []Phase          `json:"phases"`
+	Rules         []Rule           `json:"rules"`
+	Layout        map[string]Point `json:"layout,omitempty"`
+}
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 type State struct {
 	Schema         int                  `json:"schema"`

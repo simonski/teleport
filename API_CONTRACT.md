@@ -45,4 +45,18 @@ The generated OpenAPI contains complete concrete project/ticket/history and oper
 
 ## Storage
 
+## Workflow definitions
+
+`listWorkflows` accepts `{projectId?,cursor?,limit?}` and returns authorized definitions ordered by exact key; its cursor is the last opaque workflow key. `getWorkflow` accepts `{workflowKey,ticketId?}`. Optional ticket context grants access only to that currently authorized ticket's exact retained pin, including after transfer. Published keys are `ID@VERSION`; mutable drafts use `ID@draft`. Definitions add `projectId,draftRevision,layout?` to the seed shape; layout maps phase IDs to bounded `{x,y}` coordinates.
+
+`copyWorkflow` takes `{sourceKey,projectId,title,requestId}` and creates a new draft identity. `draftWorkflow` takes `{workflowKey}` and idempotently starts the next version of that same definition. `saveWorkflow` takes `{definition,expectedRevision}`, preserving identity/family/ownership and rejecting stale writes. `deleteWorkflow` takes `{workflowKey,expectedRevision}` for drafts only; published history remains retained. Maintainer authority controls project definitions; installation drafts require administrator authority. Save validates the whole graph, including disconnected branches, exact destinations, manual role gates and overlapping conditions. Declared cycles and self-retries are valid.
+
+Rules match source/outcome and exact string conditions on `reason,revisionKind,questionOrigin,result`. Lower numeric priority wins (0–10,000); potentially overlapping matches at equal priority fail validation. Choose exactly one target or `wait`/`halt` action. `previewWorkflowOutcome` takes `{workflowKey,source,outcome,context?}` and returns `{ruleId,target?,action?,needsAttempt,requiredGates}` without state changes. An unmatched route returns 409 with a routing-specific code.
+
+`activateWorkflowVersion` takes `{workflowKey,expectedRevision,projectId,expectedProjectVersion}`. It validates complete agent/human routing, publishes an immutable version if needed and updates only that project's selection for new tickets. Existing pins remain unchanged. Installation-wide future-project default selection is not shipped yet. `previewWorkflowMigration`/`migrateWorkflow` take `{sourceKey,targetKey,tickets:[{id,expectedVersion}],mapping:{sourcePhaseId:targetPhaseId}}`. Migration requires current Maintainer rights, stopped/unclaimed work, published same-family definitions and exact same-role mappings; the complete batch commits or fails together. No automatic queueing or acceptance occurs. Full agent continuation/migration guards depend on the later execution phase.
+
+New tickets use a unique Todo phase in their selected pin, or explicit `phaseId` when required. Human transitions accept exact target IDs (or a uniquely resolved semantic role), with optional explicit `outcome,context` for configured rules. Display titles never grant authority.
+
+## Installation aggregate
+
 Schema 1 stores a versioned installation aggregate transactionally in the selected SQL backend. A serialized server owns mutations and snapshots; PostgreSQL additionally locks the row. SQLite uses WAL and an exclusive OS installation lock; PostgreSQL uses a connection-held advisory lock. Unsupported schema versions refuse operation. The aggregate is an initial local implementation, not a claim of large-workspace performance. Clients do not import the store. This representation may migrate behind stable domain contracts as capacity evidence requires.

@@ -74,6 +74,31 @@ def main():
                     browser("wait", "--fn", "!document.querySelector('dialog')?.open")
                     assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["status"] == "Done"
                     browser("screenshot", "/tmp/teleport-smoke.png")
+                    draft = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "human@1", "projectId": project["id"], "title": "Flight workflow", "requestId": "smoke-flow"})))
+                    browser("select", "#project", str(project["id"]))
+                    browser("find", "role", "button", "click", "--name", "Settings", "--exact")
+                    browser("find", "role", "button", "click", "--name", "Workflow editor", "--exact")
+                    browser("wait", "#flow-select")
+                    browser("select", "#flow-select", draft["id"] + "@draft")
+                    browser("fill", '[data-phase="1"] [data-field="title"]', "In flight")
+                    browser("click", "#flow-save")
+                    browser("wait", "--fn", "document.querySelector('#flow-message')?.innerText.includes('Draft saved')")
+                    browser("select", "#preview-source", "Doing")
+                    browser("fill", "#preview-outcome", "return")
+                    browser("click", "#flow-preview")
+                    browser("wait", "--fn", "document.querySelector('#preview-result')?.innerText.includes('Todo')")
+                    browser("eval", "document.querySelector('#workflow-editor').scrollTop=0")
+                    browser("screenshot", "/tmp/teleport-workflow.png")
+                    browser("click", "#flow-activate")
+                    browser("click", '#editor button[type="submit"]')
+                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    new_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Fresh workflow pin", "agent": False, "requestId": "new-pin"})))
+                    assert new_ticket["workflow"] == draft["id"] + "@1"
+                    assert json.loads(tk("getTicket", "--data", json.dumps({"id": ticket["id"]})))["workflow"] == "human@1"
+                except Exception:
+                    print(browser("snapshot", "-i"))
+                    print(browser("errors"))
+                    raise
                 finally:
                     browser("close")
             tk("logout")

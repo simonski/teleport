@@ -39,6 +39,7 @@ type CreateProjectInput struct {
 	RequestID string `json:"requestId"`
 }
 type CreateTicketInput struct {
+	PhaseID     string `json:"phaseId,omitempty"`
 	ProjectID   int64  `json:"projectId"`
 	ParentID    int64  `json:"parentId,omitempty"`
 	Kind        string `json:"kind,omitempty"`
@@ -63,10 +64,12 @@ type UpdateTicketInput struct {
 	Progress        *int      `json:"progress,omitempty"`
 }
 type TransitionInput struct {
-	ID              int64  `json:"id"`
-	ExpectedVersion int64  `json:"expectedVersion"`
-	Target          string `json:"target"`
-	Confirm         bool   `json:"confirm,omitempty"`
+	Outcome         string            `json:"outcome,omitempty"`
+	Context         map[string]string `json:"context,omitempty"`
+	ID              int64             `json:"id"`
+	ExpectedVersion int64             `json:"expectedVersion"`
+	Target          string            `json:"target"`
+	Confirm         bool              `json:"confirm,omitempty"`
 }
 
 func collections(st *model.State) {
@@ -335,6 +338,15 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			agent = *in.Agent
 		}
 		t := newTicket(st, p, a, in.Kind, strings.TrimSpace(in.Title), agent, false)
+		initial, valid := phaseForRole(st.Workflows[t.Workflow], "Todo")
+		if in.PhaseID != "" {
+			initial, valid = phaseByID(st.Workflows[t.Workflow], in.PhaseID)
+			valid = valid && initial.Role == "Todo"
+		}
+		if !valid {
+			return nil, false, failure(409, "workflow_mapping", "Select an exact Todo phase for this workflow")
+		}
+		t.Phase = initial.ID
 		t.Description, t.Criteria = in.Description, in.Criteria
 		if in.Priority != "" {
 			t.Priority = in.Priority
@@ -512,36 +524,54 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		if t.Agent {
 			return nil, false, failure(409, "agent_gate", "Agent phases require scoped outcome and human acceptance actions")
 		}
-		if in.Target == t.Phase {
+		workflow := st.Workflows[t.Workflow]
+		target, found := phaseByID(workflow, in.Target)
+		if !found {
+			target, found = phaseForRole(workflow, in.Target)
+		}
+		if !found {
+			return nil, false, failure(409, "workflow_mapping", "Choose an exact valid destination phase")
+		}
+		if target.ID == t.Phase {
 			return t, false, nil
 		}
-		valid := false
-		for _, r := range st.Workflows[t.Workflow].Rules {
-			if r.Source == t.Phase && r.Target == in.Target {
-				valid = true
-				break
+		outcome := in.Outcome
+		if outcome == "" {
+			matches := 0
+			for _, r := range workflow.Rules {
+				if r.Source == t.Phase && r.Target == target.ID && len(r.Conditions) == 0 {
+					matches++
+					outcome = r.Outcome
+				}
+			}
+			if matches != 1 {
+				return nil, false, failure(409, "explicit_outcome_required", "Select the exact declared outcome for this destination")
 			}
 		}
-		if !valid {
+		route, routeErr := ResolveOutcome(workflow, t.Phase, outcome, in.Context)
+		if routeErr != nil {
+			return nil, false, routeErr
+		}
+		if route.Target != target.ID {
 			return nil, false, failure(409, "invalid_transition", "No declared workflow route to this phase")
 		}
-		if (in.Target == "Done" || in.Target == "Doing") && !dependenciesDone(st, t) {
+		if (target.Role == "Done" || target.Role == "Doing") && !dependenciesDone(st, t) {
 			return nil, false, failure(409, "unmet_prerequisite", "Every prerequisite must be Done")
 		}
-		if in.Target == "Done" {
+		if target.Role == "Done" {
 			if !in.Confirm {
 				return nil, false, failure(409, "agreement_required", "Explicitly confirm the current completion criteria")
 			}
 			t.Agreements = append(t.Agreements, model.Agreement{Kind: "Done", Actor: a.ID, At: time.Now().UTC(), Criteria: t.Criteria, BasisVersion: t.Version})
 			t.Progress = 100
-		} else if in.Target == "Doing" {
+		} else if target.Role == "Doing" {
 			if t.Progress == 0 || t.Progress == 100 {
 				t.Progress = 1
 			}
 		} else {
 			t.Progress = 0
 		}
-		t.Status, t.Phase = in.Target, in.Target
+		t.Status, t.Phase = target.Role, target.ID
 		saveTicket(st, &t, a, operation)
 		reconcile(st, t.ParentID, a)
 		reconcileDependencyStops(st, a)

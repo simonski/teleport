@@ -397,7 +397,7 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		}
 		return map[string]bool{"signedOut": true}, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return workflowOperations(st, a, operation, raw)
 }
 func containsID(ids []int64, id int64) bool {
 	for _, v := range ids {

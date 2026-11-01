@@ -111,7 +111,7 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	if operation == "login" {
 		return s.login(ctx, raw)
 	}
-	if operation == "getSession" || operation == "logout" || operation == "listWorkflows" {
+	if operation == "getSession" || operation == "logout" {
 		if err := parse(raw, &struct{}{}); err != nil {
 			return nil, err
 		}
@@ -131,9 +131,6 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			delete(st.Sessions, digest(token))
 			result = map[string]bool{"signedOut": true}
 			return true, nil
-		case "listWorkflows":
-			result = map[string]any{"items": []model.Workflow{st.Workflows["human@1"], st.Workflows["agent@1"]}, "nextCursor": ""}
-			return false, nil
 		default:
 			var changed bool
 			result, changed, err = projectOperations(st, a, operation, raw)

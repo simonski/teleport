@@ -34,9 +34,10 @@ type IDInput struct {
 	Limit  int    `json:"limit,omitempty"`
 }
 type CreateProjectInput struct {
-	Name      string `json:"name"`
-	Key       string `json:"key"`
-	RequestID string `json:"requestId"`
+	Description string `json:"description,omitempty"`
+	Name        string `json:"name"`
+	Key         string `json:"key"`
+	RequestID   string `json:"requestId"`
 }
 type CreateTicketInput struct {
 	PhaseID     string `json:"phaseId,omitempty"`
@@ -295,8 +296,8 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		if in.Key == "" {
 			in.Key = strings.ToLower(strings.ReplaceAll(in.Name, " ", "-"))
 		}
-		if len(in.Name) == 0 || len(in.Name) > 200 || !regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,79}$`).MatchString(in.Key) {
-			return nil, false, failure(422, "invalid_project", "Provide a name and a lowercase project key")
+		if len(in.Name) == 0 || len(in.Name) > 200 || len(in.Description) > 20000 || !regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,79}$`).MatchString(in.Key) {
+			return nil, false, failure(422, "invalid_project", "Provide a name within 200 bytes, lowercase project key and description within 20000 bytes")
 		}
 		key, fingerprint, previous, err := receipt(st, a, operation, in.RequestID, in)
 		if err != nil {
@@ -320,6 +321,7 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		}
 		st.NextProjectID++
 		p := model.Project{ID: st.NextProjectID, Version: 1, Key: in.Key, Name: in.Name, Creator: a.ID, Members: map[string]string{a.ID: "Maintainer"}, HumanWorkflow: "human@1", AgentWorkflow: "agent@1"}
+		p.Description = in.Description
 		goal := newTicket(st, p, a, "goal", "Unassigned", false, true)
 		epic := newTicket(st, p, a, "epic", "Unassigned", false, true)
 		epic.ParentID = goal.ID
@@ -329,6 +331,8 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		saveTicket(st, &epic, a, operation)
 		remember(st, key, fingerprint, p)
 		return p, true, nil
+	case "saveProject":
+		return saveProject(st, a, raw)
 	case "listProjects":
 		var in ListInput
 		if err := parse(raw, &in); err != nil {

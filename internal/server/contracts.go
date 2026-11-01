@@ -51,7 +51,7 @@ func schemaType(t reflect.Type) map[string]any {
 		return map[string]any{}
 	}
 	if t.Kind() == reflect.Pointer {
-		return schemaType(t.Elem())
+		return map[string]any{"anyOf": []any{schemaType(t.Elem()), map[string]any{"type": "null"}}}
 	}
 	if t == reflect.TypeFor[time.Time]() {
 		return map[string]any{"type": "string", "format": "date-time"}

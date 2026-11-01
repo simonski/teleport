@@ -151,6 +151,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		}
 		return s.login(ctx, raw)
 	}
+	if operation == "listProjectSummaries" {
+		return s.projectDirectory(ctx, token, raw)
+	}
 	if localOperation(operation) {
 		return s.localCall(ctx, token, operation, raw)
 	}

@@ -96,6 +96,8 @@ def main():
         def read():
             return base64.b64decode(tk("attachSession", {"id": session_id})["data"]).decode(errors="replace")
         wait_for(lambda: ("native fixture connected" if args.native_fixture else "terminal fixture") in read())
+        summary = next(item for item in tk("listProjectSummaries")["items"] if item["id"] == project["id"])
+        assert summary["agents"] == 1 and summary["agentsScope"] == "own-authorized" and summary["tokens"] is None
         if args.native_fixture:
             wait_for(lambda: tk("getSessionRequests", {"id": session_id})["items"])
             context_env = dict(environment, TELEPORT_CONFIG=str(folder / "runtime" / (session_id + ".client.json")))
@@ -160,6 +162,7 @@ def main():
         assert row["directory"] != str(repository.resolve()) and row["directory"].startswith(str((folder / "worktrees").resolve()))
         tk("stopSession", {"id": session_id, "confirm": True})
         wait_for(lambda: tk("listSessions")["items"][0]["state"] == "exited")
+        assert next(item for item in tk("listProjectSummaries")["items"] if item["id"] == project["id"])["agents"] == 0
         if args.native_fixture:
             expired = subprocess.run([str(ROOT / "bin/tk"), "listProjects"], env=context_env, capture_output=True, timeout=15)
             assert expired.returncode != 0, "Exited native context credential remained usable"

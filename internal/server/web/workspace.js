@@ -18,7 +18,7 @@ function homeView(){const visible=tickets.filter(t=>!t.protected);const upcoming
 function empty(title,description,id,label){return `<div class="empty"><div class="empty-symbol" aria-hidden="true">↗</div><h2>${title}</h2><p>${description}</p>${id?`<button id="${id}">${label}</button>`:''}</div>`;}
 function phaseTitle(t){return workflowMap[t.workflow]?.phases.find(p=>p.id===t.phase)?.title||(t.agent&&t.status==='Doing'?'Implementation':t.status);}
 function boardView(){const human=view==='Todos';const leaf=tickets.filter(t=>(t.kind==='task'||!human&&t.kind==='epic'&&t.planning)&&(human?!t.agent:lens==='both'||t.agent===(lens==='agent'))&&t.status!=='Cancelled');const keys=[...new Set(leaf.map(t=>t.workflow))];if(!human&&currentProject()){const defaults=lens==='both'?[currentProject().agentWorkflow,currentProject().humanWorkflow]:[lens==='human'?currentProject().humanWorkflow:currentProject().agentWorkflow];for(const key of defaults)if(!keys.includes(key))keys.push(key);}if(!keys.length)keys.push(lens==='human'?'human@1':'agent@1');function lanes(phases,items){return `<div class="board ${human?'human-board':''}">${phases.map(phase=>`<section class="lane"><header><h2>${escapeHTML(phase.title)}</h2><span class="lane-count">${items.filter(t=>human?t.status===phase.role:t.phase===phase.id).length}</span><span class="lane-line"></span></header><div class="lane-body">${items.filter(t=>human?t.status===phase.role:t.phase===phase.id).sort((a,b)=>Number(Boolean(b.attention))-Number(Boolean(a.attention))||a.id-b.id).map(card).join('')}</div></section>`).join('')}</div>`;}return `<div class="board-heading"><p class="eyebrow">${human?'HUMAN WORK':'WORKFLOW'} / ${escapeHTML(currentProject()?.name||'ALL PROJECTS')}</p>${!human?'<label class="compact">Intent <select id="lens">'+['agent','human','both'].map(value=>'<option value="'+value+'" '+(value===lens?'selected':'')+'>'+value[0].toUpperCase()+value.slice(1)+'</option>').join('')+'</select></label>':''}</div>`+(human?lanes(['Todo','Doing','Done'].map(role=>({id:role,title:role,role})),leaf):keys.map(key=>{const w=workflowMap[key];if(!w)return '';return `<div class="workflow-context">${escapeHTML(w.title)} / v${w.version} · ${w.family}</div>`+lanes(w.phases.filter(p=>p.role!=='Cancelled'),leaf.filter(t=>t.workflow===key));}).join(''));}
-function projectsView(){return `<div class="page-heading"><div><p class="eyebrow">WORKSPACE / DIRECTORY</p><h1>Projects<span>.</span></h1></div><button id="new-project">＋ New project</button></div><div class="project-grid">${projects.map(p=>`<button class="project-card" data-project="${p.id}"><span class="eyebrow">${escapeHTML(p.key)} / ${String(p.id).padStart(2,'0')}</span><h2>${escapeHTML(p.name)}</h2><div><span>${tickets.filter(t=>t.projectId===p.id&&!t.protected).length} tickets</span><span>Open workspace ↗</span></div></button>`).join('')||empty('No projects yet.','Create the first project.','first-project','Create project')}</div>`;}
+function projectsView(){return projectDirectoryHTML();}
 function navigateView(name){loadGeneration++;if(view!==name){calendarDirty=false;}detailEpoch++;view=name;render();root.querySelector(`#nav-views [data-view="${CSS.escape(name)}"]`)?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}
 function render(){
   const restoreFocus=captureShellFocus(),restoreBoardFocus=captureBoardFocus();
@@ -27,7 +27,6 @@ function render(){
   root.innerHTML=header()+`<main class="workspace ${view==='Board'||view==='Todos'?'board-workspace':''}">${content}</main><tk-dialog id="editor"></tk-dialog>`;
   root.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>navigateView(button.dataset.view));
   root.querySelectorAll('[data-ticket]').forEach(button=>button.onclick=()=>editTicket(Number(button.dataset.ticket)));
-  root.querySelectorAll('[data-project]').forEach(button=>button.onclick=()=>{projectId=Number(button.dataset.project);view='Board';workspace().catch(showError);});
   on('project','change',e=>{
     if(presentationBusy()||calendarBusy()||graphBusy()){e.target.value=String(projectId);notice('Save, apply or reload pending view changes before switching project.');return;}
     if(e.target.value==='new-project'){e.target.value=String(projectId);projectForm();return;}
@@ -36,7 +35,7 @@ function render(){
   on('home','click',()=>navigateView('Home'));on('new','click',()=>newTicketForm());
   for(const id of ['new-project','first-project'])on(id,'click',projectForm);
   for(const id of ['new-hierarchy','first-hierarchy'])on(id,'click',()=>newTicketForm(view==='Goals'?'goal':'epic'));
-  bindAccountMenu();bindIdeas();bindPresentation();bindShell();bindNavigation();
+  bindAccountMenu();bindIdeas();bindPresentation();bindShell();bindNavigation();bindProjectDirectory();
   restoreFocus();restoreBoardFocus();
   if(view==='Graph')mountGraph();if(view==='Calendar')mountCalendar();
   on('lens','change',e=>{lens=e.target.value;render();});

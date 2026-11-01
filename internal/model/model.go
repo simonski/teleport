@@ -99,6 +99,7 @@ type Project struct {
 	Version            int64              `json:"version"`
 	Key                string             `json:"key"`
 	Name               string             `json:"name"`
+	Description        string             `json:"description"`
 	Creator            string             `json:"creator"`
 	Members            map[string]string  `json:"members"`
 	UnassignedGoal     int64              `json:"unassignedGoal"`

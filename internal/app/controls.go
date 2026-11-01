@@ -40,7 +40,9 @@ type PasswordInput struct {
 	NewPassword     string `json:"newPassword"`
 }
 
-func busy(t model.Ticket) bool { return t.Active || t.Claim != "" || t.Execution != "" }
+func busy(t model.Ticket) bool {
+	return t.Active || t.Claim != "" || t.Execution != "" || t.Delivery != nil && t.Delivery.Operation != nil && t.Delivery.Operation.State != "complete"
+}
 func subtree(st *model.State, id int64) []int64 {
 	ids := []int64{id}
 	for i := 0; i < len(ids); i++ {
@@ -316,7 +318,7 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		ids := subtree(st, t.ID)
 		for _, id := range ids {
 			item := st.Tickets[id]
-			if item.Protected || busy(item) || hasContinuation(item) {
+			if item.Protected || busy(item) || hasContinuation(item) || item.Delivery != nil {
 				return nil, false, failure(409, "transfer_blocked", "Protected defaults or pending execution block the whole transfer")
 			}
 			if item.Assignee != "" && role(st, st.Accounts[item.Assignee], p.ID) == "" {

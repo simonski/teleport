@@ -78,13 +78,15 @@ func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
 }
 
 type Service struct {
+	controllerID string
+	gitMu        sync.Mutex
 	db           *store.Store
 	mu           sync.Mutex
 	failures     int
 	blockedUntil time.Time
 }
 
-func New(db *store.Store) *Service { return &Service{db: db} }
+func New(db *store.Store) *Service { return &Service{db: db, controllerID: randomID()} }
 
 type LoginResult struct {
 	Token   string        `json:"token"`
@@ -110,6 +112,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	}
 	if operation == "login" {
 		return s.login(ctx, raw)
+	}
+	if operation == "configureLocalRepository" || operation == "prepareTaskWorktree" || operation == "recordTaskDelivery" || operation == "approveTicket" || operation == "reconcileGitOperation" {
+		return s.gitCall(ctx, token, operation, raw)
 	}
 	if operation == "getSession" || operation == "logout" {
 		if err := parse(raw, &struct{}{}); err != nil {

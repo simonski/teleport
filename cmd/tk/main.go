@@ -178,9 +178,12 @@ func run(args []string) error {
 		return fmt.Errorf("server unavailable; run tk serve (no database fallback): %w", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (4<<20)+1))
 	if err != nil {
 		return err
+	}
+	if len(body) > 4<<20 {
+		return errors.New("response exceeds 4 MiB; reduce the page limit and retry")
 	}
 	if resp.StatusCode >= 400 {
 		var result struct {

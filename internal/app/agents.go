@@ -77,6 +77,17 @@ func scopeBasis(t model.Ticket) string {
 func hasContinuation(t model.Ticket) bool {
 	return !t.ResumeHold && (t.ResumeAttempt != "" || t.Question != nil && !t.Question.Resolved && !t.Question.Obsolete)
 }
+func executionBasis(st *model.State, t model.Ticket) string {
+	basis := scopeBasis(t)
+	if repository := st.Projects[t.ProjectID].Repository; repository != nil {
+		encoded, _ := json.Marshal(struct {
+			TaskBasis         string
+			RepositoryVersion int64
+		}{basis, repository.Version})
+		return digest(string(encoded))
+	}
+	return basis
+}
 func enterPhase(t *model.Ticket, w model.Workflow, target string) error {
 	p, ok := phaseByID(w, target)
 	if !ok {
@@ -100,10 +111,20 @@ func applyRoute(t *model.Ticket, w model.Workflow, outcome string, context map[s
 	}
 	return route, err
 }
-func acceptedScope(t model.Ticket) bool {
-	return t.Refinement != nil && t.Refinement.AcceptedBy != "" && t.Refinement.Basis == scopeBasis(t)
+func acceptedScope(st *model.State, t model.Ticket) bool {
+	if t.Refinement == nil || t.Refinement.AcceptedBy == "" {
+		return false
+	}
+	basis := t.Refinement.AcceptedBasis
+	if basis == "" {
+		basis = t.Refinement.Basis
+	}
+	return basis == executionBasis(st, t)
 }
 func demoAdmission(st *model.State, t model.Ticket, p model.Phase) error {
+	if t.Delivery != nil {
+		return failure(409, "real_delivery", "Real retained work cannot be executed by the demo adapter")
+	}
 	if t.RoutingHold != "" {
 		return failure(409, "routing_hold", "A declared workflow wait/halt requires its explicit continuation")
 	}
@@ -124,7 +145,7 @@ func demoAdmission(st *model.State, t model.Ticket, p model.Phase) error {
 	if !dependenciesDone(st, t) {
 		return failure(409, "unmet_prerequisite", "Every prerequisite must be Done")
 	}
-	if contains([]string{"Doing", "Rebase", "Review", "Decompose"}, p.Role) && !acceptedScope(t) {
+	if contains([]string{"Doing", "Rebase", "Review", "Decompose"}, p.Role) && !acceptedScope(st, t) {
 		return failure(409, "scope_stale", "Current human-accepted scope is required")
 	}
 	capacity := 1
@@ -238,7 +259,7 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 	attempt := t.ResumeAttempt
 	continues := attempt != ""
 	if continues {
-		if t.Question == nil || t.Question.Basis != scopeBasis(t) || t.Question.Workflow != t.Workflow || t.Question.OriginPhase != t.Phase {
+		if t.Question == nil || t.Question.Basis != executionBasis(st, t) || t.Question.Workflow != t.Workflow || t.Question.OriginPhase != t.Phase {
 			return DemoStageResult{}, false, failure(409, "continuation_stale", "Continuation basis changed; explicit replanning is required")
 		}
 	} else {
@@ -257,7 +278,7 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 	serviceActor := model.Account{ID: "demo:" + attempt}
 	source := t.Phase
 	if outcome == "question" {
-		t.Question = &model.Question{ID: randomID(), Text: in.Question, OriginPhase: source, OriginAttempt: attempt, Workflow: t.Workflow, Basis: scopeBasis(t), AskedAt: now, OriginWaitingSince: t.PhaseEnteredAt}
+		t.Question = &model.Question{ID: randomID(), Text: in.Question, OriginPhase: source, OriginAttempt: attempt, Workflow: t.Workflow, Basis: executionBasis(st, t), AskedAt: now, OriginWaitingSince: t.PhaseEnteredAt}
 		route, err := applyRoute(&t, w, outcome, nil)
 		if err != nil {
 			return DemoStageResult{}, false, err
@@ -272,7 +293,7 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 			if strings.TrimSpace(criteria) == "" {
 				criteria = "Deliver the requested work with recorded checks."
 			}
-			t.Refinement = &model.Refinement{ID: randomID(), Text: "Demo proposal: " + t.Title, Criteria: criteria, Basis: scopeBasis(t), Simulated: true}
+			t.Refinement = &model.Refinement{ID: randomID(), Text: "Demo proposal: " + t.Title, Criteria: criteria, Basis: executionBasis(st, t), Simulated: true}
 			t.Attention = "Scope acceptance required"
 		}
 		if phase.Role == "Review" {
@@ -437,7 +458,7 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		if err = expected(t, in.ExpectedVersion); err != nil {
 			return nil, false, err
 		}
-		if t.Status != "Refine" || busy(t) || t.Question != nil && !t.Question.Resolved && !t.Question.Obsolete || t.Refinement == nil || t.Refinement.ID != in.ProposalID || t.Refinement.Basis != scopeBasis(t) {
+		if t.Status != "Refine" || busy(t) || t.Question != nil && !t.Question.Resolved && !t.Question.Obsolete || t.Refinement == nil || t.Refinement.ID != in.ProposalID || t.Refinement.Basis != executionBasis(st, t) {
 			return nil, false, failure(409, "scope_stale", "Accept the exact current unblocked refinement proposal")
 		}
 		previousParent := t.ParentID
@@ -465,9 +486,14 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		}
 		t.Refinement.AcceptedBy = a.ID
 		t.Refinement.AcceptedAt = time.Now().UTC()
-		t.Refinement.Basis = scopeBasis(t)
+		t.Refinement.AcceptedBasis = executionBasis(st, t)
 		t.Attention = ""
-		t.Agreements = append(t.Agreements, model.Agreement{Kind: "Ready", Actor: a.ID, At: time.Now().UTC(), Criteria: t.Refinement.Criteria, BasisVersion: t.Version})
+		agreement := completionBasis(st, t, a, t.Refinement.Criteria, t.Version)
+		agreement.Kind = "Ready"
+		if in.Decompose {
+			agreement.Kind = "Plan"
+		}
+		t.Agreements = append(t.Agreements, agreement)
 		saveTicket(st, &t, a, operation)
 		if previousParent != t.ParentID {
 			reconcile(st, previousParent, a)
@@ -499,7 +525,7 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 			}
 			target = route.Target
 		}
-		if t.Workflow != q.Workflow || scopeBasis(t) != q.Basis {
+		if t.Workflow != q.Workflow || executionBasis(st, t) != q.Basis {
 			t.Attention = "Answer saved; continuation basis changed"
 		} else {
 			if err = enterPhase(&t, st.Workflows[t.Workflow], target); err != nil {
@@ -553,7 +579,7 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		if in.RevisionKind == "scope" {
 			t.Refinement = nil
 			t.ResumeHold = true
-		} else if !acceptedScope(t) {
+		} else if !acceptedScope(st, t) {
 			return nil, false, failure(409, "scope_stale", "Readiness must be re-agreed before implementation revision")
 		}
 		t.Attention = "Human feedback: " + in.Feedback
@@ -672,5 +698,5 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		st.Projects[p.ID] = p
 		return p, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return agreementOperations(st, a, operation, raw)
 }

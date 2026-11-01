@@ -33,8 +33,6 @@ Public discovery: `GET /healthz`, `/openapi.json`, `/api/actions`, `/skill.md`; 
 
 The generated OpenAPI contains complete concrete project/ticket/history and operation schemas. UI and CLI call the same tool routes. Alias names such as `createProject` and `listTicketHistory` map to the corresponding canonical specification actions.
 
-## Persistence representation
-
 ## Work controls
 
 `setDependencies` takes `{id,expectedVersion,dependencies:integer[]}` on unclaimed Todo tasks/epics, up to 200 direct IDs. New references must be unique same-project non-cancelled tasks/epics. Existing cancelled prerequisites remain blockers. Validate effective inherited prerequisites plus hierarchy-completion edges as one acyclic dependency graph; workflow cycles remain valid and separate. Human Doing/Done requires completed prerequisites.
@@ -44,8 +42,6 @@ The generated OpenAPI contains complete concrete project/ticket/history and oper
 `setTicketVisibility` takes `{id,expectedVersion,archived?,deleted?}` and requires Maintainer. Change only the selected record, preserve children and reject protected defaults or pending execution. Restore retains status and adds an agent resume hold. `transferTicket` takes `{id,expectedVersion,destinationProjectId,parentId?}` and requires current Maintainer authority in both projects, or installation administrator. Move the complete subtree including hidden descendants atomically, preserving IDs/history/pins; reject protected/busy records, incompatible assignees, invalid parents or resulting cross-project prerequisites. Omitted parents use destination defaults. `moveTicket` takes `{id,expectedVersion,parentId}` for same-project valid reparenting with Contributor rights.
 
 `changePassword` takes `{currentPassword,newPassword}`, verifies the current password, requires 12–1,024 new-password bytes and revokes all account sign-in sessions atomically. It returns `{signedOut:true}` and requires a fresh sign-in. The combined visibility and container-cancellation routes compose their corresponding permanent action variants; API discovery names the primary action.
-
-## Storage
 
 ## Workflow definitions
 
@@ -59,8 +55,6 @@ Rules match source/outcome and exact string conditions on `reason,revisionKind,q
 
 New tickets use a unique Todo phase in their selected pin, or explicit `phaseId` when required. Human transitions accept exact target IDs (or a uniquely resolved semantic role), with optional explicit `outcome,context` for configured rules. Display titles never grant authority.
 
-## Installation aggregate
-
 ## Deterministic demo execution
 
 `setExecutionMode` accepts `{mode:"off"|"demo",expectedVersion}` using `getSession.settings.version`; administrator only. Saved mode is honored at server startup. Demo mode executes deterministic in-process outcomes every 500 ms, with zero model calls, OS-process claims or source writes. It is distinct from real Codex execution. Shared per-project pools default to one Refine/Doing worker; `setLaneCapacity` accepts `{projectId,expectedVersion,refineWorkers,doingWorkers}` in 0–20. `setHandbrake` accepts `{projectId?,expectedVersion,workflowKey?,phaseId?,engaged}` for administrator system or Maintainer project/stable-phase controls. Its result is the changed Settings or Project object.
@@ -73,7 +67,19 @@ Declared `wait`/`halt` actions persist `routingHold` and prevent automatic retri
 
 `setExecutionBudget` accepts `{id,expectedVersion,limit,resume?}` from a Maintainer, 1–1,000 total attempts, preserving consumption. An unbudgeted next attempt records a visible block and resume hold; the last admitted attempt may complete. `pauseTicket`/`resumeTicket` take `{id,expectedVersion}` and retain independent guards. Pending unsuspended question continuations block migration/transfer/visibility changes until separately paused.
 
-Demo Implementation/Review results contain no real commit/check evidence. Review is read-only and separately recorded; `approveTicket` currently rejects with `delivery_evidence_required` even for a Maintainer. `rejectTicket` accepts `{id,expectedVersion,revisionKind:"implementation"|"scope",feedback?,confirm?}` and uses the declared Ready/Todo revision path without implicit acceptance or reset. Real code approval remains dependent on verified Git delivery and a real candidate-bound review.
+Demo Implementation/Review results contain no real commit/check evidence. Review is read-only and separately recorded; simulated evidence cannot satisfy `approveTicket`. `rejectTicket` accepts `{id,expectedVersion,revisionKind:"implementation"|"scope",feedback?,confirm?}` and uses the declared Ready/Todo revision path without implicit acceptance or reset.
+
+## Local Git delivery
+
+`configureLocalRepository` accepts `{projectId,expectedVersion,repository,storageRoot}` from an installation administrator. Both paths are absolute; the repository must have a committed `main` checkout and storage must be outside it. Rebinding retained execution/artifacts is refused. These host operations remain single-account only until isolation is verified; demo execution must be off.
+
+`prepareTaskWorktree` accepts `{id,expectedVersion,requestId}` on an eligible Ready agent task. It requires current accepted scope, completed prerequisites, finite attempts and applicable capacity/handbrakes. An ownership manifest identifies a retained task branch and worktree; existing unowned paths are never reused. `recordTaskDelivery` accepts the same fields plus optional `reportedChecks` and captures the actual clean, committed, linear candidate against its pinned base. Controller checks currently mean Git whitespace validation only. Operator-reported check text remains separately labelled. No harness execution or real Review is invented.
+
+`approveTicket` takes `{id,expectedVersion,confirm:true}` from a Maintainer/administrator at human Approval. It checks exact scope, binding, prerequisites, candidate/check fingerprint and every configured Review gate, then fast-forwards clean `main` with hooks/filters disabled and ignored-file overwrite protection. Done records the actual integrated candidate and immutable agreement basis. The seeded workflow still requires a real successful candidate-bound Review; a deliberately published workflow may omit Review while retaining human Approval. Stale main, dirty worktrees and conflicts preserve retained work and refuse integration. Automatic Rebase and cleanup are not shipped.
+
+Git calls reserve durable intent, run commands outside SQL write transactions, record controller-owned exit facts and revalidate before finalization. Matching request receipts fence retries. `reconcileGitOperation` accepts `{id,expectedVersion}` from a Maintainer to inspect retained facts after a durably verified command exit. It preserves status and stop intent; unknown exit blocks replacement. A directory or branch never proves a process has exited. Full crash recovery is not claimed.
+
+`getTicketAgreements` accepts `{id}` and returns current/saved scope hashes, staleness and criteria. Repository-binding changes invalidate readiness. `markReady` accepts `{id,expectedVersion,basis,confirm:true}` to explicitly re-agree previously accepted stopped Ready work against its exact current basis. `rejectRefinement` accepts `{id,expectedVersion,reason?}` and follows the declared failure route without changing original content. Completion revisions freeze project/workflow, prerequisite versions, container child versions where derived, and actual commit/base where present. Correlated ticket revisions carry the originating installation transaction revision.
 
 ## Storage envelope
 

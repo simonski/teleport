@@ -71,30 +71,40 @@ type State struct {
 }
 
 type Project struct {
-	RefineWorkers      int               `json:"refineWorkers"`
-	DoingWorkers       int               `json:"doingWorkers"`
-	CapacityConfigured bool              `json:"capacityConfigured"`
-	LaneLocks          map[string]bool   `json:"laneLocks,omitempty"`
-	ID                 int64             `json:"id"`
-	Version            int64             `json:"version"`
-	Key                string            `json:"key"`
-	Name               string            `json:"name"`
-	Creator            string            `json:"creator"`
-	Members            map[string]string `json:"members"`
-	UnassignedGoal     int64             `json:"unassignedGoal"`
-	UnassignedEpic     int64             `json:"unassignedEpic"`
-	HumanWorkflow      string            `json:"humanWorkflow"`
-	AgentWorkflow      string            `json:"agentWorkflow"`
-	Handbrake          bool              `json:"handbrake"`
+	Repository         *RepositoryBinding `json:"repository,omitempty"`
+	RefineWorkers      int                `json:"refineWorkers"`
+	DoingWorkers       int                `json:"doingWorkers"`
+	CapacityConfigured bool               `json:"capacityConfigured"`
+	LaneLocks          map[string]bool    `json:"laneLocks,omitempty"`
+	ID                 int64              `json:"id"`
+	Version            int64              `json:"version"`
+	Key                string             `json:"key"`
+	Name               string             `json:"name"`
+	Creator            string             `json:"creator"`
+	Members            map[string]string  `json:"members"`
+	UnassignedGoal     int64              `json:"unassignedGoal"`
+	UnassignedEpic     int64              `json:"unassignedEpic"`
+	HumanWorkflow      string             `json:"humanWorkflow"`
+	AgentWorkflow      string             `json:"agentWorkflow"`
+	Handbrake          bool               `json:"handbrake"`
 }
 type Agreement struct {
-	Kind         string    `json:"kind"`
-	Actor        string    `json:"actor"`
-	At           time.Time `json:"at"`
-	Criteria     string    `json:"criteria"`
-	BasisVersion int64     `json:"basisVersion"`
+	RecordVersion        int64           `json:"recordVersion"`
+	ProjectID            int64           `json:"projectId"`
+	Workflow             string          `json:"workflow"`
+	PrerequisiteVersions map[int64]int64 `json:"prerequisiteVersions,omitempty"`
+	ChildVersions        map[int64]int64 `json:"childVersions,omitempty"`
+	Commit               string          `json:"commit,omitempty"`
+	Base                 string          `json:"base,omitempty"`
+	Basis                string          `json:"basis,omitempty"`
+	Kind                 string          `json:"kind"`
+	Actor                string          `json:"actor"`
+	At                   time.Time       `json:"at"`
+	Criteria             string          `json:"criteria"`
+	BasisVersion         int64           `json:"basisVersion"`
 }
 type Ticket struct {
+	Delivery           *Delivery    `json:"delivery,omitempty"`
 	RoutingHold        string       `json:"routingHold,omitempty"`
 	PhaseEnteredAt     time.Time    `json:"phaseEnteredAt"`
 	AttemptLimit       int          `json:"attemptLimit"`
@@ -143,20 +153,22 @@ type Ticket struct {
 	UpdatedAt          time.Time    `json:"updatedAt"`
 }
 type Revision struct {
-	Version  int64     `json:"version"`
-	Actor    string    `json:"actor"`
-	Action   string    `json:"action"`
-	At       time.Time `json:"at"`
-	Snapshot Ticket    `json:"snapshot"`
+	TransactionID int64     `json:"transactionId"`
+	Version       int64     `json:"version"`
+	Actor         string    `json:"actor"`
+	Action        string    `json:"action"`
+	At            time.Time `json:"at"`
+	Snapshot      Ticket    `json:"snapshot"`
 }
 type Refinement struct {
-	ID         string    `json:"id"`
-	Text       string    `json:"text"`
-	Criteria   string    `json:"criteria"`
-	Basis      string    `json:"basis"`
-	AcceptedBy string    `json:"acceptedBy,omitempty"`
-	AcceptedAt time.Time `json:"acceptedAt,omitempty"`
-	Simulated  bool      `json:"simulated"`
+	AcceptedBasis string    `json:"acceptedBasis,omitempty"`
+	ID            string    `json:"id"`
+	Text          string    `json:"text"`
+	Criteria      string    `json:"criteria"`
+	Basis         string    `json:"basis"`
+	AcceptedBy    string    `json:"acceptedBy,omitempty"`
+	AcceptedAt    time.Time `json:"acceptedAt,omitempty"`
+	Simulated     bool      `json:"simulated"`
 }
 type Question struct {
 	OriginWaitingSince time.Time `json:"originWaitingSince"`
@@ -173,6 +185,7 @@ type Question struct {
 	AnsweredAt         time.Time `json:"answeredAt,omitempty"`
 }
 type AgentReview struct {
+	Basis     string    `json:"basis,omitempty"`
 	ID        string    `json:"id"`
 	Outcome   string    `json:"outcome"`
 	Findings  string    `json:"findings"`
@@ -188,6 +201,47 @@ type StageEvent struct {
 	At        time.Time `json:"at"`
 	Continues bool      `json:"continues"`
 	Simulated bool      `json:"simulated"`
+}
+type RepositoryBinding struct {
+	Repository  string `json:"repository"`
+	StorageRoot string `json:"storageRoot"`
+	Version     int64  `json:"version"`
+}
+type Worktree struct {
+	Owner    string `json:"owner"`
+	TicketID int64  `json:"ticketId"`
+	Path     string `json:"path"`
+	Branch   string `json:"branch"`
+	Base     string `json:"base"`
+}
+type GitCandidate struct {
+	Base         string `json:"base"`
+	Commit       string `json:"commit"`
+	Diff         string `json:"diff"`
+	ChecksPassed bool   `json:"checksPassed"`
+	CheckOutput  string `json:"checkOutput"`
+	Fingerprint  string `json:"fingerprint"`
+}
+type GitOperation struct {
+	BasisVersion  int64  `json:"basisVersion"`
+	ControllerID  string `json:"controllerId"`
+	CommandExited bool   `json:"commandExited"`
+	ID            string `json:"id"`
+	Kind          string `json:"kind"`
+	RequestID     string `json:"requestId"`
+	Fingerprint   string `json:"fingerprint"`
+	Actor         string `json:"actor"`
+	State         string `json:"state"`
+}
+type Delivery struct {
+	Worktree       Worktree      `json:"worktree"`
+	Candidate      *GitCandidate `json:"candidate,omitempty"`
+	Operation      *GitOperation `json:"operation,omitempty"`
+	BindingVersion int64         `json:"bindingVersion"`
+	ScopeBasis     string        `json:"scopeBasis"`
+	SourcePhase    string        `json:"sourcePhase"`
+	ReportedChecks string        `json:"reportedChecks,omitempty"`
+	Source         string        `json:"source"`
 }
 type Receipt struct {
 	Fingerprint string `json:"fingerprint"`

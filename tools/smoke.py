@@ -121,6 +121,60 @@ def main():
                     tk("approveTicket", "--data", json.dumps({"id": candidate["id"], "expectedVersion": candidate["version"], "confirm": True}), success=False)
                     configuration = json.loads(tk("getSession"))["settings"]
                     tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
+                    repository = folder / "repository"
+                    repository.mkdir()
+                    git_environment = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="Smoke", GIT_AUTHOR_EMAIL="smoke@localhost", GIT_COMMITTER_NAME="Smoke", GIT_COMMITTER_EMAIL="smoke@localhost")
+                    def git(path, *arguments):
+                        subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}", "-c", "commit.gpgsign=false", "-C", str(path), *arguments], env=git_environment, check=True, capture_output=True, timeout=30)
+                    git(repository, "init", "-b", "main")
+                    (repository / "README.md").write_text("Original fixture\n")
+                    git(repository, "add", ".")
+                    git(repository, "commit", "-m", "Initial")
+                    project = next(item for item in json.loads(tk("listProjects"))["items"] if item["id"] == project["id"])
+                    external = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "agent@1", "projectId": project["id"], "title": "Explicit external delivery", "requestId": "external-flow"})))
+                    external["phases"] = [phase for phase in external["phases"] if phase["role"] != "Review"]
+                    external["rules"] = [rule for rule in external["rules"] if rule["source"] != "Review"]
+                    for rule in external["rules"]:
+                        if rule.get("target") == "Review":
+                            rule["target"] = "Approval"
+                    external = json.loads(tk("saveWorkflow", "--data", json.dumps({"definition": external, "expectedRevision": external["draftRevision"]})))
+                    project = json.loads(tk("activateWorkflowVersion", "--data", json.dumps({"workflowKey": external["id"] + "@draft", "expectedRevision": external["draftRevision"], "projectId": project["id"], "expectedProjectVersion": project["version"]})))
+                    project = json.loads(tk("configureLocalRepository", "--data", json.dumps({"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})))
+                    real = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Real external fixture", "requestId": "real-ticket"})))
+                    configuration = json.loads(tk("getSession"))["settings"]
+                    tk("setExecutionMode", "--data", json.dumps({"mode": "demo", "expectedVersion": configuration["version"]}))
+                    tk("requestRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": real["version"]}))
+                    agent_ticket = real
+                    refined = wait_ticket(lambda current: current.get("refinement") is not None)
+                    configuration = json.loads(tk("getSession"))["settings"]
+                    tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
+                    tk("acceptRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": refined["version"], "proposalId": refined["refinement"]["id"]}))
+                    browser("wait", "--fn", "document.body.innerText.includes('Real external fixture')")
+                    browser("find", "role", "button", "click", "--name", "Real external fixture")
+                    browser("wait", '[data-delivery="prepare"]')
+                    browser("click", '[data-delivery="prepare"]')
+                    browser("find", "role", "button", "click", "--name", "Prepare worktree", "--exact")
+                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    prepared = wait_ticket(lambda current: current.get("delivery", {}).get("worktree", {}).get("path"))
+                    worktree = Path(prepared["delivery"]["worktree"]["path"])
+                    (worktree / "README.md").write_text("Delivered fixture\n")
+                    git(worktree, "add", ".")
+                    git(worktree, "commit", "-m", "Deliver external fixture")
+                    browser("find", "role", "button", "click", "--name", "Real external fixture")
+                    browser("wait", '[data-delivery="report"]')
+                    browser("click", '[data-delivery="report"]')
+                    browser("find", "role", "button", "click", "--name", "Capture candidate", "--exact")
+                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    browser("find", "role", "button", "click", "--name", "Real external fixture")
+                    browser("wait", '[data-delivery="approve"]')
+                    browser("click", '[data-delivery="approve"]')
+                    browser("find", "label", "Approve this exact code and completion basis", "check")
+                    browser("find", "role", "button", "click", "--name", "Approve and fast-forward main", "--exact")
+                    browser("wait", "--fn", "!document.querySelector('dialog[open]')")
+                    done = wait_ticket(lambda current: current["status"] == "Done")
+                    assert done.get("agentReview") is None
+                    assert (repository / "README.md").read_text() == "Delivered fixture\n"
+                    browser("screenshot", "/tmp/teleport-delivery.png")
                 except Exception:
                     print(browser("snapshot", "-i"))
                     print(browser("errors"))

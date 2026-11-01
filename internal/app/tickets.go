@@ -130,7 +130,7 @@ func saveTicket(st *model.State, t *model.Ticket, a model.Account, action string
 		t.PhaseEnteredAt = t.CreatedAt
 	}
 	st.Tickets[t.ID] = *t
-	st.History[t.ID] = append(st.History[t.ID], model.Revision{Version: t.Version, Actor: a.ID, Action: action, At: t.UpdatedAt, Snapshot: *t})
+	st.History[t.ID] = append(st.History[t.ID], model.Revision{Version: t.Version, Actor: a.ID, Action: action, At: t.UpdatedAt, Snapshot: *t, TransactionID: st.Revision + 1})
 }
 func allocate(st *model.State) int64 { st.NextTicketID++; return st.NextTicketID }
 func newTicket(st *model.State, p model.Project, a model.Account, kind, title string, agent, protected bool) model.Ticket {
@@ -260,6 +260,17 @@ func reconcile(st *model.State, parent int64, a model.Account) {
 			phaseID = phase.ID
 		}
 		if p.Progress != progress || p.Status != status {
+			if status == "Done" && p.Status != "Done" {
+				agreement := completionBasis(st, p, model.Account{ID: "server:derived"}, p.Criteria, p.Version)
+				agreement.Kind = "DerivedDone"
+				agreement.ChildVersions = map[int64]int64{}
+				for _, child := range st.Tickets {
+					if child.ParentID == p.ID && !child.Deleted {
+						agreement.ChildVersions[child.ID] = child.Version
+					}
+				}
+				p.Agreements = append(p.Agreements, agreement)
+			}
 			p.Progress, p.Status, p.Phase = progress, status, phaseID
 			saveTicket(st, &p, a, "reconcileHierarchy")
 		}
@@ -476,6 +487,9 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		if err = expected(t, in.ExpectedVersion); err != nil {
 			return nil, false, err
 		}
+		if busy(t) {
+			return nil, false, failure(409, "execution_busy", "Wait for the reserved operation before editing this ticket")
+		}
 		old := t
 		for _, field := range []struct {
 			input   *string
@@ -578,7 +592,7 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			if !in.Confirm {
 				return nil, false, failure(409, "agreement_required", "Explicitly confirm the current completion criteria")
 			}
-			t.Agreements = append(t.Agreements, model.Agreement{Kind: "Done", Actor: a.ID, At: time.Now().UTC(), Criteria: t.Criteria, BasisVersion: t.Version})
+			t.Agreements = append(t.Agreements, completionBasis(st, t, a, t.Criteria, t.Version))
 			t.Progress = 100
 		} else if target.Role == "Doing" {
 			if t.Progress == 0 || t.Progress == 100 {

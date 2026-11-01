@@ -1,13 +1,13 @@
 {
-  "integrity": "sha512-o+qycAMZrh+TsE01GqWUxUIKR1AL0S8pq7zDkYOQw8GqfX8b8VoCKYUoHbhiX5j+7hr8XsuHDVU6+gkQJQKg9w==",
+  "integrity": "sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA==",
   "package": "three",
   "patch": "OrbitControls imports the bundled relative module",
   "sha256": {
-    "LICENSE": "bfe119ea4fd413f5f7ca3fcd63adb0c4a073ed39daa2fe7d3e6b769e21272601",
-    "OrbitControls.js": "6c860c6b342200f8aef65493319c12bfb2d652107355b1d25eb2154371128391",
-    "three.core.min.js": "61ba0df005b05991361d040d8ff670e1aadfd0ce7aeebd1fdb0725957a8957de",
-    "three.module.min.js": "e2b5ee6bccd38fd6d8a2428546b83c5f2426d84b152ef82be8055556e3b40eb6"
+    "LICENSE": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc",
+    "OrbitControls.js": "a747d56dd959510407777f1800792b2b52c0a435980fd6e40caf303d8a674b9e",
+    "three.core.js": "613e370f76638fdef83926642bf256dc9615684922de1ce1f63a8583e5d78578",
+    "three.module.js": "104f56145899722094556490d787aae0617cc2fc3382f31df02d724ea1aee341"
   },
-  "source": "https://registry.npmjs.org/three/-/three-0.180.0.tgz",
-  "version": "0.180.0"
+  "source": "https://registry.npmjs.org/three/-/three-0.187.0.tgz",
+  "version": "0.187.0"
 }

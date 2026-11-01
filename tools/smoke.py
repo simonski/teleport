@@ -13,6 +13,7 @@ from ticket_browser import verify_ticket_keyboard
 from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
+from graph_browser import verify_graph
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,9 +24,10 @@ def main():
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
+    parser.add_argument("--graph-only", action="store_true", help="Verify the bundled graph renderer, persistence and fallback; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.shell_only or args.navigation_only or args.tickets_only or args.projects_only) and not args.browser:
+    if (args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
         folder = Path(temporary)
@@ -89,7 +91,8 @@ def main():
                     browser("open", endpoint)
                     browser("wait", "--fn", "document.querySelector('#build-version')?.textContent===document.querySelector('meta[name=teleport-build-version]')?.content")
                     assert json.loads(browser("eval", "document.querySelector('#build-version').textContent")) == server_version
-                    verify_landing(browser)
+                    if not args.graph_only:
+                        verify_landing(browser)
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
@@ -97,6 +100,9 @@ def main():
                     browser("screenshot", "/tmp/teleport-welcome.png")
                     browser("press", "Escape")
                     assert not json.loads(tk("getWelcomeSetup"))["setup"]["completed"]
+                    if args.graph_only:
+                        verify_graph(browser, tk, project["id"], ticket)
+                        return
                     browser("click", "#account")
                     browser("click", "#account-welcome")
                     browser("click", '#editor button[type="submit"]')

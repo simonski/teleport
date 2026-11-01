@@ -1,4 +1,4 @@
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 
 // Renderer state belongs to this viewer. Only explicit coordinate saves call the API.

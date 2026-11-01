@@ -11,8 +11,8 @@ from vendor_web import download
 
 DESTINATION = Path(__file__).resolve().parents[1] / "internal/server/web/vendor/terminal"
 PACKAGES = (
-    ("@xterm/xterm", "5.5.0", {"package/lib/xterm.js": "xterm.js", "package/css/xterm.css": "xterm.css", "package/LICENSE": "xterm-LICENSE"}),
-    ("@xterm/addon-fit", "0.10.0", {"package/lib/addon-fit.js": "addon-fit.js", "package/LICENSE": "addon-fit-LICENSE"}),
+    ("@xterm/xterm", "6.0.0", {"package/lib/xterm.js": "xterm.js", "package/css/xterm.css": "xterm.css", "package/LICENSE": "xterm-LICENSE"}),
+    ("@xterm/addon-fit", "0.11.0", {"package/lib/addon-fit.js": "addon-fit.js", "package/LICENSE": "addon-fit-LICENSE"}),
 )
 
 
@@ -21,7 +21,7 @@ def verify():
     assert [(p["name"], p["version"]) for p in lock["packages"]] == [(p[0], p[1]) for p in PACKAGES]
     for name, expected in lock["sha256"].items():
         assert hashlib.sha256((DESTINATION / name).read_bytes()).hexdigest() == expected, name
-    print("PASS: bundled xterm.js 5.5.0 and fit 0.10.0 hashes")
+    print("PASS: bundled " + ", ".join(f"{name} {version}" for name, version, _ in PACKAGES) + " hashes")
 
 
 def main():

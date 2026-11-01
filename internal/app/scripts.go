@@ -343,8 +343,8 @@ func (s *Service) scriptCall(ctx context.Context, token, operation string, raw j
 }
 
 func (s *Service) startScript(ctx context.Context, token string, a model.Account, in StartScriptInput) (any, error) {
-	if len(in.Source) == 0 || len(in.Source) > scriptruntime.SourceLimit || strings.ContainsRune(in.Source, 0) || len(in.RequestID) < 1 || len(in.RequestID) > 100 || in.Mode != "script" && in.Mode != "expression" {
-		return nil, failure(422, "invalid_script", "Provide bounded source, script/expression mode and a stable request ID")
+	if len(in.Source) == 0 || len(in.Source) > scriptruntime.SourceLimit || strings.ContainsRune(in.Source, 0) || len(in.RequestID) < 1 || len(in.RequestID) > 100 || in.Mode != "script" && in.Mode != "expression" && in.Mode != "console" {
+		return nil, failure(422, "invalid_script", "Provide bounded source, script/expression/console mode and a stable request ID")
 	}
 	if s.localClient == nil || s.localEndpoint == "" || !localruntime.Supported() {
 		return nil, failure(503, "runtime_unavailable", "Configure the local owned interpreter runtime")

@@ -10,6 +10,7 @@ import tempfile
 import time
 import urllib.request
 import uuid
+from script_prompt_browser import verify_script_prompt
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -182,6 +183,8 @@ def main():
             tk("confirmScriptCall", {"id": done_run["id"], "callId": pending["id"], "fingerprint": pending["fingerprint"], "decision": "approve", "confirm": True})
         done = wait_for(lambda: completed(done_run["id"]))
         assert done["run"]["state"] == "completed" and done["output"]["value"] == "Done", done
+        if args.browser:
+            verify_script_prompt(browser, tk, project["id"])
         after = json.loads((folder / "runtime/sessions.json").read_text())[row["id"]]
         assert before["generation"] == after["generation"] and before["launchId"] == after["launchId"]
         tk("shutdownLocalRuntime", {"confirm": True})

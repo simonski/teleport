@@ -48,7 +48,7 @@ func Eval(ctx context.Context, source, mode string, call Call) (out Outcome) {
 			out.Logs = []string{}
 		}
 	}()
-	if len(source) == 0 || len(source) > SourceLimit || strings.ContainsRune(source, 0) || mode != "script" && mode != "expression" {
+	if len(source) == 0 || len(source) > SourceLimit || strings.ContainsRune(source, 0) || mode != "script" && mode != "expression" && mode != "console" {
 		out.Error = "Invalid bounded script source or mode"
 		return
 	}
@@ -108,10 +108,22 @@ func Eval(ctx context.Context, source, mode string, call Call) (out Outcome) {
 		return
 	}
 	bootstrap.Free()
+	wrap := func(body string) string { return "(async()=>{\"use strict\";\n" + body + "\n})()" }
+	program := wrap(source)
 	if mode == "expression" {
-		source = "return (" + source + "\n);"
+		program = wrap("return (" + source + "\n);")
+	} else if mode == "console" {
+		expression := strings.TrimSuffix(strings.TrimSpace(source), ";")
+		candidate := wrap("return (" + expression + "\n);")
+		probe := realm.Eval(candidate, quickjs.EvalFlagCompileOnly(true))
+		if probe.IsException() {
+			_ = realm.Exception() // Clear the parse exception before statement execution.
+		} else {
+			program = candidate
+		}
+		probe.Free()
 	}
-	value := realm.Eval("(async()=>{\"use strict\";\n"+source+"\n})()", quickjs.EvalAwait(true))
+	value := realm.Eval(program, quickjs.EvalAwait(true))
 	defer value.Free()
 	if value.IsException() {
 		out.Error = realm.Exception().Error()

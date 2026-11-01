@@ -40,7 +40,9 @@ Save latest before previewing a saved route or choosing Publish latest. Publicat
 
 ## JavaScript console
 
-Press `/` outside text entry to open the right-side console. Choose Script or Expression, enter source and press Run. Script mode supports variables, functions, loops, `await` and an explicit `return`; Expression mode returns the expression value. Tab completes a matching operation name inside `tk("…`. Available bindings appear in the console and `tk getScriptBindings`.
+Press `/` or the terminal icon to open the command console. Type JavaScript or a supported `tk` command and press Enter. Expressions such as `1 + 2` return a value automatically. Shift+Enter inserts a newline; Up/Down recalls command history, Tab completes binding names, and Ctrl+L or `clear` clears visible output. Type `help` for commands. Ctrl+C requests Stop for the current run through its confirmation popup. Each command has its own isolated context; variables/functions can be shared within one multiline command.
+
+Examples: `tk listProjects`, `tk getTicket --data '{"id":3}'`, or `await tk("listProjects", {})`.
 
 ```javascript
 const projects = await tk("listProjects", {});
@@ -48,7 +50,7 @@ console.log(projects.items.map(project => project.name));
 return projects.items.length;
 ```
 
-Runs receive stable `J1` IDs and private source/results. Escape, outside click and Detach close the viewer while the job continues. Reopen and select its history entry to reconnect. Logout also detaches; sign in again to inspect or confirm. Source edits prepare a new Run and do not rewrite an existing job.
+Runs receive stable `J1` IDs and private source/results. Escape, outside click and Close detach the viewer while the job continues. Reopen and select Runs to reconnect. Logout also detaches; sign in again to inspect or confirm. Editing the prompt prepares a new command and preserves existing jobs. Retry pending uses the original submission identity while preserving newer typed input.
 
 Scope acceptance, code decisions and human Done pause for an exact-action confirmation with current ticket/version context. Script code cannot confirm itself. Declining affects only that script action. Stop terminates the interpreter while preserving committed API effects and receipts. Failed or uncertain dispatch is never automatically repeated as a canonical mutation.
 

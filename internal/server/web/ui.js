@@ -9,7 +9,7 @@ function dismissChoice(restore = false) {
   if (restore && button.isConnected) button.focus();
 }
 function modalFocusables(dialog) {
-  return [...dialog.querySelectorAll('button,input,textarea,select,a[href],[tabindex]')].filter(e => !e.matches(':disabled') && !e.hidden && !e.closest('[inert]') && e.tabIndex >= 0 && e.getClientRects().length);
+  return [...dialog.querySelectorAll('button,input,textarea,select,summary,a[href],[tabindex]')].filter(e => !e.matches(':disabled') && !e.hidden && !e.closest('[inert]') && e.tabIndex >= 0 && e.getClientRects().length);
 }
 class TeleportDialog extends HTMLElement {
   constructor() {

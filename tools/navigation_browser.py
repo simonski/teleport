@@ -3,6 +3,16 @@ import json
 
 
 def verify_navigation(browser, tk, project_id):
+    # Preference-only polls deliberately retain the content/session snapshot.
+    # Observe the completed network read rather than waiting for that snapshot
+    # to acquire a revision that does not require a content refresh.
+    browser("eval", "window.__navigationObservedRevision=0;window.__navigationOriginalFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.__navigationOriginalFetch(...args);if(String(args[0]).endsWith('/getSession')&&response.ok){const current=await response.clone().json();window.__navigationObservedRevision=Math.max(window.__navigationObservedRevision,current.revision);}return response;}")
+    def observed(revision):
+        try:
+            browser("wait", "--fn", "window.__navigationObservedRevision>=" + str(revision))
+        except RuntimeError as error:
+            state = browser("eval", "({observed:window.__navigationObservedRevision,sessionRevision:session?.revision,preferenceVersion:preferences?.version,preferenceSaving,preferenceError,refreshing,graphInteracting,hidden:document.hidden,focused:document.hasFocus(),foreground:foregroundOpen(),navigationBusy:navigationBusy()})")
+            raise RuntimeError(f"Navigation poll did not observe revision {revision}: {state}") from error
     def saved():
         browser("wait", "--fn", "!preferenceSaving&&!Object.keys(preferenceDraft).length")
 
@@ -27,7 +37,7 @@ def verify_navigation(browser, tk, project_id):
     saved()
     assert visible()[0] == "Ideas" and prefs()["navigationOrder"][0] == "Ideas"
     revision = json.loads(tk("getSession"))["revision"]
-    browser("wait", "--fn", "session.revision>=" + str(revision))
+    observed(revision)
     browser("eval", "if(document.activeElement?.dataset.view!=='Ideas')throw new Error('Preference refresh lost keyboard tab focus')")
     browser("eval", "if(document.querySelector('[aria-current=page]')?.dataset.view!=='Home')throw new Error('Reorder navigated away')")
 
@@ -52,7 +62,7 @@ def verify_navigation(browser, tk, project_id):
     browser("press", "Escape")
     assert prefs()["navigationPosition"] == "left"
     revision = json.loads(tk("getSession"))["revision"]
-    browser("wait", "--fn", "session.revision>=" + str(revision))
+    observed(revision)
     browser("eval", "if(document.activeElement!==document.querySelector('#account'))throw new Error('Background preference refresh lost popup return focus')")
     browser("screenshot", "/tmp/teleport-navigation-left.png")
     browser("click", "#nav-collapse"); saved()
@@ -98,4 +108,5 @@ def verify_navigation(browser, tk, project_id):
     browser("press", "Escape")
     assert json.loads(tk("listProjects"))["items"] == projects_before
     assert json.loads(browser("eval", "document.querySelector('#project').value")) == str(project_id)
+    browser("eval", "if(window.__navigationOriginalFetch)window.fetch=window.__navigationOriginalFetch;delete window.__navigationOriginalFetch;delete window.__navigationObservedRevision")
     print("PASS: canonical/private navigation order, real keyboard/pointer reorder, cancelled drag, left/right collapse, reload/mobile layout and grouped project creation without publication")

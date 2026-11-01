@@ -36,6 +36,12 @@ def main():
             port = sock.getsockname()[1]
         endpoint = f"http://127.0.0.1:{port}"
         environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+        # Hidden test tabs must keep polling during long acceptance flows.
+        # Chrome otherwise throttles chained timers after five minutes hidden.
+        browser_environment = dict(os.environ, AGENT_BROWSER_ARGS=",".join(filter(None, [
+            os.environ.get("AGENT_BROWSER_ARGS", ""), "--disable-background-timer-throttling",
+            "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
+        ])))
         def tk(*arguments, input=None, success=True):
             result = subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, input=input, text=True, capture_output=True, timeout=30)
             if success and result.returncode:
@@ -82,8 +88,8 @@ def main():
                         # Native-driver visibility can include a few clipped pixels;
                         # centre the actual control inside its scroll container.
                         expression = f"document.querySelector({json.dumps(arguments[1])})?.scrollIntoView({{block:'center',inline:'nearest'}})"
-                        subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", "eval", expression], text=True, capture_output=True, timeout=40, check=True)
-                    result = subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", *arguments], text=True, capture_output=True, timeout=40)
+                        subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", "eval", expression], env=browser_environment, text=True, capture_output=True, timeout=40, check=True)
+                    result = subprocess.run(["agent-browser", "--session", f"teleport-smoke-{port}", *arguments], env=browser_environment, text=True, capture_output=True, timeout=40)
                     if result.returncode:
                         raise RuntimeError(result.stderr or result.stdout)
                     return result.stdout
@@ -91,7 +97,7 @@ def main():
                     browser("open", endpoint)
                     browser("wait", "--fn", "document.querySelector('#build-version')?.textContent===document.querySelector('meta[name=teleport-build-version]')?.content")
                     assert json.loads(browser("eval", "document.querySelector('#build-version').textContent")) == server_version
-                    if not args.graph_only:
+                    if not (args.graph_only or args.navigation_only):
                         verify_landing(browser)
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
@@ -140,6 +146,9 @@ def main():
                     assert not json.loads(tk("getSession"))["settings"]["agents"]
                     browser("select", "#project", str(project["id"]))
                     browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
+                    if args.navigation_only:
+                        verify_navigation(browser, tk, project["id"])
+                        return
                     browser("eval", "if(document.querySelector('main h1,.board-heading>.eyebrow')||Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-59)>1)throw new Error('Shell is not compact');if(!document.querySelector('#javascript-console')||!document.querySelector('#harness-console'))throw new Error('Missing console buttons')")
                     browser("screenshot", "/tmp/teleport-shell.png")
                     verify_profile_dialogs(browser)

@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCUMENTS = ("SPECIFICATION.md", "IMPLEMENTATION_PLAN.md", "API_CONTRACT.md", "USER_GUIDE.md")
+DOCUMENTS = ("SPECIFICATION.md", "AGENTS.md", "README.md", "SDLC.md")
 
 
 def normalize(text):

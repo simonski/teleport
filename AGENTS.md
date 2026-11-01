@@ -6,7 +6,6 @@ This checkout contains a Go application and its product contract:
 
 - `SPECIFICATION.md`: product requirements, action contracts, acceptance scenarios, and unresolved decisions.
 - `SDLC.md`: contributor communication and tooling rules.
-- `IMPLEMENTATION_PLAN.md`: phase branches, dependencies and verification evidence.
 - `cmd/tk/`: executable entry point; `internal/app/`: domain services; `internal/model/`: persisted types; `internal/store/`: SQL ownership and transactions.
 - `internal/server/`: HTTP contracts and embedded `web/` assets. Go tests sit beside their packages.
 
@@ -32,7 +31,7 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 - `python3 -B tools/smoke.py --browser`: exercise an isolated real binary/browser installation after building.
 - `python3 -B tools/postgres_check.py --browser`: run the same suite and real browser path against a disposable PostgreSQL cluster; requires local server binaries.
 
-Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations. See `USER_GUIDE.md` and `API_CONTRACT.md` for shipped behavior.
+Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations.
 
 ## Coding Style & Naming Conventions
 

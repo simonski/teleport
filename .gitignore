@@ -1,0 +1,10 @@
+/bin/
+/.build-count
+/.teleport/
+*.db
+*.db-shm
+*.db-wal
+*.lock
+__pycache__/
+/node_modules/
+/test-results/

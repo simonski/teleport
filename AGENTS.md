@@ -2,12 +2,15 @@
 
 ## Project Structure & Module Organization
 
-This checkout contains planning documents and documentation tools:
+This checkout contains a Go application and its product contract:
 
 - `SPECIFICATION.md`: product requirements, action contracts, acceptance scenarios, and unresolved decisions.
 - `SDLC.md`: contributor communication and tooling rules.
+- `IMPLEMENTATION_PLAN.md`: phase branches, dependencies and verification evidence.
+- `cmd/tk/`: executable entry point; `internal/app/`: domain services; `internal/model/`: persisted types; `internal/store/`: SQL ownership and transactions.
+- `internal/server/`: HTTP contracts and embedded `web/` assets. Go tests sit beside their packages.
 
-No application source, tests, assets, dependency manifests, or build configuration exist yet. Verify specified paths before using them. Place reusable development tools under `tools/`.
+Place reusable development tools under `tools/`. Keep generated binaries and local credentials out of Git.
 
 ## Requirements & Architecture
 
@@ -17,14 +20,16 @@ Preserve the Goal → Epic → Task hierarchy. SQLite is the default database; P
 
 ## Build, Test, and Development Commands
 
-Run `python3 tools/spec_sources.py --verify` for documentation checks. Application build, test, and server commands are not executable yet. The specification targets:
+Go 1.26.1+, Python 3 and Make are required. Supported commands:
 
 - `make build`: produce `bin/tk` with build version metadata.
 - `make install`: install the executable.
-- `go test ./...`: run Go tests once a Go module exists.
+- `go test ./...`: run Go tests.
 - `go test -race ./...`: check Go code for data races.
+- `make check`: verify formatting, vet, documentation and race tests.
+- `python3 -B tools/smoke.py --browser`: exercise an isolated real binary/browser installation after building.
 
-Document actual prerequisites and startup commands when implementing the build system. Use the `tk` binary for server operations.
+Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations. See `USER_GUIDE.md` and `API_CONTRACT.md` for shipped behavior.
 
 ## Coding Style & Naming Conventions
 
@@ -38,4 +43,4 @@ Cover agreed acceptance scenarios with fresh evidence. No numeric coverage thres
 
 ## Commit & Pull Request Guidelines
 
-No Git metadata or commit history is available here, so no existing message convention can be established. Use concise, imperative commit subjects. Pull requests should describe scope, affected requirement/action IDs, validation results, and deferred behavior. Include screenshots for visual changes.
+Use concise, imperative commit subjects. Each phase starts on its own branch from clean `main`, passes its checks, then merges with `git merge --ff-only`; preserve linear history. Pull requests describe scope, affected requirement/action IDs, validation results and deferred behavior. Include screenshots for visual changes.

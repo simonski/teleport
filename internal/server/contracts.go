@@ -1,0 +1,83 @@
+package server
+
+import (
+	"reflect"
+	"strings"
+	"time"
+
+	"teleport/internal/app"
+	"teleport/internal/model"
+)
+
+type contract struct{ Input, Output any }
+
+var contracts = map[string]contract{
+	"login": {struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}{}, app.LoginResult{}},
+	"getSession": {struct{}{}, struct {
+		Account        model.Account  `json:"account"`
+		InstallationID string         `json:"installationId"`
+		Revision       int64          `json:"revision"`
+		Settings       model.Settings `json:"settings"`
+	}{}},
+	"logout": {struct{}{}, struct {
+		SignedOut bool `json:"signedOut"`
+	}{}},
+	"listWorkflows": {struct{}{}, struct {
+		Items      []model.Workflow `json:"items"`
+		NextCursor string           `json:"nextCursor"`
+	}{}},
+}
+
+func schema(value any) map[string]any { return schemaType(reflect.TypeOf(value)) }
+func schemaType(t reflect.Type) map[string]any {
+	if t == nil {
+		return map[string]any{}
+	}
+	if t.Kind() == reflect.Pointer {
+		return schemaType(t.Elem())
+	}
+	if t == reflect.TypeFor[time.Time]() {
+		return map[string]any{"type": "string", "format": "date-time"}
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		properties := map[string]any{}
+		required := []string{}
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			if !f.IsExported() || f.Name == "PasswordHash" {
+				continue
+			}
+			tag := f.Tag.Get("json")
+			name := strings.Split(tag, ",")[0]
+			if name == "-" {
+				continue
+			}
+			if name == "" {
+				name = f.Name
+			}
+			properties[name] = schemaType(f.Type)
+			if !strings.Contains(tag, "omitempty") {
+				required = append(required, name)
+			}
+		}
+		return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+	case reflect.Slice, reflect.Array:
+		return map[string]any{"type": "array", "items": schemaType(t.Elem())}
+	case reflect.Map:
+		return map[string]any{"type": "object", "additionalProperties": schemaType(t.Elem())}
+	case reflect.Bool:
+		return map[string]any{"type": "boolean"}
+	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Uint64:
+		return map[string]any{"type": "integer"}
+	case reflect.Float64:
+		return map[string]any{"type": "number"}
+	case reflect.String:
+		return map[string]any{"type": "string"}
+	default:
+		return map[string]any{}
+	}
+}

@@ -1,0 +1,24 @@
+.DEFAULT_GOAL := help
+.PHONY: help build install check test lint clean
+help:
+	@echo "build    Build bin/tk with a local build identity"
+	@echo "install  Build and install tk into GOBIN or GOPATH/bin"
+	@echo "check    Run documentation, vet, unit, integration and race checks"
+	@echo "test     Run Go tests"
+	@echo "lint     Verify Go formatting and run vet"
+	@echo "clean    Remove generated binary"
+build:
+	python3 tools/build.py
+install: build
+	python3 tools/build.py --install-only
+test:
+	go test ./...
+lint:
+	@test -z "$$(gofmt -l cmd internal)"
+	go vet ./...
+check: lint
+	python3 -B tools/spec_sources.py --verify
+	go test -race ./...
+clean:
+	go clean
+	rm -f bin/tk

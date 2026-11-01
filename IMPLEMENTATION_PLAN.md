@@ -8,7 +8,7 @@ Deliver usable vertical phases from the agreed specification. Start each phase f
 
 | Phase / branch | Depends | Demo and acceptance boundary | Status |
 | --- | --- | --- | --- |
-| P01 `phase/01-local-bootstrap` | — | Build one Go binary; explicit init/login/serve, seeded manual/agent workflows, persistent local credentials and API-only CLI. Repeat init preserves identity. A32/A33/A34/A165. | Pending |
+| P01 `phase/01-local-bootstrap` | — | Build one Go binary; explicit init/login/serve, seeded manual/agent workflows, persistent local credentials and API-only CLI. Repeat init preserves identity. A32/A33/A34/A165. | Verified |
 | P02 `phase/02-human-tickets` | P01 | Browser/CLI project creation with protected Unassigned hierarchy; human Todo/Doing/Done, immutable history, versions and rollups. A01–A05/A09/A11/A69. | Pending |
 | P03 `phase/03-work-controls` | P02 | Dependencies, cancellation/reopen, visibility and dual-owner subtree transfers, enforced in API and UI. A10/A25/A31/A63–A68/A147–A150. | Pending |
 | P04 `phase/04-workflow-editor` | P02 | Visual/list workflow editing, outcome conditions and backward routes, read-only preview, explicit immutable activation and new-work pins. A40/A97/A102–A105/A163/A164. | Pending |
@@ -32,5 +32,7 @@ The hardest boundaries are process ownership/recovery, human acceptance of exact
 P01 supplies durable installation/authentication and bounded authenticated tool calls. P02 supplies project membership, stable hierarchy IDs, versioned mutations and immutable revisions. P03 supplies admission/dependency/transfer guards. P04 supplies pinned workflow definitions and deterministic routing. P05 consumes those contracts to reserve stage visits/attempts without bypassing human gates. P06 adds real Git evidence. P07/P08 add verified process/PTY authority. P10 proves backend parity; P11 adds isolation before enabling multi-user execution. P12 integrates clients and packaging without changing domain policy.
 
 ## Execution evidence
+
+P01: `make check` passed formatting/vet, documentation verification and Go race tests. `make build` produced the binary. `python3 -B tools/smoke.py --browser` verified real init/serve/API-only CLI login/discovery/logout, exclusive installation ownership, repeat init and browser sign-in. Snapshot persistence uses a documented SQL aggregate; scalability, Windows local locking and real PostgreSQL parity remain unclaimed.
 
 Initial repository: Git initialized on `main`, no commits, three planning documents and two documentation tools. Application implementation starts after the documentation baseline commit. Deferred capabilities must remain explicit in API discovery and the usage guide rather than appearing as functioning controls.

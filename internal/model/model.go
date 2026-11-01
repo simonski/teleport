@@ -1,0 +1,80 @@
+package model
+
+import "time"
+
+const SchemaVersion = 1
+
+type Account struct {
+	ID            string `json:"id"`
+	Username      string `json:"username"`
+	PasswordHash  string `json:"passwordHash,omitempty"`
+	Administrator bool   `json:"administrator"`
+	Suspended     bool   `json:"suspended"`
+}
+type Session struct {
+	AccountID string    `json:"accountId"`
+	Expires   time.Time `json:"expires"`
+}
+type Settings struct {
+	Agents        bool `json:"agents"`
+	Registrations bool `json:"registrations"`
+	Handbrake     bool `json:"handbrake"`
+}
+type Phase struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Role         string `json:"role"`
+	Agentic      bool   `json:"agentic"`
+	Instructions string `json:"instructions"`
+}
+type Rule struct {
+	ID         string            `json:"id"`
+	Source     string            `json:"source"`
+	Outcome    string            `json:"outcome"`
+	Target     string            `json:"target,omitempty"`
+	Action     string            `json:"action,omitempty"`
+	Priority   int               `json:"priority"`
+	Conditions map[string]string `json:"conditions,omitempty"`
+}
+type Workflow struct {
+	ID        string  `json:"id"`
+	Version   int64   `json:"version"`
+	Title     string  `json:"title"`
+	Family    string  `json:"family"`
+	Published bool    `json:"published"`
+	Phases    []Phase `json:"phases"`
+	Rules     []Rule  `json:"rules"`
+}
+type State struct {
+	Schema         int                 `json:"schema"`
+	InstallationID string              `json:"installationId"`
+	Revision       int64               `json:"revision"`
+	Accounts       map[string]Account  `json:"accounts"`
+	Sessions       map[string]Session  `json:"sessions"`
+	Settings       Settings            `json:"settings"`
+	Workflows      map[string]Workflow `json:"workflows"`
+}
+
+func SeedWorkflows() map[string]Workflow {
+	h := Workflow{ID: "human", Version: 1, Title: "Human", Family: "human", Published: true}
+	for _, role := range []string{"Todo", "Doing", "Done"} {
+		h.Phases = append(h.Phases, Phase{ID: role, Title: role, Role: role, Instructions: "Human-powered movement between phases."})
+	}
+	h.Rules = []Rule{{ID: "start", Source: "Todo", Outcome: "start", Target: "Doing"}, {ID: "complete", Source: "Doing", Outcome: "complete", Target: "Done"}, {ID: "complete-draft", Source: "Todo", Outcome: "complete", Target: "Done"}, {ID: "return", Source: "Doing", Outcome: "return", Target: "Todo"}, {ID: "reopen", Source: "Done", Outcome: "reopen", Target: "Todo"}}
+	a := Workflow{ID: "agent", Version: 1, Title: "Agent delivery", Family: "agent", Published: true}
+	for _, role := range []string{"Todo", "Refine", "Ready", "Doing", "Review", "Approval", "Done", "Decompose", "Rebase", "Cancelled"} {
+		title := role
+		if role == "Doing" {
+			title = "Implementation"
+		}
+		agentic := role == "Refine" || role == "Doing" || role == "Review" || role == "Decompose" || role == "Rebase"
+		a.Phases = append(a.Phases, Phase{ID: role, Title: title, Role: role, Agentic: agentic, Instructions: "Follow accepted scope and the phase's permission boundary."})
+	}
+	a.Rules = []Rule{{ID: "refine", Source: "Todo", Outcome: "requestRefinement", Target: "Refine"}, {ID: "proposal", Source: "Refine", Outcome: "success", Action: "wait"}, {ID: "refine-failed", Source: "Refine", Outcome: "failure", Target: "Todo"}, {ID: "scope", Source: "Refine", Outcome: "acceptScope", Target: "Ready"}, {ID: "plan", Source: "Refine", Outcome: "acceptPlan", Target: "Decompose"}, {ID: "start", Source: "Ready", Outcome: "start", Target: "Doing"}, {ID: "implemented", Source: "Doing", Outcome: "success", Target: "Review"}, {ID: "implementation-failed", Source: "Doing", Outcome: "failure", Target: "Ready"}, {ID: "reviewed", Source: "Review", Outcome: "success", Target: "Approval"}, {ID: "changes", Source: "Review", Outcome: "failure", Target: "Ready"}, {ID: "approve", Source: "Approval", Outcome: "approve", Target: "Done"}, {ID: "revise", Source: "Approval", Outcome: "revise", Target: "Ready"}, {ID: "rescope", Source: "Approval", Outcome: "rescope", Target: "Todo"}, {ID: "stale", Source: "Approval", Outcome: "staleBase", Target: "Rebase"}, {ID: "rebased", Source: "Rebase", Outcome: "success", Target: "Review"}, {ID: "rebase-failed", Source: "Rebase", Outcome: "failure", Target: "Ready"}, {ID: "planned", Source: "Decompose", Outcome: "success", Action: "halt"}, {ID: "planning-failed", Source: "Decompose", Outcome: "failure", Action: "halt"}}
+	for _, p := range a.Phases {
+		if p.Agentic {
+			a.Rules = append(a.Rules, Rule{ID: "question-" + p.ID, Source: p.ID, Outcome: "question", Action: "wait"})
+		}
+	}
+	return map[string]Workflow{"human@1": h, "agent@1": a}
+}

@@ -2,6 +2,10 @@
 
 ## Shell composition
 
+The landing wordmark uses transparent vector lettering between synchronized rear/front CSS flight layers. The shared path loops around a decorative moon; reduced motion leaves one static rocket. No opaque wordmark box masks the flight. View templates omit redundant workspace/project breadcrumb/title rows while keeping filters, creation controls and workflow pin labels.
+
+Profile configuration opens the shared `tk-dialog` over the unchanged view. Its body-level shade blurs the application and makes background surfaces inert. Target handlers retain editing/form/terminal behavior; dialog-bound keydown/keyup/keypress events stop before application shortcuts. The modal router keeps focus in the foremost dialog, wraps Tab/Shift+Tab, dismisses a nested selector before Escape closes its parent and restores usable opener focus. These are presentation changes to existing APIs, with no new operation or permission.
+
 Specification D47–D53/A174–A181 defines the approved target; only discovery-listed operations are shipped. Existing seeds remain immutable, and the revised Typo/Verify default needs its own verified delivery slice.
 
 The first shell slice adds no new domain-mutation operation. Personal Settings composes current appearance/view-preference/account operations; System composes permitted installation operations with canonical confirmations. Repository configuration stays project-scoped. Opening/dismissing a popup preserves the underlying view and active session. The server renders an escaped `teleport-build-version` meta value from its actual build identity for the persistent footer. Console icons open the existing JavaScript viewer and authorized harness selector; opening/reconnecting alone never launches a model. Navigation layout follows the contract below; workflow-field schemas will be frozen in their own slice before implementation.

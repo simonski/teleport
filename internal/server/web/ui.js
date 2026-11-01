@@ -9,14 +9,23 @@ function dismissChoice(restore = false) {
   if (restore && button.isConnected) button.focus();
 }
 function modalFocusables(dialog) {
-  return [...dialog.querySelectorAll('button,input,textarea,select,a[href],[tabindex]')].filter(e => !e.disabled && !e.hidden && e.tabIndex >= 0 && e.getClientRects().length);
+  return [...dialog.querySelectorAll('button,input,textarea,select,a[href],[tabindex]')].filter(e => !e.matches(':disabled') && !e.hidden && !e.closest('[inert]') && e.tabIndex >= 0 && e.getClientRects().length);
 }
 class TeleportDialog extends HTMLElement {
+  constructor() {
+    super();
+    // Let target controls handle keys before containing application shortcuts.
+    for (const type of ['keydown', 'keyup', 'keypress']) this.addEventListener(type, e => e.stopPropagation());
+  }
   get open() { return this.hasAttribute('open'); }
   showModal() {
     const heading = this.querySelector('h2,h1');
     if (heading) { heading.id ||= `modal-title-${crypto.randomUUID()}`; this.setAttribute('aria-labelledby', heading.id); }
-    if (this.open) return;
+    if (this.open) {
+      enhanceControls();
+      if (!this.contains(document.activeElement)) (modalFocusables(this)[0] || this).focus();
+      return;
+    }
     dismissChoice();
     this.opener = document.activeElement;
     this.setAttribute('role', 'dialog'); this.setAttribute('aria-modal', 'true');
@@ -30,6 +39,7 @@ class TeleportDialog extends HTMLElement {
     this.before = document.createComment('dialog'); this.beforeParent = this.parentNode;
     this.beforeParent.insertBefore(this.before, this); document.body.append(this.shade); this.shade.append(this);
     modalStack.push(this); this.setAttribute('open', ''); syncModalInert();
+    if (typeof resetShift === 'function') resetShift();
     (modalFocusables(this)[0] || this).focus();
   }
   close(value = '') {
@@ -98,16 +108,26 @@ function enhanceSelect(select) {
     const maxHeight = Math.min(280, innerHeight - 24); list.style.maxHeight = `${maxHeight}px`;
     const height = Math.min(list.scrollHeight, maxHeight);
     list.style.top = `${rect.bottom + height + 8 < innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4)}px`;
-    openChoice = {button, list}; available[active]?.focus();
+    function navigateChoice(key) {
+      if (!available.length) return;
+      active = key === 'Home' ? 0 : key === 'End' ? available.length - 1 : (active + (key === 'ArrowDown' ? 1 : -1) + available.length) % available.length;
+      available[active].focus();
+    }
+    openChoice = {button, list, navigate:navigateChoice}; available[active]?.focus();
     let search = '', lastKey = 0;
     list.onkeydown = e => {
       if (e.key === 'Escape') {e.preventDefault();e.stopPropagation();dismissChoice(true);return;}
       if (e.key === 'Tab') {dismissChoice(true);return;}
-      if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {e.preventDefault();active = e.key === 'Home' ? 0 : e.key === 'End' ? available.length - 1 : (active + (e.key === 'ArrowDown' ? 1 : -1) + available.length) % available.length;available[active]?.focus();}
+      if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {e.preventDefault();navigateChoice(e.key);}
       else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && e.key !== ' ') {e.preventDefault();search = performance.now() - lastKey < 700 ? search + e.key : e.key;lastKey = performance.now();const found = available.findIndex(o => o.textContent.toLowerCase().startsWith(search.toLowerCase()));if (found >= 0) {active = found;available[active].focus();}}
     };
   });
-  button.addEventListener('keydown', e => {if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {e.preventDefault();button.click();}});
+  button.addEventListener('keydown', e => {
+    if (!['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return;
+    e.preventDefault();
+    if (openChoice?.button === button) openChoice.navigate(e.key);
+    else {button.click();if (e.key === 'Home' || e.key === 'End') openChoice?.navigate(e.key);}
+  });
   new MutationObserver(sync).observe(select, {attributes:true,childList:true,subtree:true});
   select.addEventListener('focus', () => button.focus()); sync();
 }
@@ -121,9 +141,26 @@ document.addEventListener('submit', e => { if (e.target.closest('tk-dialog') && 
 document.addEventListener('pointerdown', e => {if (openChoice && !openChoice.list.contains(e.target) && !openChoice.button.contains(e.target)) dismissChoice();}, true);
 window.addEventListener('resize', () => dismissChoice());
 window.addEventListener('scroll', e => {if (openChoice && !openChoice.list.contains(e.target)) dismissChoice();}, true);
-document.addEventListener('keydown', e => {
-  const top = modalStack.at(-1); if (!top) return;
-  if (e.key === 'Escape' && !openChoice) {e.preventDefault();e.stopImmediatePropagation();top.close();}
-  else if (e.key === 'Tab' && !openChoice) {const items = modalFocusables(top), first = items[0], last = items.at(-1);if (!items.length) {e.preventDefault();top.focus();}else if (e.shiftKey && (document.activeElement === first || document.activeElement === top)) {e.preventDefault();last.focus();}else if (!e.shiftKey && document.activeElement === last) {e.preventDefault();first.focus();}}
+document.addEventListener('focusin', e => {
+  const top = modalStack.at(-1);
+  if (top && !top.contains(e.target)) (modalFocusables(top)[0] || top).focus();
 }, true);
-function rocketMark() { return '<svg class="rocket" viewBox="0 0 32 32" aria-hidden="true"><path d="M13 21 8 24l1-7C12 9 19 5 27 5c0 8-4 15-12 18l-7 1 3-5M18 9a3 3 0 1 0 4 4 3 3 0 0 0-4-4ZM10 24l-5 3 3-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+for (const type of ['keydown', 'keyup', 'keypress']) document.addEventListener(type, e => {
+  const top = modalStack.at(-1); if (!top) return;
+  if (type === 'keydown' && e.key === 'Escape') {e.preventDefault();e.stopImmediatePropagation();if (openChoice) dismissChoice(true); else top.close();return;}
+  if (!top.contains(e.target)) {e.preventDefault();e.stopImmediatePropagation();(modalFocusables(top)[0] || top).focus();return;}
+  if (type !== 'keydown') return;
+  if (e.key === 'Tab') {
+    if (openChoice) dismissChoice(true);
+    const items = modalFocusables(top), first = items[0], last = items.at(-1);
+    if (!items.length) {e.preventDefault();top.focus();}
+    else if (e.shiftKey && (document.activeElement === first || document.activeElement === top)) {e.preventDefault();last.focus();}
+    else if (!e.shiftKey && (document.activeElement === last || document.activeElement === top)) {e.preventDefault();first.focus();}
+  }
+}, true);
+function rocketDrawing() { return '<path d="M13 21 8 24l1-7C12 9 19 5 27 5c0 8-4 15-12 18l-7 1 3-5M18 9a3 3 0 1 0 4 4 3 3 0 0 0-4-4ZM10 24l-5 3 3-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'; }
+function rocketMark() { return '<svg class="rocket" viewBox="0 0 32 32" aria-hidden="true">'+rocketDrawing()+'</svg>'; }
+function landingBrand() {
+  const ship='<use href="#landing-rocket" x="-14" y="-14" width="28" height="28" transform="rotate(45)"/>';
+  return `<div class="login-brand"><h1 class="sr-only">teleport</h1><svg class="login-scene" viewBox="0 0 360 170" aria-hidden="true"><defs><symbol id="landing-rocket" viewBox="0 0 32 32">${rocketDrawing()}</symbol></defs><g class="login-moon"><circle cx="319" cy="33" r="14"/><circle class="moon-crater" cx="314" cy="29" r="3"/><circle class="moon-crater" cx="323" cy="37" r="4"/></g><g class="login-ship ship-back">${ship}</g><text class="landing-word" x="180" y="106" text-anchor="middle">teleport</text><g class="login-ship ship-front">${ship}</g></svg></div>`;
+}

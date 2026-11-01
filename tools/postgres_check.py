@@ -25,9 +25,12 @@ def main():
     selection.add_argument("--scripts-only", action="store_true", help="Run only isolated script jobs against a fresh database")
     selection.add_argument("--terminal-only", action="store_true", help="Run only the plain PTY fixture against a fresh database")
     selection.add_argument("--smoke-only", action="store_true", help="Run only the application smoke against a fresh database")
+    selection.add_argument("--shell-only", action="store_true", help="Run shared shell, landing and modal browser checks against a fresh database")
     selection.add_argument("--tests-only", action="store_true", help="Run only Go tests against disposable PostgreSQL")
     parser.add_argument("--test-pattern", help="Go test -run pattern for a focused regression")
     args = parser.parse_args()
+    if args.shell_only and not args.browser:
+        parser.error("--shell-only requires --browser")
     candidates = [args.postgres_bin]
     if shutil.which("initdb"):
         candidates.append(Path(shutil.which("initdb")).parent)
@@ -54,7 +57,7 @@ def main():
             started = True
             connection = "postgresql://teleport@/postgres?" + urlencode({"host": temporary, "sslmode": "disable"})
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
-            focused = args.native_only or args.scripts_only or args.terminal_only or args.smoke_only
+            focused = args.native_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only
             if not focused:
                 test_command = ["go", "test", "-race", "-count=1"]
                 if args.test_pattern:
@@ -64,35 +67,37 @@ def main():
                 print("PASS: PostgreSQL Go test selection", flush=True)
                 return
             subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
-            if not focused or args.smoke_only:
+            if not focused or args.smoke_only or args.shell_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "smoke")
                 smoke_url = "postgresql://teleport@/smoke?" + urlencode({"host": temporary, "sslmode": "disable"})
                 command = ["python3", "-B", "tools/smoke.py", "--database", smoke_url]
                 if args.browser:
                     command.append("--browser")
+                if args.shell_only:
+                    command.append("--shell-only")
                 subprocess.run(command, cwd=ROOT, env=environment, check=True)
-            if not args.smoke_only and not args.native_only and not args.scripts_only:
+            if not args.shell_only and not args.smoke_only and not args.native_only and not args.scripts_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
                 terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
                 terminal_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", terminal_url]
                 if args.browser:
                     terminal_command.append("--browser")
                 subprocess.run(terminal_command, cwd=ROOT, env=environment, check=True)
-            if not args.smoke_only and not args.scripts_only and not args.terminal_only:
+            if not args.shell_only and not args.smoke_only and not args.scripts_only and not args.terminal_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "native_terminal")
                 native_url = "postgresql://teleport@/native_terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
                 native_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", native_url, "--native-fixture"]
                 if args.browser:
                     native_command.append("--browser")
                 subprocess.run(native_command, cwd=ROOT, env=environment, check=True)
-            if not args.smoke_only and not args.native_only and not args.terminal_only:
+            if not args.shell_only and not args.smoke_only and not args.native_only and not args.terminal_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "script_runtime")
                 script_url = "postgresql://teleport@/script_runtime?" + urlencode({"host": temporary, "sslmode": "disable"})
                 script_command = ["python3", "-B", "tools/script_runtime_check.py", "--database", script_url]
                 if args.browser:
                     script_command.append("--browser")
                 subprocess.run(script_command, cwd=ROOT, env=environment, check=True)
-            label = "application smoke" if args.smoke_only else "native protocol/runtime fixture" if args.native_only else "isolated script jobs" if args.scripts_only else "plain PTY fixture" if args.terminal_only else "isolated domain/race suite and real binary/browser smoke with native and script runtimes"
+            label = "shared shell and modal browser checks" if args.shell_only else "application smoke" if args.smoke_only else "native protocol/runtime fixture" if args.native_only else "isolated script jobs" if args.scripts_only else "plain PTY fixture" if args.terminal_only else "isolated domain/race suite and real binary/browser smoke with native and script runtimes"
             print("PASS: PostgreSQL " + label, flush=True)
         finally:
             if started:

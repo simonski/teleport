@@ -9,7 +9,7 @@ function ideaCanControl(idea) {
 }
 function ideasView() {
   const visible = ideas.filter(i => (!ideaInboxOnly || i.placement === 'inbox') && (ideaHidden || !i.archived && !i.deleted));
-  return `<div class="page-heading"><div><p class="eyebrow">PLANNING / ${escapeHTML(currentProject()?.name || 'AUTHORIZED INBOX + PROJECTS')}</p><h1>Ideas<span>.</span></h1></div><button id="new-idea">＋ New idea</button></div>
+  return `<div class="page-heading view-actions"><button id="new-idea">＋ New idea</button></div>
     <div class="idea-filters">${!projectId ? `<label class="checkbox-label"><input id="idea-inbox" type="checkbox" ${ideaInboxOnly ? 'checked' : ''}>Private inbox only</label>` : ''}<label class="checkbox-label"><input id="idea-hidden" type="checkbox" ${ideaHidden ? 'checked' : ''}>Include archived and deleted</label></div>
     <div class="idea-grid">${visible.map(i => `<button class="idea-card" data-idea="${escapeHTML(i.id)}"><span class="eyebrow">${escapeHTML(i.id)} / ${i.placement === 'inbox' ? 'PRIVATE INBOX' : escapeHTML(projectName(i.projectId))}</span><h2>${escapeHTML(i.title)}</h2><p>${escapeHTML(i.text.slice(0, 240)) || 'No details'}</p><div class="idea-card-footer"><span>${i.acceptedCount ? `Accepted · ${i.acceptedCount} proposal${i.acceptedCount === 1 ? '' : 's'}` : 'Draft idea'}</span><span>${i.deleted ? 'Deleted' : i.archived ? 'Archived' : 'Open ↗'}</span></div></button>`).join('') || empty('No ideas yet.', '', 'first-idea', 'New idea')}</div>`;
 }

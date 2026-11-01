@@ -8,11 +8,17 @@ Run `make build`, then `bin/tk init` and `bin/tk serve`. SQLite defaults to `~/.
 
 Sign in through the browser with initial `admin` / `password`. CLI login reads the password from standard input: `bin/tk login --password-stdin`. `TELEPORT_SERVER` selects the server; `TELEPORT_CONFIG` selects the private mode-0600 client credential file. All CLI operations except init and server hosting use HTTP APIs. `bin/tk logout` revokes that sign-in session.
 
+The landing rocket travels behind and in front of the wordmark, loops around the moon and returns. Reduced-motion preferences show a static rocket. View content starts beneath navigation without a duplicate workspace/project breadcrumb.
+
 First browser sign-in opens Welcome to teleport: name/select a project, choose Codex or configure later, then select attention preferences. Names are checked while typing; the suggested prefix uses four letters, or three plus an available number on collision. Progress stays private until Finish setup atomically creates the project and completes setup. Escape, outside click or Later dismisses; Finish setup in the account menu resumes it. Repository/worktree paths and access grants are configured separately, after setup. Finishing starts no harness or paid work. Missing Codex installation is shown without claiming readiness. Attention preferences affect notifications; ticket badges remain visible.
 
 ## Support boundary
 
 The compact header has permanent JavaScript and harness-session buttons; opening either viewer starts no execution. The harness button turns red when an accessible running session needs attention. The bottom-right footer shows the actual server build on login and in every view. The profile menu opens personal Settings and separate installation System popups over the current view. Choose Project settings for the selected project's repository, handbrake, native readiness and shortcut to Workflows. Escape/outside dismisses popups without changing the underlying view. Evolution remains a subsequent slice.
+
+Popups blur the background and contain application keys and Tab/Shift+Tab focus. Typing and local controls keep their normal behavior; underlying shortcuts stay inactive. Escape closes a nested dropdown first, then its dialog. Completed outside clicks also dismiss dialogs, restoring the opener.
+
+Focused interface checks use `python3 -B tools/smoke.py --browser --shell-only`; add PostgreSQL parity with `python3 -B tools/postgres_check.py --browser --shell-only`. Both use disposable installations.
 
 Drag tabs to reorder them, or focus a tab and press Alt+Shift+Arrow. Settings → Navigation selects top, left or right placement; side navigation can collapse to icons. Changes save privately to the account and survive reload. Reset navigation restores the default order and top placement. Updates from another browser wait while an editor or terminal owns input. Q/Shift+Q follows the saved order. The project selector shows the current selection and a separate New project section; cancelling its dialog creates nothing.
 

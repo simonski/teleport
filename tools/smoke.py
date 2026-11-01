@@ -12,6 +12,7 @@ from navigation_browser import verify_navigation
 from ticket_browser import verify_ticket_keyboard
 from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
+from shell_polish_browser import verify_landing, verify_profile_dialogs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -88,6 +89,7 @@ def main():
                     browser("open", endpoint)
                     browser("wait", "--fn", "document.querySelector('#build-version')?.textContent===document.querySelector('meta[name=teleport-build-version]')?.content")
                     assert json.loads(browser("eval", "document.querySelector('#build-version').textContent")) == server_version
+                    verify_landing(browser)
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
@@ -134,6 +136,7 @@ def main():
                     browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
                     browser("eval", "if(document.querySelector('main h1,.board-heading>.eyebrow')||Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-59)>1)throw new Error('Shell is not compact');if(!document.querySelector('#javascript-console')||!document.querySelector('#harness-console'))throw new Error('Missing console buttons')")
                     browser("screenshot", "/tmp/teleport-shell.png")
+                    verify_profile_dialogs(browser)
                     browser("find", "role", "button", "click", "--name", "Settings", "--exact")
                     browser("eval", "if(document.querySelector('#editor h2')?.textContent!=='Settings'||document.querySelector('#execution-mode,#configure-repository,#edit-workflows')||document.querySelector('[aria-current=page]')?.dataset.view!=='Home')throw new Error('Settings is not a personal popup over Home')")
                     browser("screenshot", "/tmp/teleport-settings.png")

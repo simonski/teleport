@@ -23,7 +23,7 @@ import (
 const ReplayLimit = 2 << 20
 
 var ErrUnavailable = errors.New("local runtime is unavailable")
-var sessionID = regexp.MustCompile(`^H[1-9][0-9]{0,15}$`)
+var sessionID = regexp.MustCompile(`^[HJ][1-9][0-9]{0,15}$`)
 
 type Status struct {
 	ID         string     `json:"id"`
@@ -41,6 +41,7 @@ type Status struct {
 	Next       int64      `json:"next"`
 }
 type Launch struct {
+	Script     bool              `json:"script,omitempty"`
 	Native     bool              `json:"native,omitempty"`
 	Generation string            `json:"generation"`
 	ID         string            `json:"id"`
@@ -72,6 +73,7 @@ type Request struct {
 	Rows        uint16       `json:"rows,omitempty"`
 }
 type Response struct {
+	ScriptRuntime bool            `json:"scriptRuntime"`
 	RequestsGap   bool            `json:"requestsGap"`
 	Requests      []NativeRequest `json:"requests,omitempty"`
 	NativeReceipt *NativeReceipt  `json:"nativeReceipt,omitempty"`

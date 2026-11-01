@@ -2,6 +2,8 @@
 
 ## Local setup
 
+Building requires Go 1.26.1+, a C compiler with CGO enabled, Python 3 and Make. Node.js is used for development browser checks. The installed executable includes the JavaScript engine.
+
 Run `make build`, then `bin/tk init` and `bin/tk serve`. SQLite defaults to `~/.teleport/database.db`; `--db PATH` or `TELEPORT_DB` selects an isolated installation. The local server defaults to `localhost:9999`; `serve --addr HOST:PORT` overrides it. Repeated init preserves identity and credentials, refuses a running installation, and starts nothing.
 
 Sign in through the browser with initial `admin` / `password`. CLI login reads the password from standard input: `bin/tk login --password-stdin`. `TELEPORT_SERVER` selects the server; `TELEPORT_CONFIG` selects the private mode-0600 client credential file. All CLI operations except init and server hosting use HTTP APIs. `bin/tk logout` revokes that sign-in session.
@@ -14,11 +16,27 @@ Projects creates projects and their Unassigned hierarchy. New creates Goal/Epic/
 
 For example, `bin/tk createProject --data '{"name":"Flight","key":"flight","requestId":"create-flight-1"}'`, then `bin/tk createTicket --data '{"projectId":1,"title":"Pack case","agent":false,"requestId":"pack-1"}'`. Supply the current `expectedVersion` for edits/transitions. `bin/tk listTickets --data '{"projectId":1,"limit":100}'` reads a bounded page. `tk spec` publishes all shipped schemas.
 
-This is an incremental local implementation. Agents and registrations start disabled. Only operations listed by `tk tools` are shipped; unsupported actions fail explicitly. Published human and agent workflow definitions are seeded. Local PTY sessions and the Codex interpreter are available through explicit launch; live provider acceptance and automatic native workflow execution remain pending. Remote hosts, multi-user activation, external sign-in, application TUI, script automation and release publication remain future work. Private project-draft autosave and broad drag/layout controls remain pending. Never use demo evidence as proof of real code delivery.
+This is an incremental local implementation. Agents and registrations start disabled. Only operations listed by `tk tools` are shipped; unsupported actions fail explicitly. Published human and agent workflow definitions are seeded. Local PTY sessions, the Codex interpreter and bounded script automation are available through explicit launch; live provider acceptance and automatic native workflow execution remain pending. Remote hosts, multi-user activation, external sign-in, application TUI, command shorthands and release publication remain future work. Private project-draft autosave and broad drag/layout controls remain pending. Never use demo evidence as proof of real code delivery.
 
 Ticket details offer prerequisites, cancellation and permitted reopen/transfer/archive/delete controls. Visibility changes affect only that record; Settings → Hidden tickets provides restoration. Container cancellation affects unfinished descendants, while container reopening affects only the selection. Transfers require ownership (Maintainer) in both projects and refuse cross-project prerequisite links. Settings → Change password verifies the current password and signs out every session; repeat init never resets it.
 
 Settings → Workflow editor shows published definitions and drafts. New from this workflow creates a project-owned draft; edit phase titles, roles, instructions, agentic settings and outcome rules in the keyboard-accessible lists. Canvas node dragging saves layout only. Save draft before previewing a route or activating it for a selected project. Activation changes future tickets; existing Board sections retain their published version. The CLI also exposes stopped same-role migration.
+
+## JavaScript console
+
+Press `/` outside text entry to open the right-side console. Choose Script or Expression, enter source and press Run. Script mode supports variables, functions, loops, `await` and an explicit `return`; Expression mode returns the expression value. Tab completes a matching operation name inside `tk("…`. Available bindings appear in the console and `tk getScriptBindings`.
+
+```javascript
+const projects = await tk("listProjects", {});
+console.log(projects.items.map(project => project.name));
+return projects.items.length;
+```
+
+Runs receive stable `J1` IDs and private source/results. Escape, outside click and Detach close the viewer while the job continues. Reopen and select its history entry to reconnect. Logout also detaches; sign in again to inspect or confirm. Source edits prepare a new Run and do not rewrite an existing job.
+
+Scope acceptance, code decisions and human Done pause for an exact-action confirmation with current ticket/version context. Script code cannot confirm itself. Declining affects only that script action. Stop terminates the interpreter while preserving committed API effects and receipts. Failed or uncertain dispatch is never automatically repeated as a canonical mutation.
+
+Execution uses a bounded embedded engine without browser, shell, filesystem, database or arbitrary network bindings. The initial safe API subset is explicit; unsupported commands fail. Limits include 120 seconds, 64 MiB JavaScript heap, 128 calls and four live jobs. Source/results remain initiating-account private even from other administrators; administrators may inspect operational metadata and Stop. Expired authority, account suspension and unresolved process ownership prevent further dispatch.
 
 ## Local harnesses and demo workflow
 

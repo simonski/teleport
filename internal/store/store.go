@@ -214,6 +214,7 @@ func (s *Store) Update(ctx context.Context, fn func(*model.State) (bool, error))
 	if !changed {
 		return nil
 	}
+	st.WithdrawSuspendedPrivateExecutions()
 	st.Revision++
 	encoded, err := json.Marshal(st)
 	if err != nil {

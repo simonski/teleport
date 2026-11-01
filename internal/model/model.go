@@ -5,6 +5,8 @@ import "time"
 const SchemaVersion = 1
 
 type Account struct {
+	ServiceRunID     string `json:"-"`
+	ServiceCallID    string `json:"-"`
 	ServiceSessionID string `json:"-"`
 	ServiceProjectID int64  `json:"-"`
 	ID               string `json:"id"`
@@ -57,6 +59,8 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
+	NextScriptID       int64                     `json:"nextScriptId"`
+	ScriptRuns         map[string]ScriptRun      `json:"scriptRuns"`
 	NextLocalSessionID int64                     `json:"nextLocalSessionId"`
 	LocalSessions      map[string]LocalSession   `json:"localSessions"`
 	LocalInputs        map[string]LocalInput     `json:"localInputs"`
@@ -169,6 +173,8 @@ type Ticket struct {
 	UpdatedAt          time.Time    `json:"updatedAt"`
 }
 type Revision struct {
+	ScriptRunID   string    `json:"scriptRunId,omitempty"`
+	ScriptCallID  string    `json:"scriptCallId,omitempty"`
 	TransactionID int64     `json:"transactionId"`
 	Version       int64     `json:"version"`
 	Actor         string    `json:"actor"`

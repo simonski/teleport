@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"time"
@@ -54,6 +55,9 @@ func schemaType(t reflect.Type) map[string]any {
 	}
 	if t == reflect.TypeFor[time.Time]() {
 		return map[string]any{"type": "string", "format": "date-time"}
+	}
+	if t == reflect.TypeFor[json.RawMessage]() {
+		return map[string]any{}
 	}
 	switch t.Kind() {
 	case reflect.Struct:

@@ -29,6 +29,7 @@ type receipt struct {
 	Fingerprint string `json:"fingerprint"`
 }
 type entry struct {
+	Script           bool                           `json:"script,omitempty"`
 	Native           bool                           `json:"native,omitempty"`
 	NativeKey        string                         `json:"nativeKey,omitempty"`
 	NativeReleased   bool                           `json:"nativeReleased,omitempty"`
@@ -338,7 +339,7 @@ func (d *daemon) call(in Request) Response {
 		return Response{Error: "runtime_shutdown_pending"}
 	}
 	if in.Operation == "ping" {
-		return Response{Generation: d.generation}
+		return Response{Generation: d.generation, ScriptRuntime: true}
 	}
 	if in.Operation == "list" {
 		items := []Status{}
@@ -436,6 +437,9 @@ func (d *daemon) launch(in *Launch) Response {
 	if in == nil || !sessionID.MatchString(in.ID) || len(in.LaunchID) != 64 || !filepath.IsAbs(in.Program) || !filepath.IsAbs(in.Cwd) || !validSize(in.Cols, in.Rows) {
 		return Response{Error: "invalid_launch"}
 	}
+	if in.Script != strings.HasPrefix(in.ID, "J") || in.Script && in.Native {
+		return Response{Error: "invalid_launch_kind"}
+	}
 	client := New(d.root, "")
 	fingerprint, err := client.Fingerprint(in)
 	if err != nil {
@@ -453,14 +457,19 @@ func (d *daemon) launch(in *Launch) Response {
 	}
 	active := 0
 	for _, e := range d.entries {
-		if e.State != "exited" && e.State != "failed" {
+		if e.Script == in.Script && e.State != "exited" && e.State != "failed" {
 			active++
 		}
 	}
-	if active >= 16 || len(d.entries) >= 1000 {
+	limit := 16
+	if in.Script {
+		limit = 4
+	}
+	if active >= limit || len(d.entries) >= 1000 {
 		return Response{Error: "runtime_capacity_exhausted"}
 	}
 	e := &entry{Status: Status{ID: in.ID, LaunchID: in.LaunchID, Generation: d.generation, State: "starting", Cols: in.Cols, Rows: in.Rows, StartedAt: time.Now().UTC()}, Fingerprint: fingerprint, Receipts: map[int64]receipt{}}
+	e.Script = in.Script
 	d.entries[in.ID] = e
 	if in.Native {
 		e.Native = true

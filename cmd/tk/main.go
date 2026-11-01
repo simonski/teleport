@@ -21,6 +21,7 @@ import (
 
 	"teleport/internal/app"
 	"teleport/internal/localruntime"
+	"teleport/internal/scriptruntime"
 	"teleport/internal/server"
 	"teleport/internal/store"
 )
@@ -50,6 +51,16 @@ func run(args []string) error {
 		return nil
 	}
 	command := args[0]
+	if command == "_script-run" {
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		config := flags.String("config", "", "owned script configuration")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		return scriptruntime.RunFile(ctx, *config)
+	}
 	if command == "_codex-session" {
 		flags := flag.NewFlagSet(command, flag.ContinueOnError)
 		root := flags.String("runtime-dir", "", "owned runtime")
@@ -162,6 +173,9 @@ func run(args []string) error {
 				case <-stopCtx.Done():
 					return
 				case <-ticker.C:
+					if err := service.PumpScripts(stopCtx); err != nil && stopCtx.Err() == nil {
+						slog.Error("script reconciliation failed", "error", err)
+					}
 					if err := service.PumpLocal(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("local runtime reconciliation failed", "error", err)
 					}

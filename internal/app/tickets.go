@@ -136,7 +136,7 @@ func saveTicket(st *model.State, t *model.Ticket, a model.Account, action string
 		t.PhaseEnteredAt = t.CreatedAt
 	}
 	st.Tickets[t.ID] = *t
-	st.History[t.ID] = append(st.History[t.ID], model.Revision{Version: t.Version, Actor: a.ID, Action: action, At: t.UpdatedAt, Snapshot: *t, TransactionID: st.Revision + 1})
+	st.History[t.ID] = append(st.History[t.ID], model.Revision{Version: t.Version, Actor: a.ID, Action: action, At: t.UpdatedAt, Snapshot: *t, TransactionID: st.Revision + 1, ScriptRunID: a.ServiceRunID, ScriptCallID: a.ServiceCallID})
 }
 func allocate(st *model.State) int64 { st.NextTicketID++; return st.NextTicketID }
 func newTicket(st *model.State, p model.Project, a model.Account, kind, title string, agent, protected bool) model.Ticket {

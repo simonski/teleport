@@ -49,6 +49,11 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 	} else if a.ServiceSessionID != "" {
 		return nil, failure(403, "service_scope", "Managed context credentials cannot deliver or approve code")
 	}
+	if a, err := actor(st, token); err != nil {
+		return nil, err
+	} else if err = checkScriptDispatch(ctx, st, &a, operation, raw); err != nil {
+		return nil, err
+	}
 	if operation == "configureLocalRepository" {
 		return s.configureRepository(ctx, token, raw)
 	}

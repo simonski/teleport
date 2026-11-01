@@ -37,3 +37,13 @@ test('a late mutation response cannot close a replacement dialog or enter anothe
   await assert.rejects(pending, error => error.staleInteraction === true);
   assert.equal(dialog.open,true);
 });
+
+test('a late content read is rejected after actor or view invalidation',async()=>{
+  let release;
+  const context=vm.createContext({session:{account:{id:'first'}},loadGeneration:1,document:{querySelector:selector=>selector==='dialog[open]'?null:{}},workspace:async()=>{},fetch:()=>new Promise(resolve=>release=resolve)});
+  vm.runInContext(source('app.js'),context);
+  const pending=vm.runInContext("api('listWorkflows',{})",context);
+  vm.runInContext("session={account:{id:'second'}};loadGeneration++",context);
+  release({ok:true,json:async()=>({items:[{instructions:'first account private content'}]})});
+  await assert.rejects(pending,error=>error.staleInteraction===true);
+});

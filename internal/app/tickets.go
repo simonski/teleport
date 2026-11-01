@@ -160,7 +160,7 @@ func validContent(t model.Ticket) error {
 	}
 	for _, date := range []string{t.Start, t.ETA, t.Due} {
 		if date != "" {
-			if _, err := time.Parse("2006-01-02", date); err != nil {
+			if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Year() < 1 {
 				return failure(422, "invalid_date", "Use YYYY-MM-DD dates")
 			}
 		}
@@ -436,7 +436,7 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			if id <= after || role(st, a, t.ProjectID) == "" || in.ProjectID != 0 && t.ProjectID != in.ProjectID || !in.IncludeHidden && (t.Archived || t.Deleted) || in.Kind != "" && t.Kind != in.Kind || in.Agent != nil && t.Agent != *in.Agent || in.Status != "" && t.Status != in.Status {
 				continue
 			}
-			if in.Query != "" && !strings.Contains(strings.ToLower(t.Title+" "+t.Description), strings.ToLower(in.Query)) {
+			if !textMatches(t.Title+" "+t.Description+" "+strings.Join(t.Labels, " ")+" "+t.Kind+" "+t.Priority+" "+strconv.FormatInt(t.ID, 10), in.Query) {
 				continue
 			}
 			ids = append(ids, id)

@@ -30,6 +30,12 @@ Graph shows each project/ticket once, with hierarchy/dependency edges and dashed
 
 Settings offers Paper/Instrument styles, each in Light/Dark mode, plus personal sign-in defaults. Preferences synchronize without redirecting another open client or replacing foreground edits. Sign-out clears actor-bound presentation state. Cost currently explains the absence of observed provider usage; it reports no invented token or money total.
 
+## Calendar and Finder
+
+Edit a ticket's Start, ETA and Due dates, then open Calendar. Spans include both endpoints; containers show derived bounds without changing their saved dates. Default includes the previous week, current week and six following weeks. Week/month/quarter/year/full and due-date presets use calendar boundaries. Deadlines remain visible even when an earlier planned span is outside the window. Context ancestors retain hierarchy, and unscheduled work is counted separately. Custom colours and richer epic context menus remain pending.
+
+Choose Find or tap Shift twice outside text/foreground controls. Search a numeric ID (optional #) or all words, optionally scoped to a project. Exact ID/title and title prefixes rank ahead of metadata matches. Arrow keys choose a result; Enter opens it through normal ticket permissions. Preview is read-only, and More matches reads the next bounded page. Finder does not create or start work. Project create/edit commands and contextual creation shortcuts remain pending. Sign-out/account changes clear filter, record and layout caches.
+
 ## Goals and outcome reviews
 
 Goals and Epics use the same hierarchy IDs and child-based delivery rollups as Board/Graph. Open a goal to configure up to 20 success measures while it is Todo; cadence can be monthly or quarterly. Record human review freezes the current goal/objectives, direct-child versions and delivery snapshot, alongside observed values, evidence notes, sources, as-of dates and an explicit human assessment. Missing evidence remains visible; Done never implies the objective was achieved.

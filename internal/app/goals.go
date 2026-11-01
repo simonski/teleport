@@ -283,5 +283,5 @@ func goalOperations(st *model.State, a model.Account, operation string, raw json
 		remember(st, key, fingerprint, review)
 		return review, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return planningOperations(st, a, operation, raw)
 }

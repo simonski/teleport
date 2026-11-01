@@ -4,9 +4,17 @@
 
 Specification D47–D53/A174–A181 defines the approved target; only discovery-listed operations are shipped. Existing seeds remain immutable, and the revised Typo/Verify default needs its own verified delivery slice.
 
-The first shell slice adds no new domain-mutation operation. Personal Settings composes current appearance/view-preference/account operations; System composes permitted installation operations with canonical confirmations. Repository configuration stays project-scoped. Opening/dismissing a popup preserves the underlying view and active session. The server renders an escaped `teleport-build-version` meta value from its actual build identity for the persistent footer. Console icons open the existing JavaScript viewer and authorized harness selector; opening/reconnecting alone never launches a model. Navigation-layout and workflow-field schemas will be frozen in their own slices before implementation.
+The first shell slice adds no new domain-mutation operation. Personal Settings composes current appearance/view-preference/account operations; System composes permitted installation operations with canonical confirmations. Repository configuration stays project-scoped. Opening/dismissing a popup preserves the underlying view and active session. The server renders an escaped `teleport-build-version` meta value from its actual build identity for the persistent footer. Console icons open the existing JavaScript viewer and authorized harness selector; opening/reconnecting alone never launches a model. Navigation layout follows the contract below; workflow-field schemas will be frozen in their own slice before implementation.
 
 Settings/System are not navigation destinations. Legacy stored Settings sign-in defaults read as Home, with popup-only recent contexts omitted; reads do not rewrite the stored version. New navigation writes reject Settings as `invalid_view`; an ordinary successful preference change retains the normalized Home destination.
+
+### Navigation layout
+
+`Preferences` adds `navigationOrder:string[]`, `navigationPosition:"top"|"left"|"right"` and `navigationCollapsed:boolean`, defaulting to the D47 canonical twelve-view order, top and false. These are private account preferences; unsupported target views remain hidden until delivered. Reads normalize missing legacy values without a version bump. Settings/System are popups and never members of this order.
+
+`saveViewPreferences` accepts optional additive fields with those names; omission/null preserves the saved field so older clients cannot reset layout. An explicit order must be a complete, unique permutation of the twelve canonical view IDs, including not-yet-delivered views; unknown/duplicate/missing IDs return 422 without mutation. Position accepts only the three declared values. Current expected preference version is mandatory; an identical save preserves version, and stale saves return `preference_conflict`. Existing default-view/project/recent validation and current resource rights remain unchanged.
+
+The browser renders only usable views in saved order. Drag and Alt+Shift+Arrow reordering move stable view IDs; surrounding tabs animate unless reduced motion is requested. Pointer cancellation/Escape rolls back an unfinished drag without saving. Side collapse and position changes persist independently of current view/project. Apply layout/order by moving existing navigation nodes, preserving content, focus, active terminals and unsaved fields. Defer remote layout changes while a foreground interaction owns input; own explicit edits may preview their pending values. Actor changes clear pending navigation state. Save conflicts retain the local draft and expose Retry rather than silently overwriting another device.
 
 ## Transport
 

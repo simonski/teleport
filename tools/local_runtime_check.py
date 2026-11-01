@@ -129,9 +129,15 @@ def main():
             browser("wait", "--fn", "terminalView?.terminal.buffer.active.getLine(terminalView.terminal.buffer.active.cursorY)?.translateToString(true)!==undefined")
             wait_for(lambda: read().count("Fixture direction?") >= 2 if args.native_fixture else "received: from browser" in read())
             browser("wait", "--fn", "terminalView&&!terminalView.sending&&terminalView.queue.length===0")
+            browser("eval", "window.navigationTerminal=terminalView;true")
+            preferences = tk("getViewPreferences")
+            tk("saveViewPreferences", {"expectedVersion": preferences["version"], "defaultView": preferences["defaultView"], "defaultProject": preferences["defaultProject"], "recent": preferences["recent"], "navigationPosition": "left"})
+            browser("wait", "--fn", "preferences.navigationPosition==='left'")
+            browser("eval", "if(terminalView!==window.navigationTerminal||document.documentElement.dataset.navigation!=='top')throw new Error('Remote navigation disturbed the attached terminal')")
             interventions = len(tk("listSessionInterventions", {"id": session_id})["items"])
             browser("press", "Escape")
             browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+            browser("wait", "--fn", "document.documentElement.dataset.navigation==='left'")
             assert len(tk("listSessionInterventions", {"id": session_id})["items"]) == interventions
             browser("wait", f'#session-icons [data-session="{session_id}"]')
             browser("click", f'#session-icons [data-session="{session_id}"]')
@@ -181,6 +187,7 @@ def main():
                 browser("press", "Escape")
                 browser("find", "role", "button", "click", "--name", "Board", "--exact")
                 browser("wait", f'[data-ticket-card="{ticket["id"]}"] .needs-attention')
+                browser("wait", "#harness-console.needs-attention")
                 browser("click", f'[data-ticket-card="{ticket["id"]}"] .ticket-open')
                 browser("wait", '[data-native-request]')
                 # The custom select delegates its value to the hidden form field.

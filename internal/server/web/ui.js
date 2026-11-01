@@ -81,12 +81,17 @@ function enhanceSelect(select) {
     list.style.width = `${width}px`; list.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`;
     let active = Math.max(0, select.selectedIndex);
     const options = [...select.options];
+    const groups=new Map();
     options.forEach((option, index) => {
       if (option.hidden) return;
       const row = document.createElement('button'); row.type = 'button'; row.setAttribute('role', 'option'); row.dataset.value = option.value;
       row.textContent = option.textContent; row.disabled = option.disabled || !!option.closest('optgroup:disabled'); row.setAttribute('aria-selected', String(option.selected)); row.tabIndex = -1;
       row.onclick = () => {select.value = option.value; select.dispatchEvent(new Event('input', {bubbles:true}));select.dispatchEvent(new Event('change', {bubbles:true}));dismissChoice(true);};
-      list.append(row);
+      const group=option.parentElement;
+      if(group?.tagName==='OPTGROUP'){
+        if(!groups.has(group)){const container=document.createElement('div');container.className='choice-group';container.setAttribute('role','group');container.setAttribute('aria-label',group.label);const title=document.createElement('div');title.className='choice-group-title';title.textContent=group.label;title.setAttribute('aria-hidden','true');container.append(title);list.append(container);groups.set(group,container);}
+        groups.get(group).append(row);
+      }else list.append(row);
     });
     const available = [...list.querySelectorAll('button:not(:disabled)')];
     const selected = list.querySelector('[aria-selected="true"]'); active = Math.max(0, available.indexOf(selected));

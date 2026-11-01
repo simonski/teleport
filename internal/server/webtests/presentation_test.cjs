@@ -21,7 +21,7 @@ function fixture(source) {
   return { context, handlers, elements, run: code => vm.runInContext(code, context), release: result => release(result) };
 }
 
-for (const [control, field, value] of [['appearance-style', 'style', 'instrument'], ['preference-view', 'defaultView', 'Board']]) {
+for (const [control, field, value] of [['appearance-style', 'style', 'instrument'], ['preference-view', 'defaultView', 'Board'], ['navigation-position','navigationPosition','left']]) {
   test(`${control} discards a delayed response after account switch`, async () => {
     const f = fixture('presentation.js');
     f.run("preferences={version:1,style:'paper',mode:'light',recent:[]};bindPresentation();");

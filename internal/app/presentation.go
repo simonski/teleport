@@ -52,10 +52,13 @@ type AppearanceInput struct {
 	Mode            string `json:"mode"`
 }
 type ViewPreferencesInput struct {
-	ExpectedVersion int64                 `json:"expectedVersion"`
-	DefaultView     string                `json:"defaultView"`
-	DefaultProject  int64                 `json:"defaultProject"`
-	Recent          []model.RecentContext `json:"recent"`
+	ExpectedVersion     int64                 `json:"expectedVersion"`
+	DefaultView         string                `json:"defaultView"`
+	DefaultProject      int64                 `json:"defaultProject"`
+	Recent              []model.RecentContext `json:"recent"`
+	NavigationOrder     *[]string             `json:"navigationOrder,omitempty"`
+	NavigationPosition  *string               `json:"navigationPosition,omitempty"`
+	NavigationCollapsed *bool                 `json:"navigationCollapsed,omitempty"`
 }
 type AppearanceStyles struct {
 	Styles []string `json:"styles"`
@@ -202,6 +205,10 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	}
 	if p.DefaultView == "Settings" {
 		p.DefaultView = "Home"
+	}
+	p.NavigationOrder = normalizeNavigationOrder(p.NavigationOrder)
+	if !contains([]string{"top", "left", "right"}, p.NavigationPosition) {
+		p.NavigationPosition = "top"
 	}
 	if p.DefaultProject != 0 && role(st, a, p.DefaultProject) == "" {
 		p.DefaultProject = 0
@@ -350,6 +357,21 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 				}
 			}
 			p.DefaultView, p.DefaultProject, p.Recent = in.DefaultView, in.DefaultProject, append([]model.RecentContext{}, in.Recent...)
+			if in.NavigationOrder != nil {
+				if !validNavigationOrder(*in.NavigationOrder) {
+					return nil, false, failure(422, "invalid_navigation", "Provide each canonical view exactly once")
+				}
+				p.NavigationOrder = append([]string{}, (*in.NavigationOrder)...)
+			}
+			if in.NavigationPosition != nil {
+				if !contains([]string{"top", "left", "right"}, *in.NavigationPosition) {
+					return nil, false, failure(422, "invalid_navigation", "Choose top, left or right navigation")
+				}
+				p.NavigationPosition = *in.NavigationPosition
+			}
+			if in.NavigationCollapsed != nil {
+				p.NavigationCollapsed = *in.NavigationCollapsed
+			}
 		}
 		if reflect.DeepEqual(old, p) {
 			return p, false, nil

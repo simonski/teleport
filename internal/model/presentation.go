@@ -15,10 +15,13 @@ type RecentContext struct {
 	TicketID  int64  `json:"ticketId,omitempty"`
 }
 type Preferences struct {
-	Version        int64           `json:"version"`
-	Style          string          `json:"style"`
-	Mode           string          `json:"mode"`
-	DefaultView    string          `json:"defaultView"`
-	DefaultProject int64           `json:"defaultProject"`
-	Recent         []RecentContext `json:"recent"`
+	Version             int64           `json:"version"`
+	Style               string          `json:"style"`
+	Mode                string          `json:"mode"`
+	DefaultView         string          `json:"defaultView"`
+	DefaultProject      int64           `json:"defaultProject"`
+	Recent              []RecentContext `json:"recent"`
+	NavigationOrder     []string        `json:"navigationOrder"`
+	NavigationPosition  string          `json:"navigationPosition"`
+	NavigationCollapsed bool            `json:"navigationCollapsed"`
 }

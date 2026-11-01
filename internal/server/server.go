@@ -192,7 +192,7 @@ func openAPI(version string) map[string]any {
 		post["requestBody"] = map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": schema(definition.Input)}}}
 		responses := post["responses"].(map[string]any)
 		responses["200"] = map[string]any{"description": "Operation result", "content": map[string]any{"application/json": map[string]any{"schema": schema(definition.Output)}}}
-		for _, code := range []string{"400", "401", "403", "404", "409", "413", "415", "429", "500"} {
+		for _, code := range []string{"400", "401", "403", "404", "409", "413", "415", "422", "429", "500"} {
 			responses[code] = map[string]any{"description": "Operation error", "content": map[string]any{"application/json": map[string]any{"schema": schema(struct {
 				Error app.Error `json:"error"`
 			}{})}}}
@@ -201,7 +201,7 @@ func openAPI(version string) map[string]any {
 			post["security"] = []any{}
 		}
 	}
-	for _, path := range []string{"/healthz", "/openapi.json", "/api/actions", "/skill.md", "/", "/app.js", "/workspace.js", "/controls.js", "/workflows.js", "/agents.js", "/delivery.js", "/style.css", "/workflows.css", "/agents.css", "/delivery.css", "/shell.js", "/shell.css"} {
+	for _, path := range []string{"/healthz", "/openapi.json", "/api/actions", "/skill.md", "/", "/app.js", "/workspace.js", "/controls.js", "/workflows.js", "/agents.js", "/delivery.js", "/style.css", "/workflows.css", "/agents.css", "/delivery.css", "/shell.js", "/shell.css", "/navigation.js", "/navigation.css"} {
 		paths[path] = map[string]any{"get": map[string]any{"responses": map[string]any{"200": map[string]string{"description": "Public application asset or discovery"}}}}
 	}
 	return map[string]any{"openapi": "3.1.0", "info": map[string]string{"title": "teleport", "version": version}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"session": map[string]string{"type": "apiKey", "in": "cookie", "name": "teleport_session"}, "bearer": map[string]string{"type": "http", "scheme": "bearer"}}}}

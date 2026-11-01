@@ -63,6 +63,29 @@ function syncRuntimeLabel() {
   if(label)label.textContent='/ '+(session.settings.executionMode==='demo'?'DEMO · simulated':'agents off');
 }
 
+function syncConsoleAttention(){
+  const button=byId('harness-console');if(!button)return;
+  const count=localSessions.filter(row=>runningSession(row)&&(row.attention||row.errorCode)).length;
+  button.classList.toggle('needs-attention',count>0);
+  button.setAttribute('aria-label',count?`Harness sessions · ${count} require attention`:'Harness sessions');
+}
+
+function captureShellFocus(){
+  const element=document.activeElement,actor=session?.account.id,generation=loadGeneration;
+  let selector='';
+  if(element?.closest('#nav-views')&&element.dataset.view)selector=`#nav-views [data-view="${CSS.escape(element.dataset.view)}"]`;
+  else if(element?.closest('.topbar')){
+    if(element.id)selector='#'+CSS.escape(element.id);
+    else if(element.dataset.session)selector=`#session-icons [data-session="${CSS.escape(element.dataset.session)}"]`;
+    else if(element.classList.contains('choice-button')&&element.previousElementSibling?.id==='project')selector='#project + .choice-button';
+  }
+  return ()=>{
+    if(!selector)return;
+    const restore=()=>{if(session?.account.id===actor&&loadGeneration===generation&&document.activeElement===document.body)root.querySelector(selector)?.focus({preventScroll:true});};
+    restore();queueMicrotask(restore);
+  };
+}
+
 function bindShell() {
   const menu=byId('account-menu'),settings=byId('account-settings');
   if(menu&&settings){
@@ -80,6 +103,7 @@ function bindShell() {
     sessions.before(consoles);
     on('javascript-console','click',()=>openScriptConsole().catch(showError));
     on('harness-console','click',()=>sessionSwitcher().catch(showError));
+    syncConsoleAttention();
   }
   const main=root.querySelector('main');main?.setAttribute('aria-label',view);
   for(const row of root.querySelectorAll('.page-heading,.board-heading')){

@@ -223,7 +223,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	return p
 }
 func validRecent(st *model.State, a model.Account, c model.RecentContext) error {
-	if !contains([]string{"Home", "Board", "Todos", "Goals", "Epics", "Calendar", "Graph", "Ideas", "Cost", "Projects"}, c.View) {
+	if !contains([]string{"Home", "Board", "Todos", "Goals", "Epics", "Calendar", "Graph", "Workflows", "Ideas", "Cost", "Projects"}, c.View) {
 		return failure(422, "invalid_view", "Choose a shipped workspace view")
 	}
 	if c.ProjectID != 0 {

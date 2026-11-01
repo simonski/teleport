@@ -19,6 +19,7 @@ function clearPresentation() {
   if (typeof resetProjectDirectory === 'function') resetProjectDirectory();
   if (typeof dismissTicketMenu === 'function') dismissTicketMenu();
   if (typeof resetWorkflowPublication === 'function') resetWorkflowPublication();
+  if (typeof resetWorkflowView === 'function') resetWorkflowView();
   leaveGraph(); graphCameras.clear(); graphData=null;graphPending={};graphQuery='';graphKind='';calendarState={date:'',period:'default',duePeriod:'',query:''};calendarDirty=false;calendarEpoch++;selected=null;workflowMap={};flow=null;flows=[];flowDirty=false;flowDrag=null;resetShift();projects=[];tickets=[];ideas=[];root.replaceChildren();notice('');session=null;preferences=null;preferencesActor='';initialNavigation=true;appearanceDirty=false;navigationDirty=false;
   clearTimeout(preferenceTimer);preferenceDraft={};preferenceError='';preferenceConflict=false;preferenceSaving=false;
   document.documentElement.removeAttribute('data-style');document.documentElement.removeAttribute('data-mode');
@@ -72,6 +73,7 @@ async function flushPreferenceSave() {
   }
 }
 function bindPresentation() {
+  const defaults=byId('preference-view');if(defaults&&typeof supportedNavigation!=='undefined')defaults.innerHTML=supportedNavigation.map(name=>`<option ${(preferenceDraft.defaultView??preferences?.defaultView)===name?'selected':''}>${name}</option>`).join('');
   for(const [id,field] of [['appearance-style','style'],['appearance-mode','mode'],['preference-view','defaultView'],['preference-project','defaultProject'],['navigation-position','navigationPosition']])on(id,'change',e=>queuePreferenceSave(field,field==='defaultProject'?Number(e.target.value):e.target.value));
   on('preference-retry','click',retryPreferenceSave);
   on('navigation-reset','click',()=>{queuePreferenceSave('navigationOrder',[...canonicalNavigation]);queuePreferenceSave('navigationPosition','top');queuePreferenceSave('navigationCollapsed',false);if(byId('navigation-position'))byId('navigation-position').value='top';});

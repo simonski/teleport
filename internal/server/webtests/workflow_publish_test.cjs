@@ -15,10 +15,12 @@ function fixture(){
 test('publication retry after a lost response retains its exact durable request identity',async()=>{
   const f=fixture(),first=f.run('publishFlow()');
   f.pending[0].reject(new Error('Response lost'));await first;
+  assert.ok(f.run('workflowPublicationRecovery'));
   const second=f.run('publishFlow()');
   assert.deepEqual(f.requests[0],f.requests[1]);
   f.pending[1].resolve({id:'flow-a',version:1,published:true,draftRevision:0});await second;
   assert.equal(f.context.flow.version,1);assert.match(f.status.textContent,/Published v-1/);
+  assert.equal(f.run('workflowPublicationRecovery'),null);
 });
 
 test('a late publication cannot replace a closed editor or another selected workflow',async()=>{

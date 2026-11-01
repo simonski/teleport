@@ -86,18 +86,19 @@ def main():
                     browser("click", "#account-welcome")
                     browser("click", '#editor button[type="submit"]')
                     browser("wait", '#editor [name="projectId"]')
+                    browser("fill", '#editor [name="projectName"]', " smoke   FLIGHT ")
+                    browser("wait", "--fn", "document.querySelector('#welcome-project-status')?.innerText.includes('Project name already exists')")
+                    assert len(json.loads(tk("listProjects"))["items"]) == 1
                     browser("fill", '#editor [name="projectName"]', "Welcome project")
-                    browser("fill", '#editor [name="projectKey"]', "welcome-project")
-                    browser("eval", "{const original=window.fetch;let lose=true;window.fetch=async(...args)=>{const response=await original(...args);if(lose&&String(args[0]).endsWith('/createProject')){lose=false;throw new Error('Simulated lost project response');}return response;};}")
+                    browser("wait", "--fn", "document.querySelector('#editor [name=projectKey]')?.value==='welc'")
+                    browser("screenshot", "/tmp/teleport-welcome-project.png")
                     browser("click", '#editor button[type="submit"]')
-                    browser("wait", "--fn", "document.querySelector('#welcome-status')?.innerText.includes('Simulated lost project response')")
+                    browser("wait", '#editor [name="harness"]')
+                    assert len(json.loads(tk("listProjects"))["items"]) == 1
+                    browser("eval", "if(document.querySelector('[name=repository],[name=storageRoot],#welcome-grant'))throw new Error('Wizard still requests filesystem access')")
                     browser("press", "Escape")
                     browser("click", "#account")
                     browser("click", "#account-welcome")
-                    browser("wait", '#editor [name="projectName"]')
-                    browser("click", '#editor button[type="submit"]')
-                    browser("wait", '#editor [name="repository"]')
-                    browser("click", '#editor button[type="submit"]')
                     browser("wait", '#editor [name="harness"]')
                     browser("select", '#editor [name="harness"]', "codex")
                     browser("click", '#editor button[type="submit"]')
@@ -105,6 +106,11 @@ def main():
                     browser("select", '#editor [name="attention"]', "quiet")
                     browser("click", '#editor button[type="submit"]')
                     browser("wait", ".setup-summary")
+                    assert len(json.loads(tk("listProjects"))["items"]) == 1
+                    browser("eval", "{const original=window.fetch;let lose=true;window.welcomeTrace=[];window.fetch=async(...args)=>{const stack=new Error().stack;const response=await original(...args);if(/WelcomeSetup$/.test(String(args[0])))window.welcomeTrace.push({op:String(args[0]),input:JSON.parse(args[1].body),stack,status:response.status,result:await response.clone().json()});if(lose&&String(args[0]).endsWith('/completeWelcomeSetup')){lose=false;throw new Error('Simulated lost completion response');}return response;};}")
+                    browser("click", '#editor button[type="submit"]')
+                    browser("wait", "--fn", "document.querySelector('#welcome-status')?.innerText.includes('Simulated lost completion response')")
+                    assert len(json.loads(tk("listProjects"))["items"]) == 2
                     browser("click", '#editor button[type="submit"]')
                     browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                     setup = json.loads(tk("getWelcomeSetup"))["setup"]
@@ -362,6 +368,7 @@ def main():
                 except Exception:
                     print(browser("snapshot", "-i"))
                     print(browser("eval", "document.querySelector('#notice')?.innerText"))
+                    print(browser("eval", "({welcomeStatus:document.querySelector('#welcome-status')?.innerText,trace:window.welcomeTrace})"))
                     browser("screenshot", "/tmp/teleport-failure.png")
                     print(browser("errors"))
                     raise

@@ -51,12 +51,21 @@ func welcomeSetup(st *model.State, a model.Account) model.WelcomeSetup {
 func welcomeOperations(st *model.State, a model.Account, operation string, raw json.RawMessage) (any, bool, error) {
 	w := welcomeSetup(st, a)
 	switch operation {
+	case "checkProjectAvailability":
+		var in ProjectAvailabilityInput
+		if err := parse(raw, &in); err != nil {
+			return nil, false, err
+		}
+		if len(in.Name) > 200 || len(in.Key) > 80 || strings.ContainsRune(in.Name+in.Key, 0) {
+			return nil, false, failure(422, "invalid_project", "Provide a project name and prefix within the field limits")
+		}
+		return projectAvailability(st, in), false, nil
 	case "getWelcomeSetup":
 		if err := parse(raw, &struct{}{}); err != nil {
 			return nil, false, err
 		}
 		_, err := exec.LookPath("codex")
-		return WelcomeSetupResult{Setup: w, CanCreateProject: true, CanBindRepository: a.Administrator && len(st.Accounts) == 1, Harnesses: []HarnessChoice{{ID: "codex", Title: "Codex", Available: err == nil}}}, false, nil
+		return WelcomeSetupResult{Setup: w, CanCreateProject: true, Harnesses: []HarnessChoice{{ID: "codex", Title: "Codex", Available: err == nil}}}, false, nil
 	case "saveWelcomeSetup":
 		var in SaveWelcomeSetupInput
 		if err := parse(raw, &in); err != nil {
@@ -84,7 +93,7 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 		w.Version++
 		w.Step, w.ProjectID = in.Step, in.ProjectID
 		w.ProjectName, w.ProjectKey = in.ProjectName, in.ProjectKey
-		w.Repository, w.StorageRoot = in.Repository, in.StorageRoot
+		w.Repository, w.StorageRoot = "", ""
 		w.Harness, w.Attention = in.Harness, in.Attention
 	case "completeWelcomeSetup":
 		var in CompleteWelcomeSetupInput
@@ -97,18 +106,22 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 		if w.Completed {
 			return w, false, nil
 		}
-		if in.ExpectedVersion != w.Version || w.Step != 5 || w.ProjectID == 0 {
+		if in.ExpectedVersion != w.Version || w.Step != 5 {
 			return nil, false, failure(409, "welcome_conflict", "Select a project and review the current setup before completion")
+		}
+		if w.ProjectID == 0 {
+			input, _ := json.Marshal(CreateProjectInput{Name: w.ProjectName, Key: w.ProjectKey, RequestID: "welcome-project-" + w.ID})
+			result, _, err := projectOperations(st, a, "createProject", input)
+			if err != nil {
+				return nil, false, err
+			}
+			p := result.(model.Project)
+			w.ProjectID, w.ProjectName, w.ProjectKey = p.ID, p.Name, p.Key
 		}
 		if err := require(st, a, w.ProjectID, "Viewer"); err != nil {
 			return nil, false, err
 		}
-		if w.Repository != "" || w.StorageRoot != "" {
-			binding := st.Projects[w.ProjectID].Repository
-			if binding == nil || binding.Repository != w.Repository || binding.StorageRoot != w.StorageRoot {
-				return nil, false, failure(409, "binding_required", "Grant the displayed repository roots or return to skip repository setup")
-			}
-		}
+		w.Repository, w.StorageRoot = "", ""
 		w.Completed = true
 		w.Version++
 	default:

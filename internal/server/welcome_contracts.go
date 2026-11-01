@@ -11,6 +11,7 @@ func init() {
 		input, output any
 	}{
 		{"getWelcomeSetup", "Read private Welcome progress and local setup capabilities", struct{}{}, app.WelcomeSetupResult{}},
+		{"checkProjectAvailability", "Check project name/prefix availability without disclosing projects", app.ProjectAvailabilityInput{}, app.ProjectAvailability{}},
 		{"saveWelcomeSetup", "Save bounded private Welcome progress without starting execution", app.SaveWelcomeSetupInput{}, model.WelcomeSetup{}},
 		{"completeWelcomeSetup", "Complete the reviewed setup without enabling execution", app.CompleteWelcomeSetupInput{}, model.WelcomeSetup{}},
 	}

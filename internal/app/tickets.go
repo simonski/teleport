@@ -311,6 +311,9 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			return p, false, nil
 		}
 		for _, p := range st.Projects {
+			if sameProjectName(p.Name, in.Name) {
+				return nil, false, failure(409, "project_name_exists", "Project name already exists")
+			}
 			if p.Key == in.Key {
 				return nil, false, failure(409, "project_exists", "Project key already exists")
 			}

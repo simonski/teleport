@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 func TestWelcomeProgressIsPrivateVersionedAndStartsNothing(t *testing.T) {
 	svc, token, db := fixtureWithStore(t)
 	initial := call(t, svc, token, "getWelcomeSetup", struct{}{}).(app.WelcomeSetupResult)
-	if initial.Setup.Version != 0 || initial.Setup.Completed || !initial.CanBindRepository {
+	if initial.Setup.Version != 0 || initial.Setup.Completed || initial.CanBindRepository {
 		t.Fatal("invalid fresh setup", initial)
 	}
 	in := app.SaveWelcomeSetupInput{Step: 1, ProjectName: "Private setup", ProjectKey: "private-setup", Harness: "codex", Attention: "quiet"}
@@ -67,12 +68,9 @@ func TestWelcomeCompletionRequiresCurrentBasisAndIsRetrySafe(t *testing.T) {
 	p := call(t, svc, token, "createProject", app.CreateProjectInput{Name: "Welcome project", RequestID: "welcome-project"}).(model.Project)
 	in := app.SaveWelcomeSetupInput{Step: 5, ProjectID: p.ID, Repository: "/not/granted", StorageRoot: "/not/granted-worktrees", Harness: "codex", Attention: "questions"}
 	w := call(t, svc, token, "saveWelcomeSetup", in).(model.WelcomeSetup)
-	raw, _ := json.Marshal(app.CompleteWelcomeSetupInput{ExpectedVersion: w.Version, Confirm: true})
-	if _, err := svc.Call(context.Background(), token, "completeWelcomeSetup", raw); err == nil || app.ErrorResponse(err).Code != "binding_required" {
-		t.Fatal("ungranted filesystem basis completed", err)
+	if w.Repository != "" || w.StorageRoot != "" {
+		t.Fatal("legacy paths retained in setup", w)
 	}
-	in.ExpectedVersion, in.Repository, in.StorageRoot = w.Version, "", ""
-	w = call(t, svc, token, "saveWelcomeSetup", in).(model.WelcomeSetup)
 	finish := app.CompleteWelcomeSetupInput{ExpectedVersion: w.Version, Confirm: true}
 	done := call(t, svc, token, "completeWelcomeSetup", finish).(model.WelcomeSetup)
 	replayed := call(t, svc, token, "completeWelcomeSetup", finish).(model.WelcomeSetup)
@@ -82,5 +80,76 @@ func TestWelcomeCompletionRequiresCurrentBasisAndIsRetrySafe(t *testing.T) {
 	st, err := db.Read(context.Background())
 	if err != nil || len(st.Projects) != 1 || st.Settings.Agents || st.Projects[p.ID].Repository != nil {
 		t.Fatal("completion created an implicit grant/start", err)
+	}
+}
+
+func TestWelcomeCreatesOnlyAtFinalCompletionAndRechecksName(t *testing.T) {
+	svc, token, db := fixtureWithStore(t)
+	in := app.SaveWelcomeSetupInput{Step: 5, ProjectName: "Teleport", ProjectKey: "tele", Harness: "codex", Attention: "questions"}
+	w := call(t, svc, token, "saveWelcomeSetup", in).(model.WelcomeSetup)
+	st, _ := db.Read(context.Background())
+	if len(st.Projects) != 0 {
+		t.Fatal("draft published a project")
+	}
+	call(t, svc, token, "createProject", app.CreateProjectInput{Name: " TELEPORT ", Key: "taken", RequestID: "concurrent"})
+	raw, _ := json.Marshal(app.CompleteWelcomeSetupInput{ExpectedVersion: w.Version, Confirm: true})
+	if _, err := svc.Call(context.Background(), token, "completeWelcomeSetup", raw); err == nil || app.ErrorResponse(err).Code != "project_name_exists" {
+		t.Fatal("concurrent name collision not rejected", err)
+	}
+	st, _ = db.Read(context.Background())
+	if len(st.Projects) != 1 || st.WelcomeSetups["admin"].Completed {
+		t.Fatal("failed completion had partial effects")
+	}
+	in.ExpectedVersion, in.ProjectName, in.ProjectKey = w.Version, "New project", "newp"
+	w = call(t, svc, token, "saveWelcomeSetup", in).(model.WelcomeSetup)
+	done := call(t, svc, token, "completeWelcomeSetup", app.CompleteWelcomeSetupInput{ExpectedVersion: w.Version, Confirm: true}).(model.WelcomeSetup)
+	retried := call(t, svc, token, "completeWelcomeSetup", app.CompleteWelcomeSetupInput{ExpectedVersion: w.Version, Confirm: true}).(model.WelcomeSetup)
+	st, _ = db.Read(context.Background())
+	if done != retried || !done.Completed || len(st.Projects) != 2 || st.Projects[done.ProjectID].Repository != nil {
+		t.Fatal("final creation was not atomic/retry-safe", done, retried)
+	}
+}
+
+func TestProjectNameAvailabilityPrefixesAndConcurrentCreation(t *testing.T) {
+	svc, token, _ := fixtureWithStore(t)
+	for _, in := range []app.CreateProjectInput{{Name: "Teleport", Key: "tele", RequestID: "one"}, {Name: "Other", Key: "tel1", RequestID: "two"}} {
+		call(t, svc, token, "createProject", in)
+	}
+	for _, tc := range []struct {
+		name, key, suggestion string
+		available             bool
+	}{
+		{"  TELEPORT ", "new", "tel2", false}, {"Television", "new", "tel2", true}, {"Tiny name", "new", "tiny", true}, {"🚀", "new", "proj", true},
+	} {
+		r := call(t, svc, token, "checkProjectAvailability", app.ProjectAvailabilityInput{Name: tc.name, Key: tc.key}).(app.ProjectAvailability)
+		if r.NameAvailable != tc.available || r.SuggestedKey != tc.suggestion || !r.KeyAvailable {
+			t.Fatal(tc, r)
+		}
+	}
+	var wg sync.WaitGroup
+	errors := make(chan error, 2)
+	for _, key := range []string{"race1", "race2"} {
+		wg.Add(1)
+		go func(key string) {
+			defer wg.Done()
+			raw, _ := json.Marshal(app.CreateProjectInput{Name: "Race project", Key: key, RequestID: key})
+			_, err := svc.Call(context.Background(), token, "createProject", raw)
+			errors <- err
+		}(key)
+	}
+	wg.Wait()
+	close(errors)
+	successes, conflicts := 0, 0
+	for err := range errors {
+		if err == nil {
+			successes++
+		} else if app.ErrorResponse(err).Code == "project_name_exists" {
+			conflicts++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatal("duplicate concurrent names", successes, conflicts)
 	}
 }

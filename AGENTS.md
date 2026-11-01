@@ -13,6 +13,8 @@ Place reusable development tools under `tools/`. Keep generated binaries and loc
 
 Executable tools append UTC start/end times, monotonic durations, outcomes and exit codes to ignored `tool_calls_history.csv`. Python and Go writers share a process lock. Arguments, environment values and exception messages are excluded. `TELEPORT_TOOL_HISTORY` selects an isolated history path for tests. An `exec` launcher records `handoff` before replacing itself; that row does not assert the native process's eventual outcome.
 
+Run `python3 tool/timing.py` to print each recorded invocation and its duration in seconds. Supply a CSV path as the optional positional argument to inspect another history file.
+
 ## Requirements & Architecture
 
 Read the authority and change-control rules in `SPECIFICATION.md` before proposing changes. Distinguish requirements, engineering-owned contracts, and open choices. Workflows are directed graphs with configurable outcome rules and backward routes; preserve finite attempts and human approval gates. Seed manual and agentic defaults. The specification alone does not authorize implementation, deployment, or destructive resets.

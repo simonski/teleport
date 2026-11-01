@@ -5,6 +5,7 @@ environment values or exception messages. TELEPORT_TOOL_HISTORY selects a differ
 CSV for isolated tests. Process replacement records an explicit handoff outcome.
 """
 import csv
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -18,7 +19,8 @@ FIELDS = ("invocation_id", "tool", "started_at", "finished_at", "duration_second
 _current = None
 
 
-def append_record(path, row):
+@contextmanager
+def locked_history(path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with Path(str(path) + ".lock").open("a+b") as lock:
@@ -30,19 +32,34 @@ def append_record(path, row):
             import fcntl
             fcntl.flock(lock, fcntl.LOCK_EX)
         try:
-            with path.open("a", newline="", encoding="utf-8") as output:
-                writer = csv.writer(output)
-                if output.tell() == 0:
-                    writer.writerow(FIELDS)
-                writer.writerow(row)
-                output.flush()
-                os.fsync(output.fileno())
+            yield
         finally:
             if os.name == "nt":
                 lock.seek(0)
                 msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def append_record(path, row):
+    path = Path(path)
+    with locked_history(path):
+        with path.open("a", newline="", encoding="utf-8") as output:
+            writer = csv.writer(output)
+            if output.tell() == 0:
+                writer.writerow(FIELDS)
+            writer.writerow(row)
+            output.flush()
+            os.fsync(output.fileno())
+
+
+def read_history(path):
+    """Read a complete snapshot while concurrent writers hold the same lock."""
+    path = Path(path)
+    with locked_history(path):
+        with path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source, strict=True)
+            return reader.fieldnames or [], list(reader)
 
 
 class Invocation:

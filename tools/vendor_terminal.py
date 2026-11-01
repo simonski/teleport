@@ -51,4 +51,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from tool_history import run
+    run(main)

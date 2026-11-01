@@ -17,12 +17,13 @@ sbom:
 test:
 	go test ./...
 lint:
-	@test -z "$$(gofmt -l cmd internal)"
+	@test -z "$$(gofmt -l cmd internal tools)"
 	go vet ./...
 	python3 -B tools/web_check.py
 check: lint
 	python3 -B tools/test_build.py
 	python3 -B tools/test_sbom.py
+	python3 -B tools/test_tool_history.py
 	python3 -B tools/spec_sources.py --verify
 	python3 -B tools/client_scope.py
 	go test -race ./...

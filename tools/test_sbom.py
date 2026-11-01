@@ -48,4 +48,5 @@ class SBOMTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    from tool_history import run
+    run(unittest.main)

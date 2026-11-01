@@ -510,4 +510,5 @@ def main():
         assert "Initialization complete" in tk("init")
 
 if __name__ == "__main__":
-    main()
+    from tool_history import run
+    run(main)

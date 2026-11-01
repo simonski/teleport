@@ -11,12 +11,23 @@ import (
 	"time"
 
 	"teleport/internal/localruntime"
+	"teleport/tools/toolhistory"
 )
 
+var history *toolhistory.Call
+
 func main() {
-	folder := flag.String("fixture", "", "explicit owned fixture directory")
-	stop := flag.Bool("stop", false, "request owned stops and idle shutdown")
-	flag.Parse()
+	history = toolhistory.Start("tools/runtime_cleanup")
+	defer history.End()
+	flags := flag.NewFlagSet("runtime_cleanup", flag.ContinueOnError)
+	folder := flags.String("fixture", "", "explicit owned fixture directory")
+	stop := flags.Bool("stop", false, "request owned stops and idle shutdown")
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		if err == flag.ErrHelp {
+			return
+		}
+		history.Exit(2)
+	}
 	if !filepath.IsAbs(*folder) || !strings.HasPrefix(filepath.Base(*folder), "teleport-terminal-proof-") && !strings.HasPrefix(filepath.Base(*folder), "teleport-script-proof-") && !strings.HasPrefix(filepath.Base(*folder), "teleport-workflow-proof-") {
 		fail("Select the exact owned terminal/script/workflow fixture directory")
 	}
@@ -66,4 +77,4 @@ func main() {
 	}
 	fmt.Println("PASS: owned fixture exits observed; idle daemon shutdown requested")
 }
-func fail(message string) { fmt.Fprintln(os.Stderr, message); os.Exit(1) }
+func fail(message string) { fmt.Fprintln(os.Stderr, message); history.Exit(1) }

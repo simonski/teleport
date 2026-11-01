@@ -9,3 +9,4 @@ __pycache__/
 /node_modules/
 /test-results/
 /sbom.cdx.json
+/tool_calls_history.csv

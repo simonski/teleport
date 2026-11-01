@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/coder/websocket"
+	"teleport/tools/toolhistory"
 )
 
 type message struct {
@@ -24,7 +25,11 @@ type message struct {
 	Result json.RawMessage `json:"result"`
 }
 
+var history *toolhistory.Call
+
 func main() {
+	history = toolhistory.Start("tools/fixtures/native-codex")
+	defer history.End()
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println("codex-cli 0.166.0")
 		return
@@ -38,13 +43,13 @@ func main() {
 		return
 	}
 	fmt.Fprintln(os.Stderr, "native fixture requires an explicit fixture role")
-	os.Exit(2)
+	history.Exit(2)
 }
 func engine() {
 	encoder := json.NewEncoder(os.Stdout)
 	send := func(value any) {
 		if encoder.Encode(value) != nil {
-			os.Exit(1)
+			history.Exit(1)
 		}
 	}
 	event := func(method string, params any) { send(map[string]any{"method": method, "params": params}) }
@@ -55,7 +60,7 @@ func engine() {
 	for scanner.Scan() {
 		var m message
 		if json.Unmarshal(scanner.Bytes(), &m) != nil {
-			os.Exit(2)
+			history.Exit(2)
 		}
 		if m.Method == "" {
 			event("serverRequest/resolved", map[string]any{"threadId": "fixture-thread", "requestId": m.ID})
@@ -131,7 +136,7 @@ func tui(path string) {
 	connection, _, err := websocket.Dial(context.Background(), "ws://native/", &websocket.DialOptions{HTTPClient: &http.Client{Transport: transport}})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		history.Exit(1)
 	}
 	defer connection.CloseNow()
 	var mu sync.Mutex

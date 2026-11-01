@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from tool_history import record_handoff
 
 
 def main():
@@ -18,6 +19,7 @@ def main():
     native = (binary_folder / "codex-original").resolve(strict=True)
     arguments = sys.argv[1:]
     if arguments == ["--version"]:
+        record_handoff()
         os.execv(str(native), [str(native), *arguments])
     working = Path.cwd().resolve()
     if not working.is_relative_to((fixture / "worktrees").resolve()):
@@ -27,8 +29,10 @@ def main():
     # segments as TOML keys. Supply the owned map as one TOML inline table.
     table = ",".join(json.dumps(path) + '={trust_level="trusted"}' for path in sorted(trusted))
     overrides = ["--config", "projects={" + table + "}"]
+    record_handoff()
     os.execv(str(native), [str(native), *overrides, *arguments])
 
 
 if __name__ == "__main__":
-    main()
+    from tool_history import run
+    run(main, "tools/native_trust_wrapper.py")

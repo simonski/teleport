@@ -92,6 +92,7 @@ def main():
     fixture_bin.mkdir(mode=0o700)
     (fixture_bin / "codex-original").symlink_to(Path(installed).resolve())
     shutil.copyfile(ROOT / "tools/native_trust_wrapper.py", fixture_bin / "codex")
+    shutil.copyfile(ROOT / "tools/tool_history.py", fixture_bin / "tool_history.py")
     (fixture_bin / "codex").chmod(0o500)
     environment["PATH"] = str(fixture_bin) + os.pathsep + environment["PATH"]
     native_config_root = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
@@ -221,4 +222,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from tool_history import run
+    run(main)

@@ -29,6 +29,8 @@ type receipt struct {
 	Fingerprint string `json:"fingerprint"`
 }
 type entry struct {
+	NativeFailure    *NativeFailure                 `json:"nativeFailure,omitempty"`
+	NativeTurn       *NativeTurn                    `json:"nativeTurn,omitempty"`
 	Script           bool                           `json:"script,omitempty"`
 	Native           bool                           `json:"native,omitempty"`
 	NativeKey        string                         `json:"nativeKey,omitempty"`
@@ -188,6 +190,7 @@ func (c *Client) Ensure(ctx context.Context) error {
 	return ErrUnavailable
 }
 func (d *daemon) persist() error {
+	d.trimNativeTurns()
 	b, err := json.Marshal(d.entries)
 	if err != nil {
 		return err
@@ -373,6 +376,21 @@ func (d *daemon) call(in Request) Response {
 		return d.nativeEvent(e, in.NativeEvent)
 	case "nativeRequests":
 		return Response{Requests: append([]NativeRequest{}, e.NativeRequests...), RequestsGap: e.NativeHistoryGap}
+	case "nativeTurn":
+		out := Response{}
+		if e.NativeTurn != nil {
+			copy := *e.NativeTurn
+			out.Turn = &copy
+		}
+		if e.NativeFailure != nil {
+			copy := *e.NativeFailure
+			if copy.EngineExitCode != nil {
+				code := *copy.EngineExitCode
+				copy.EngineExitCode = &code
+			}
+			out.NativeFailure = &copy
+		}
+		return out
 	case "nativeReply":
 		return d.nativeReply(e, in.NativeReply)
 	case "read":

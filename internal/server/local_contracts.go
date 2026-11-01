@@ -8,6 +8,7 @@ func init() {
 		name, action, summary string
 		input, output         any
 	}{
+		{"getSessionTurn", "ACT-1007", "Read exact bounded native turn status and final output", app.NativeRequestsInput{}, app.NativeTurnView{}},
 		{"getSessionRequests", "ACT-1015", "Read exact native pending requests and retained replies", app.NativeRequestsInput{}, app.NativeRequestPage{}},
 		{"respondToAgent", "ACT-1015", "Answer an exact native request without human ticket approval", app.NativeResponseInput{}, localruntime.NativeReceipt{}},
 		{"getLocalHarnesses", "ACT-1009", "Discover verified local harness choices without starting execution", struct{}{}, app.LocalHarnesses{}},

@@ -57,6 +57,10 @@ type NativeRequestPage struct {
 	Gap   bool                         `json:"gap"`
 	Items []localruntime.NativeRequest `json:"items"`
 }
+type NativeTurnView struct {
+	Turn    *localruntime.NativeTurn    `json:"turn,omitempty"`
+	Failure *localruntime.NativeFailure `json:"failure,omitempty"`
+}
 type NativeResponseInput struct {
 	ID          string                               `json:"id"`
 	RequestID   string                               `json:"requestId"`
@@ -67,7 +71,7 @@ type NativeResponseInput struct {
 
 func (s *Service) nativeRequestCall(ctx context.Context, token, op string, raw json.RawMessage) (any, error) {
 	var input NativeResponseInput
-	if op == "getSessionRequests" {
+	if op == "getSessionRequests" || op == "getSessionTurn" {
 		var in NativeRequestsInput
 		if err := parse(raw, &in); err != nil {
 			return nil, err
@@ -82,6 +86,16 @@ func (s *Service) nativeRequestCall(ctx context.Context, token, op string, raw j
 	}
 	if s.localClient == nil {
 		return nil, failure(503, "runtime_unavailable", "Native requests require the owned runtime")
+	}
+	if op == "getSessionTurn" {
+		out, err := s.localClient.Call(ctx, daemonRequest(row, "nativeTurn"))
+		if err != nil {
+			return nil, failure(503, "native_turn_unavailable", "Native turn evidence is unavailable; no replacement was started")
+		}
+		if _, _, _, err = s.localSnapshot(ctx, token, input.ID); err != nil {
+			return nil, err
+		}
+		return NativeTurnView{Turn: out.Turn, Failure: out.NativeFailure}, nil
 	}
 	if op == "getSessionRequests" {
 		out, err := s.localClient.Call(ctx, daemonRequest(row, "nativeRequests"))

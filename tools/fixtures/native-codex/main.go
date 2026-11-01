@@ -56,6 +56,7 @@ func engine() {
 		}
 		if m.Method == "" {
 			event("serverRequest/resolved", map[string]any{"threadId": "fixture-thread", "requestId": m.ID})
+			event("item/completed", map[string]any{"threadId": "fixture-thread", "turnId": fmt.Sprint(turn), "item": map[string]any{"type": "agentMessage", "text": "Native fixture completed", "phase": "final_answer"}})
 			event("turn/completed", map[string]any{"threadId": "fixture-thread", "turn": map[string]any{"id": fmt.Sprint(turn), "status": "completed"}})
 			continue
 		}

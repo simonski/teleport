@@ -113,6 +113,12 @@ def main():
             native = wait_for(lambda: next((r for r in tk("getSessionRequests", {"id": session_id})["items"] if r["state"] == "resolved" and r.get("source")), None))
             assert native["source"] == "native client" and native["answers"]["secret"]["answers"] == ["[redacted]"]
             assert "fixture-secret" not in (folder / "runtime/sessions.json").read_text()
+            def completed_turn():
+                current = tk("getSessionTurn", {"id": session_id}).get("turn")
+                return current if current and current["state"] == "completed" else None
+            turn = wait_for(completed_turn)
+            assert turn["state"] == "completed" and turn["text"] == "Native fixture completed" and not turn["truncated"]
+            assert not tk("getSessionTurn", {"id": session_id}).get("failure")
         tk("resizeSession", {"id": session_id, "cols": 120, "rows": 35})
         before = json.loads((folder / "runtime/sessions.json").read_text())[session_id]
         if args.browser:

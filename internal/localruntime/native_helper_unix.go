@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -32,7 +33,11 @@ type nativePending struct {
 	Answered  bool
 	Epoch     uint64
 }
+type nativeEventClient interface {
+	Call(context.Context, Request) (Response, error)
+}
 type nativeProxy struct {
+	failureCode     string
 	openCommands    map[string]bool
 	everCommand     bool
 	cleanupAck      bool
@@ -51,7 +56,7 @@ type nativeProxy struct {
 	threadID        string
 	startedThread   bool
 	queries         map[string]string
-	client          *Client
+	client          nativeEventClient
 	identity        Request
 	key             string
 	cwd             string
@@ -60,6 +65,19 @@ type nativeProxy struct {
 
 func nativeSocket(root, id string) string { return socketPath(filepath.Join(root, "native-"+id)) }
 func (p *nativeProxy) report(server bool, message []byte, captured ...string) {
+	if server {
+		data, valid := compactNativeTelemetry(message)
+		if !valid {
+			p.mu.Lock()
+			p.telemetryFailed = true
+			p.mu.Unlock()
+			message = []byte(`{"method":"teleport/captureError"}`)
+		} else if len(data) == 0 {
+			return
+		} else {
+			message = data
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	request := p.identity
@@ -87,6 +105,42 @@ func (p *nativeProxy) report(server bool, message []byte, captured ...string) {
 		p.mu.Unlock()
 		request.NativeEvent = &NativeEvent{Server: true, Message: json.RawMessage(`{"method":"teleport/captureError"}`)}
 		_, _ = p.client.Call(ctx, request)
+	}
+}
+
+func (p *nativeProxy) retainFailure(code string, invalidProtocol bool) {
+	if !validNativeFailure(code) {
+		code = "native_protocol_read_failed"
+	}
+	p.mu.Lock()
+	if p.stopping && code == "native_protocol_eof" {
+		p.mu.Unlock()
+		return
+	}
+	if invalidProtocol {
+		p.protocolFailed = true
+	}
+	if p.failureCode != "" {
+		p.mu.Unlock()
+		return
+	}
+	p.failureCode = code
+	p.mu.Unlock()
+	slog.Warn("native interpreter failure", "session", p.identity.ID, "code", code)
+	event, _ := json.Marshal(map[string]any{"method": "teleport/protocolFailure", "params": map[string]string{"code": code}})
+	p.report(true, event)
+}
+
+func nativeParseFailure(err error) string {
+	switch err.Error() {
+	case "native protocol is not JSON":
+		return "native_protocol_invalid_json"
+	case "native thread identity changed":
+		return "native_protocol_thread_changed"
+	case "native event thread identity changed":
+		return "native_protocol_event_thread_changed"
+	default:
+		return "native_protocol_read_failed"
 	}
 }
 func (p *nativeProxy) send(message []byte) error {
@@ -309,7 +363,17 @@ func (p *nativeProxy) fromEngine(data []byte) ([]byte, error) {
 			}
 		}
 	}
-	relevant := message.Method == "thread/started" || message.Method == "thread/status/changed" || message.Method == "serverRequest/resolved" || message.Method == "turn/started" || message.Method == "turn/completed" || len(message.ID) > 0 && message.Method != ""
+	agentMessage := false
+	if message.Method == "item/completed" {
+		var params struct {
+			Item struct {
+				Type string `json:"type"`
+			} `json:"item"`
+		}
+		_ = json.Unmarshal(message.Params, &params)
+		agentMessage = params.Item.Type == "agentMessage"
+	}
+	relevant := agentMessage || message.Method == "thread/started" || message.Method == "thread/status/changed" || message.Method == "serverRequest/resolved" || message.Method == "turn/started" || message.Method == "turn/completed" || len(message.ID) > 0 && message.Method != ""
 	p.mu.Unlock()
 	if relevant {
 		p.report(true, data, captured)
@@ -409,7 +473,7 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 	stopCtx, stop := context.WithCancel(ctx)
 	defer stop()
 	engineDone := make(chan error, 1)
-	protocolDone := make(chan error, 1)
+	protocolDone := make(chan string, 1)
 	// Drain the pipe before Wait closes it. Keep collecting exit evidence even
 	// after the TUI disconnects; a disconnected viewer is not a command exit.
 	go func() {
@@ -418,9 +482,7 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 		for scanner.Scan() {
 			data, parseErr := proxy.fromEngine(append([]byte(nil), scanner.Bytes()...))
 			if parseErr != nil {
-				proxy.mu.Lock()
-				proxy.protocolFailed = true
-				proxy.mu.Unlock()
+				proxy.retainFailure(nativeParseFailure(parseErr), true)
 				stop()
 				continue
 			}
@@ -437,15 +499,21 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 			writeErr := connection.Write(writeCtx, websocket.MessageText, data)
 			cancel()
 			if writeErr != nil {
+				proxy.retainFailure("native_frontend_write_failed", false)
 				stop()
 			}
 		}
-		if scanner.Err() != nil {
-			proxy.mu.Lock()
-			proxy.protocolFailed = true
-			proxy.mu.Unlock()
+		code := "native_protocol_eof"
+		if errors.Is(scanner.Err(), bufio.ErrTooLong) {
+			code = "native_protocol_frame_too_large"
+		} else if scanner.Err() != nil {
+			code = "native_protocol_read_failed"
 		}
-		protocolDone <- scanner.Err()
+		proxy.retainFailure(code, true)
+		proxy.mu.Lock()
+		code = proxy.failureCode
+		proxy.mu.Unlock()
+		protocolDone <- code
 		engineDone <- engine.Wait()
 		stop()
 	}()
@@ -478,18 +546,24 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 		}
 		_ = input.Close()
 		engineExited := false
+		var engineResult error
 		select {
-		case <-engineDone:
+		case engineResult = <-engineDone:
 			engineExited = true
 		case <-time.After(2 * time.Second):
 			_ = engine.Process.Kill()
 			_ = output.Close()
-			<-engineDone
+			engineResult = <-engineDone
 		}
 		proxy.mu.Lock()
-		confirmed := engineExited && !proxy.protocolFailed && len(proxy.openCommands) == 0 && (!proxy.everCommand || proxy.cleanupAck)
+		confirmed := engineExited && engineResult == nil && !proxy.protocolFailed && len(proxy.openCommands) == 0 && (!proxy.everCommand || proxy.cleanupAck)
 		connection := proxy.connection
+		failed := proxy.failureCode != ""
 		proxy.mu.Unlock()
+		if failed && engine.ProcessState != nil {
+			exit, _ := json.Marshal(map[string]any{"method": "teleport/engineExit", "params": map[string]int{"exitCode": engine.ProcessState.ExitCode()}})
+			proxy.report(true, exit)
+		}
 		event, _ := json.Marshal(map[string]any{"method": "teleport/nativeExit", "params": map[string]any{"confirmed": confirmed}})
 		proxy.report(true, event)
 		if connection != nil {
@@ -531,9 +605,18 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 		tuiDone <- err
 		return err
 	case <-stopCtx.Done():
+		proxy.mu.Lock()
+		code := proxy.failureCode
+		proxy.mu.Unlock()
+		if code != "" {
+			return errors.New(code)
+		}
 		return nil
-	case <-protocolDone:
-		return errors.New("native protocol closed")
+	case code := <-protocolDone:
+		if code != "" {
+			return errors.New(code)
+		}
+		return nil
 	}
 }
 

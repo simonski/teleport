@@ -102,7 +102,7 @@ func (s *Service) ConfigureLocalRuntime(root, executable string, fixture bool, e
 	}
 }
 func localOperation(op string) bool {
-	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "respondToAgent"}, op)
+	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
 }
 func localInfo(row model.LocalSession) LocalSessionInfo {
 	return LocalSessionInfo{ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
@@ -193,7 +193,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	if s.localClient == nil || !localruntime.Supported() {
 		return nil, failure(409, "local_runtime_unavailable", "Local terminals require configured macOS/Linux runtime support")
 	}
-	if operation == "getSessionRequests" || operation == "respondToAgent" {
+	if operation == "getSessionRequests" || operation == "getSessionTurn" || operation == "respondToAgent" {
 		return s.nativeRequestCall(ctx, token, operation, raw)
 	}
 	if operation == "openConsoleSession" || operation == "startTicketSession" {

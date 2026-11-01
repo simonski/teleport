@@ -91,6 +91,26 @@ func (d *daemon) nativeEvent(e *entry, event *NativeEvent) Response {
 		switch message.Method {
 		case "teleport/captureError":
 			e.Attention = "Native event capture unavailable; use terminal"
+			retainNativeFailure(e, "native_capture_unavailable")
+		case "teleport/protocolFailure":
+			var params struct {
+				Code string `json:"code"`
+			}
+			if json.Unmarshal(message.Params, &params) != nil || !validNativeFailure(params.Code) {
+				return Response{Error: "invalid_native_failure"}
+			}
+			retainNativeFailure(e, params.Code)
+		case "teleport/engineExit":
+			var params struct {
+				ExitCode *int `json:"exitCode"`
+			}
+			if json.Unmarshal(message.Params, &params) != nil || params.ExitCode == nil || *params.ExitCode < -1 || *params.ExitCode > 255 {
+				return Response{Error: "invalid_native_failure"}
+			}
+			if e.NativeFailure != nil && e.NativeFailure.EngineExitCode == nil {
+				code := *params.ExitCode
+				e.NativeFailure.EngineExitCode = &code
+			}
 		case "teleport/nativeExit":
 			var params struct {
 				Confirmed bool `json:"confirmed"`
@@ -104,7 +124,7 @@ func (d *daemon) nativeEvent(e *entry, event *NativeEvent) Response {
 					ID string `json:"id"`
 				} `json:"thread"`
 			}
-			if json.Unmarshal(message.Params, &params) == nil {
+			if json.Unmarshal(message.Params, &params) == nil && validNativeID(params.Thread.ID) {
 				if e.NativeThreadID != "" && e.NativeThreadID != params.Thread.ID {
 					return Response{Error: "native_thread_identity_changed"}
 				}
@@ -129,8 +149,56 @@ func (d *daemon) nativeEvent(e *entry, event *NativeEvent) Response {
 			}
 		case "turn/started":
 			e.Attention = ""
+			var params struct {
+				ThreadID string `json:"threadId"`
+				Turn     struct {
+					ID string `json:"id"`
+				} `json:"turn"`
+			}
+			if json.Unmarshal(message.Params, &params) != nil || params.ThreadID != e.NativeThreadID || !validNativeID(params.ThreadID) || !validNativeID(params.Turn.ID) {
+				return Response{Error: "invalid_native_turn"}
+			}
+			if e.NativeTurn == nil || e.NativeTurn.ThreadID != params.ThreadID || e.NativeTurn.TurnID != params.Turn.ID {
+				e.NativeTurn = &NativeTurn{ThreadID: params.ThreadID, TurnID: params.Turn.ID, State: "inProgress", At: time.Now().UTC()}
+			}
+		case "item/completed":
+			var params struct {
+				ThreadID string          `json:"threadId"`
+				TurnID   string          `json:"turnId"`
+				Item     json.RawMessage `json:"item"`
+			}
+			if json.Unmarshal(message.Params, &params) == nil && e.NativeTurn != nil && e.NativeTurn.State == "inProgress" && params.ThreadID == e.NativeTurn.ThreadID && params.TurnID == e.NativeTurn.TurnID {
+				e.NativeTurn.capture(params.Item)
+			}
 		case "turn/completed":
-			e.Attention = "Response ready"
+			var params struct {
+				ThreadID string `json:"threadId"`
+				Turn     struct {
+					ID     string            `json:"id"`
+					Status string            `json:"status"`
+					Items  []json.RawMessage `json:"items"`
+				} `json:"turn"`
+			}
+			if json.Unmarshal(message.Params, &params) == nil && e.NativeTurn != nil && e.NativeTurn.State == "inProgress" && params.ThreadID == e.NativeTurn.ThreadID && params.Turn.ID == e.NativeTurn.TurnID {
+				e.NativeTurn.State = params.Turn.Status
+				switch params.Turn.Status {
+				case "completed", "failed", "interrupted":
+				default:
+					e.NativeTurn.State, e.NativeTurn.ErrorCode = "unknown", "native_turn_unknown_state"
+				}
+				e.NativeTurn.At = time.Now().UTC()
+				for _, item := range params.Turn.Items {
+					e.NativeTurn.capture(item)
+				}
+				if params.Turn.Status == "completed" && !e.NativeTurn.Truncated {
+					e.Attention = "Response ready"
+				} else {
+					e.Attention = "Native turn needs attention"
+					if e.NativeTurn.ErrorCode == "" {
+						e.NativeTurn.ErrorCode = "native_turn_" + params.Turn.Status
+					}
+				}
+			}
 		case "thread/status/changed":
 			var params struct {
 				ThreadID string `json:"threadId"`
@@ -163,6 +231,9 @@ func (d *daemon) nativeEvent(e *entry, event *NativeEvent) Response {
 			}
 			break
 		}
+	}
+	if e.NativeFailure != nil {
+		e.Attention = "Native session: " + e.NativeFailure.Code
 	}
 	if d.persist() != nil {
 		return Response{Error: "native_event_persistence_failed"}

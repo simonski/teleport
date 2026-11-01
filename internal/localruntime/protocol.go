@@ -73,6 +73,8 @@ type Request struct {
 	Rows        uint16       `json:"rows,omitempty"`
 }
 type Response struct {
+	NativeFailure *NativeFailure  `json:"nativeFailure,omitempty"`
+	Turn          *NativeTurn     `json:"turn,omitempty"`
 	ScriptRuntime bool            `json:"scriptRuntime"`
 	RequestsGap   bool            `json:"requestsGap"`
 	Requests      []NativeRequest `json:"requests,omitempty"`

@@ -1,10 +1,12 @@
 # Implemented API Contract
 
-## Approved next shell slice
+## Shell composition
 
 Specification D47–D53/A174–A181 defines the approved target; only discovery-listed operations are shipped. Existing seeds remain immutable, and the revised Typo/Verify default needs its own verified delivery slice.
 
-The first shell slice adds no domain mutation. Personal Settings composes current appearance/view-preference/account operations; System composes permitted installation operations with canonical confirmations. Repository configuration stays project-scoped. Opening/dismissing a popup preserves the underlying view and active session. The server renders an escaped `teleport-build-version` meta value from its actual build identity for the persistent footer. Console icons open the existing JavaScript viewer and authorized harness selector; opening/reconnecting alone never launches a model. Navigation-layout and workflow-field schemas will be frozen in their own slices before implementation.
+The first shell slice adds no new domain-mutation operation. Personal Settings composes current appearance/view-preference/account operations; System composes permitted installation operations with canonical confirmations. Repository configuration stays project-scoped. Opening/dismissing a popup preserves the underlying view and active session. The server renders an escaped `teleport-build-version` meta value from its actual build identity for the persistent footer. Console icons open the existing JavaScript viewer and authorized harness selector; opening/reconnecting alone never launches a model. Navigation-layout and workflow-field schemas will be frozen in their own slices before implementation.
+
+Settings/System are not navigation destinations. Legacy stored Settings sign-in defaults read as Home, with popup-only recent contexts omitted; reads do not rewrite the stored version. New navigation writes reject Settings as `invalid_view`; an ordinary successful preference change retains the normalized Home destination.
 
 ## Transport
 

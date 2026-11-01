@@ -25,6 +25,8 @@ def main():
     selection.add_argument("--scripts-only", action="store_true", help="Run only isolated script jobs against a fresh database")
     selection.add_argument("--terminal-only", action="store_true", help="Run only the plain PTY fixture against a fresh database")
     selection.add_argument("--smoke-only", action="store_true", help="Run only the application smoke against a fresh database")
+    selection.add_argument("--tests-only", action="store_true", help="Run only Go tests against disposable PostgreSQL")
+    parser.add_argument("--test-pattern", help="Go test -run pattern for a focused regression")
     args = parser.parse_args()
     candidates = [args.postgres_bin]
     if shutil.which("initdb"):
@@ -54,7 +56,13 @@ def main():
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
             focused = args.native_only or args.scripts_only or args.terminal_only or args.smoke_only
             if not focused:
-                subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=checked, check=True)
+                test_command = ["go", "test", "-race", "-count=1"]
+                if args.test_pattern:
+                    test_command += ["-run", args.test_pattern]
+                subprocess.run([*test_command, "./..."], cwd=ROOT, env=checked, check=True)
+            if args.tests_only:
+                print("PASS: PostgreSQL Go test selection", flush=True)
+                return
             subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
             if not focused or args.smoke_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "smoke")

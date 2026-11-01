@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -125,7 +126,8 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", contentPolicy(nonce))
-		fmt.Fprint(w, strings.Replace(string(content), "</head>", `<meta name="teleport-style-nonce" content="`+nonce+`"></head>`, 1))
+		metadata := `<meta name="teleport-style-nonce" content="` + nonce + `"><meta name="teleport-build-version" content="` + html.EscapeString(version) + `"></head>`
+		fmt.Fprint(w, strings.Replace(string(content), "</head>", metadata, 1))
 	}
 	mux.HandleFunc("GET /{$}", index)
 	mux.HandleFunc("GET /index.html", index)
@@ -199,7 +201,7 @@ func openAPI(version string) map[string]any {
 			post["security"] = []any{}
 		}
 	}
-	for _, path := range []string{"/healthz", "/openapi.json", "/api/actions", "/skill.md", "/", "/app.js", "/workspace.js", "/controls.js", "/workflows.js", "/agents.js", "/delivery.js", "/style.css", "/workflows.css", "/agents.css", "/delivery.css"} {
+	for _, path := range []string{"/healthz", "/openapi.json", "/api/actions", "/skill.md", "/", "/app.js", "/workspace.js", "/controls.js", "/workflows.js", "/agents.js", "/delivery.js", "/style.css", "/workflows.css", "/agents.css", "/delivery.css", "/shell.js", "/shell.css"} {
 		paths[path] = map[string]any{"get": map[string]any{"responses": map[string]any{"200": map[string]string{"description": "Public application asset or discovery"}}}}
 	}
 	return map[string]any{"openapi": "3.1.0", "info": map[string]string{"title": "teleport", "version": version}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"session": map[string]string{"type": "apiKey", "in": "cookie", "name": "teleport_session"}, "bearer": map[string]string{"type": "http", "scheme": "bearer"}}}}

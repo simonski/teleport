@@ -14,8 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--shell-only", action="store_true", help="Verify only the shared shell and profile popups; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
+    if args.shell_only and not args.browser:
+        parser.error("--shell-only requires --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
         folder = Path(temporary)
         with socket.socket() as sock:
@@ -61,9 +64,9 @@ def main():
                     if arguments[0] == "select":
                         browser("click", arguments[1] + " + .choice-button")
                         return browser("click", ".choice-list [data-value=" + json.dumps(arguments[2]) + "]")
-                    if arguments == ("find", "role", "button", "click", "--name", "Settings", "--exact"):
+                    if len(arguments)>=6 and arguments[:5] == ("find", "role", "button", "click", "--name") and arguments[5] in ("Settings", "System", "Project settings"):
                         browser("click", "#account")
-                        return browser("click", "#account-settings")
+                        return browser("click", {"Settings":"#account-settings", "System":"#account-system", "Project settings":"#account-project-settings"}[arguments[5]])
                     if arguments[0] == "click" and len(arguments) == 2:
                         # Native-driver visibility can include a few clipped pixels;
                         # centre the actual control inside its scroll container.
@@ -75,6 +78,8 @@ def main():
                     return result.stdout
                 try:
                     browser("open", endpoint)
+                    browser("wait", "--fn", "document.querySelector('#build-version')?.textContent===document.querySelector('meta[name=teleport-build-version]')?.content")
+                    assert json.loads(browser("eval", "document.querySelector('#build-version').textContent")) == tk("version").strip()
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
@@ -119,6 +124,43 @@ def main():
                     assert not json.loads(tk("getSession"))["settings"]["agents"]
                     browser("select", "#project", str(project["id"]))
                     browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
+                    browser("eval", "if(document.querySelector('main h1,.board-heading>.eyebrow')||Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-59)>1)throw new Error('Shell is not compact');if(!document.querySelector('#javascript-console')||!document.querySelector('#harness-console'))throw new Error('Missing console buttons')")
+                    browser("screenshot", "/tmp/teleport-shell.png")
+                    browser("find", "role", "button", "click", "--name", "Settings", "--exact")
+                    browser("eval", "if(document.querySelector('#editor h2')?.textContent!=='Settings'||document.querySelector('#execution-mode,#configure-repository,#edit-workflows')||document.querySelector('[aria-current=page]')?.dataset.view!=='Home')throw new Error('Settings is not a personal popup over Home')")
+                    browser("screenshot", "/tmp/teleport-settings.png")
+                    browser("press", "Escape")
+                    browser("eval", "if(document.activeElement!==document.querySelector('#account'))throw new Error('Settings dismissal lost usable focus')")
+                    browser("find", "role", "button", "click", "--name", "System", "--exact")
+                    browser("eval", "if(!document.querySelector('#execution-mode')||document.querySelector('#appearance-style,#configure-repository'))throw new Error('System mixes personal/project configuration')")
+                    browser("click", "#system-brake")
+                    browser("click", '#editor button[type="submit"]')
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                    assert json.loads(tk("getSession"))["settings"]["handbrake"]
+                    browser("find", "role", "button", "click", "--name", "System", "--exact")
+                    browser("click", "#system-brake")
+                    browser("press", "Escape")
+                    assert json.loads(tk("getSession"))["settings"]["handbrake"]
+                    browser("find", "role", "button", "click", "--name", "System", "--exact")
+                    browser("click", "#system-brake")
+                    browser("click", '#editor button[type="submit"]')
+                    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                    assert not json.loads(tk("getSession"))["settings"]["handbrake"]
+                    browser("click", "#javascript-console")
+                    browser("wait", "#script-source")
+                    browser("press", "Escape")
+                    assert not json.loads(tk("listScriptRuns"))["items"]
+                    browser("click", "#harness-console")
+                    browser("wait", "#new-console")
+                    browser("press", "Escape")
+                    assert not json.loads(tk("listSessions"))["items"]
+                    browser("set", "viewport", "390", "844")
+                    browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Mobile shell overflows');if(!document.querySelector('#build-version').textContent)throw new Error('Missing mobile version')")
+                    browser("screenshot", "/tmp/teleport-shell-mobile.png")
+                    browser("set", "viewport", "1280", "800")
+                    if args.shell_only:
+                        print("PASS: real build footer, compact desktop/mobile shell, separate profile popups, exact confirmed system handbrake and console viewers without execution")
+                        return
                     browser("eval", "if(document.querySelector('dialog,[data-view=Settings],#finder-open')||document.body.innerText.includes('Work, in motion'))throw new Error('Obsolete navigation or native dialog');if(!document.querySelector('.wordmark .rocket'))throw new Error('Missing rocket')")
                     browser("click", "#project + .choice-button")
                     browser("press", "ArrowDown")
@@ -147,7 +189,7 @@ def main():
                     browser("screenshot", "/tmp/teleport-smoke.png")
                     draft = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "human@1", "projectId": project["id"], "title": "Flight workflow", "requestId": "smoke-flow"})))
                     browser("select", "#project", str(project["id"]))
-                    browser("find", "role", "button", "click", "--name", "Settings", "--exact")
+                    browser("find", "role", "button", "click", "--name", "Project settings", "--exact")
                     browser("find", "role", "button", "click", "--name", "Workflow editor", "--exact")
                     browser("wait", "#flow-select")
                     browser("select", "#flow-select", draft["id"] + "@draft")
@@ -221,7 +263,7 @@ def main():
                     tk("setExecutionMode", "--data", json.dumps({"mode": "off", "expectedVersion": configuration["version"]}))
                     tk("acceptRefinement", "--data", json.dumps({"id": real["id"], "expectedVersion": refined["version"], "proposalId": refined["refinement"]["id"]}))
                     browser("wait", "--fn", "document.body.innerText.includes('Real external fixture')")
-                    browser("find", "role", "button", "click", "--name", "Real external fixture")
+                    browser("click", f'[data-ticket="{real["id"]}"]')
                     browser("wait", '[data-delivery="prepare"]')
                     browser("click", '[data-delivery="prepare"]')
                     browser("find", "role", "button", "click", "--name", "Prepare worktree", "--exact")
@@ -231,12 +273,12 @@ def main():
                     (worktree / "README.md").write_text("Delivered fixture\n")
                     git(worktree, "add", ".")
                     git(worktree, "commit", "-m", "Deliver external fixture")
-                    browser("find", "role", "button", "click", "--name", "Real external fixture")
+                    browser("click", f'[data-ticket="{real["id"]}"]')
                     browser("wait", '[data-delivery="report"]')
                     browser("click", '[data-delivery="report"]')
                     browser("find", "role", "button", "click", "--name", "Capture candidate", "--exact")
                     browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
-                    browser("find", "role", "button", "click", "--name", "Real external fixture")
+                    browser("click", f'[data-ticket="{real["id"]}"]')
                     browser("wait", '[data-delivery="approve"]')
                     browser("click", '[data-delivery="approve"]')
                     browser("find", "label", "Approve this exact code and completion basis", "check")
@@ -291,6 +333,8 @@ def main():
                     prefs = json.loads(tk("getViewPreferences"))
                     assert prefs["style"] == "instrument" and prefs["mode"] == "dark"
                     browser("eval", "if(document.querySelector('#save-appearance,#save-navigation,#save-execution-mode')||document.querySelector('#notice').textContent.includes('appearance saved'))throw new Error('Obsolete preference save UI')")
+                    browser("press", "Escape")
+                    browser("find", "role", "button", "click", "--name", "Project settings", "--exact")
                     browser("click", "#inspect-native")
                     browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.innerText.includes('fresh server authorization')")
                     browser("click", '#editor button[type="submit"]')

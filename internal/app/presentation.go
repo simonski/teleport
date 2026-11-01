@@ -200,6 +200,9 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	if !ok {
 		p = model.Preferences{Style: "paper", Mode: "light", DefaultView: "Home", Recent: []model.RecentContext{}}
 	}
+	if p.DefaultView == "Settings" {
+		p.DefaultView = "Home"
+	}
 	if p.DefaultProject != 0 && role(st, a, p.DefaultProject) == "" {
 		p.DefaultProject = 0
 	}
@@ -213,7 +216,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	return p
 }
 func validRecent(st *model.State, a model.Account, c model.RecentContext) error {
-	if !contains([]string{"Home", "Board", "Todos", "Goals", "Epics", "Calendar", "Graph", "Ideas", "Cost", "Projects", "Settings"}, c.View) {
+	if !contains([]string{"Home", "Board", "Todos", "Goals", "Epics", "Calendar", "Graph", "Ideas", "Cost", "Projects"}, c.View) {
 		return failure(422, "invalid_view", "Choose a shipped workspace view")
 	}
 	if c.ProjectID != 0 {

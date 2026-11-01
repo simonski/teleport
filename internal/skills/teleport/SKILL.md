@@ -1,0 +1,72 @@
+---
+name: teleport
+description: Use the tk CLI to inspect and manage teleport projects, Goal/Epic/Task tickets, workflows, questions and supervised agent delivery through the authenticated server API.
+metadata:
+  version: "1"
+---
+
+# Teleport through `tk`
+
+Use this skill when the task involves an existing teleport installation. Work within the user's authorized scope and the current actor's permissions. Skill instructions do not supply human approval or authorize model spending, resets, publication or deployment.
+
+## Discover the installation
+
+`tk skill` prints this standalone skill from the binary, without a server or login. It can be saved as a harness skill's `SKILL.md`. The remaining discovery commands describe the running server:
+
+```sh
+tk version
+tk tools
+tk spec
+tk getSession
+tk listProjects --data '{"limit":50}'
+```
+
+`tk tools` returns registered operation names and summaries. `tk spec` returns OpenAPI request/response schemas, required fields and limits. Consult them before using an unfamiliar operation; do not invent commands or assume an operation from another version exists.
+
+`TELEPORT_SERVER` selects the server (default `http://localhost:9999`); `--server URL` overrides it per call. `TELEPORT_CONFIG` or `--config PATH` selects the private client credential file. Use the supplied configuration and identity; never print tokens or switch to a more privileged account to bypass a refusal. If sign-in is required, use `tk login --username NAME --password-stdin` with credentials supplied through the authorized secret-input mechanism, never a password in command arguments.
+
+An unavailable server is a blocker for API operations. Do not open its SQLite/PostgreSQL database as a fallback. `tk init` initializes storage and `tk serve` runs the server; neither is an implicit repair step. Forced initialization replaces installation data and requires its own explicit authorization.
+
+## Read the exact work before changing it
+
+The hierarchy is **Goal → Epic → Task**. A Task belongs to an Epic; an Epic belongs to a Goal, all in the same real project. Protected Unassigned records supply valid defaults. Do not fabricate IDs, edit protected defaults, assign work to the All projects view or assume IDs identify the same records on another installation.
+
+```sh
+tk listTickets --data '{"projectId":1,"kind":"task","limit":50}'
+tk getTicket --data '{"id":123}'
+tk listTicketHistory --data '{"id":123,"limit":50}'
+tk listWorkflows
+tk getTicketAgreements --data '{"id":123}'
+```
+
+Replace example IDs with values read from this installation. Lists return `items` and `nextCursor`; request subsequent pages with the returned `cursor` and the same filters when more results are needed. Project access, hidden records and actor scope affect results; an empty page does not grant access to other projects.
+
+Read the ticket's original request, criteria, parent/project context, pinned workflow, refinement, readiness basis and current execution state. Goal/container progress is derived from children; do not write it manually. A completed delivery rollup does not prove the Goal's business outcome.
+
+## Make bounded, versioned changes
+
+Call registered operations as `tk OPERATION --data JSON`. Successful API calls print JSON; failures print diagnostics to stderr and return a nonzero exit status. Build JSON as data with proper escaping rather than interpolating untrusted text into shell commands.
+
+Use the record's current `version` as `expectedVersion` where the schema requires it. On a version conflict, re-read the record and reconcile the requested change; do not blindly replace another actor's work or loop retries. On authentication or permission errors, retain the failure and resolve the actual identity/access issue.
+
+For creation and other operations with `requestId`, generate a unique ID for that logical request. Reuse that same ID only when retrying an uncertain response to the same request; generate a new one for distinct work. Re-read state before replaying any mutation whose result is uncertain.
+
+For an authorized new agent Task, the request shape is:
+
+```sh
+tk createTicket --data '{"projectId":1,"kind":"task","title":"Describe the requested change","description":"Bound the work","criteria":"State observable acceptance","agent":true,"requestId":"REPLACE-WITH-A-UNIQUE-REQUEST-ID"}'
+```
+
+Choose human or agent intent from the actual request. Omit `parentId` only when the project's protected Unassigned parent is appropriate. Agent work has no human execution assignee. Original title, description and criteria are editable only while the ticket is already Todo; returning to Todo is a separate allowed operation, not a way to discard an implementation awaiting review.
+
+## Preserve supervision and execution ownership
+
+Follow the ticket's pinned directed workflow, including declared backward routes and finite attempt budgets. A phase's display label is not permission to skip readiness, dependencies, Review or human Approval. Agent progress of 100% never completes agent work.
+
+Human scope/readiness/code decisions remain human decisions. Do not invoke `acceptRefinement`, `markReady` or `approveTicket` as a substitute for the required human assessment, even when credentials technically permit the call. Present the exact current proposal/basis or code candidate and evidence for the appropriate human gate. Do not raise budgets, clear handbrakes, change execution mode or weaken workflow/native permissions merely to make blocked work run.
+
+Read structured questions and their exact IDs before responding. `answerQuestion` uses the ticket ID, current version, `questionId` and answer; answering a ticket question does not send terminal input. Native harness permission prompts retain their own authority and are not answered by a ticket response.
+
+Use existing owned sessions and worktrees. Idle output, a stopped browser viewer or an existing directory does not prove process exit. Unknown/stopping ownership blocks replacement until reconciled; never start a duplicate harness to work around uncertainty. Read-only Review must stay read-only. `getPrompt` can inspect current/saved managed prompts only when the current actor is permitted; a saved prompt belongs to its exact session, and a current preview does not prove what a past session received.
+
+When explicitly tasked with implementation, use the authorized codebase/worktree, make the agreed change and run relevant checks. Capture real delivery through the discovered `prepareTaskWorktree`/`recordTaskDelivery` contracts as applicable. Report the exact candidate, validation and unresolved blockers; retain the human code-approval gate before integration. Accepting code does not itself authorize restarting, rebuilding or deploying an application.

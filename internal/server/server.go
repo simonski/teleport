@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"teleport/internal/app"
+	teleportskill "teleport/internal/skills/teleport"
 )
 
 //go:embed web/*
@@ -40,7 +41,7 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 	mux.HandleFunc("GET /api/actions", func(w http.ResponseWriter, r *http.Request) { write(w, 200, map[string]any{"items": Operations}) })
 	mux.HandleFunc("GET /skill.md", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		fmt.Fprint(w, "# teleport\nUse tk OPERATION --data JSON for registered operations. Read tk spec and tk tools. All clients use authenticated server APIs. Human scope and code acceptance cannot be supplied by an agent. Unsupported operations fail explicitly.\n")
+		fmt.Fprint(w, teleportskill.Markdown)
 	})
 	mux.HandleFunc("POST /api/tools/{operation}", func(w http.ResponseWriter, r *http.Request) {
 		mediaType, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))

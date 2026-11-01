@@ -23,6 +23,7 @@ import (
 	"teleport/internal/localruntime"
 	"teleport/internal/scriptruntime"
 	"teleport/internal/server"
+	teleportskill "teleport/internal/skills/teleport"
 	"teleport/internal/store"
 )
 
@@ -47,7 +48,7 @@ func env(key, fallback string) string {
 }
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" {
-		fmt.Println("teleport (tk)\n\n  tk init [-f] [-demo] [--db PATH]  Initialize; -f backs up/resets SQLite; -demo seeds PetStore\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec | skill          Read server discovery\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
+		fmt.Println("teleport (tk)\n\n  tk init [-f] [-demo] [--db PATH]  Initialize; -f backs up/resets SQLite; -demo seeds PetStore\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec                  Read server discovery\n  tk skill                         Export the bundled harness SKILL.md\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
 		return nil
 	}
 	command := args[0]
@@ -100,6 +101,22 @@ func run(args []string) error {
 	if command == "version" {
 		fmt.Println(version)
 		return nil
+	}
+	if command == "skill" {
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		flags.String("server", "", "accepted for compatibility; export is offline")
+		flags.String("config", "", "accepted for compatibility; export needs no credentials")
+		if err := flags.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+		if flags.NArg() != 0 {
+			return errors.New("usage: tk skill")
+		}
+		_, err := io.WriteString(os.Stdout, teleportskill.Markdown)
+		return err
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -221,8 +238,8 @@ func run(args []string) error {
 		return err
 	}
 	*endpoint = strings.TrimRight(*endpoint, "/")
-	if command == "spec" || command == "tools" || command == "skill" {
-		path := map[string]string{"spec": "/openapi.json", "tools": "/api/actions", "skill": "/skill.md"}[command]
+	if command == "spec" || command == "tools" {
+		path := map[string]string{"spec": "/openapi.json", "tools": "/api/actions"}[command]
 		resp, err := http.Get(*endpoint + path)
 		if err != nil {
 			return fmt.Errorf("server unavailable; run tk serve: %w", err)

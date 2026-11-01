@@ -752,6 +752,8 @@ Home summarises the selected project's achieved, in-progress, upcoming and atten
 
 ### 10.6 Workflow and simulation extensions
 
+Board Todo tickets can be dragged into their project's exact declared Refine lane using the same guarded Send to refine action. Preserve the pinned workflow for agent tickets and the explicit intent handoff for human drafts. Dragging cannot migrate work across projects/definitions or bypass active ownership. Card hover disclosure must leave surrounding card positions unchanged; animate scale/opacity rather than height or margins, with immediate reversal on pointer exit and the existing reduced-motion behavior.
+
 Todos remains human-only, with drag movement and state-dependent Move to actions among declared Todo/Doing/Done destinations. Moving to Done requires the existing human completion agreement. The human ticket editor omits harness controls. Send to refine hands an eligible Todo draft to the agent workflow; queued unowned Refine tickets can return to Todos under section 3.3. Start, Due and ETA have CSS calendar pickers supporting typed ISO dates and keyboard navigation, without native browser popups.
 
 Board lanes expose workflow-edit shortcuts; agentic lanes show active/configured counts and persisted lane handbrakes. A Board handbrake applies to one project and stable workflow independently of filters, sharing existing project worker pools. Unknown/stopping reservations remain distinct from verified active workers. Cards use labelled readiness colours, an animated rounded-perimeter trace for observed active agent work, and delayed hover expansion for descriptions; keyboard focus exposes the same content and reduced motion suppresses animation.
@@ -1114,7 +1116,7 @@ Every claimed action needs a typed contract, actor rights, version/no-op/idempot
 | A18 | Detached native input observations clear correctly; structured question remains independent. |
 | A19 | Attention scope/exclusions/oldest-first identities and notification baseline/deduplication are correct. |
 | A20 | One attention band per lane precedes ordinary collapsible epic groups, retaining epic/project context and one representation per card. Collapse never hides attention; live attention changes preserve identity/selection/collapse preferences. Active planning epics remain visible once; drops preserve siblings/parentage. |
-| A21 | Foreground focus/key/IME/outside-click/dismissal behavior is safe; terminal scroll/control handling does not affect background. |
+| A21 | Foreground focus/key/IME/outside-click/dismissal behavior is safe; terminal scroll/control handling does not affect background. Board hover previews leave neighbouring card positions fixed and reverse promptly; Todo → Refine dragging uses the guarded pinned-route action and cannot carry stale actor/view ownership. |
 | A22 | Graph uses unified identities, explicit assignments and revision-free layout; periodic goal review targets same goal. |
 | A23 | Calendar/DST/date/report/rollup semantics match approved worked examples and period scope. |
 | A24 | Tidy preview is read-only and stale batch commit fails atomically with exact-version history. |

@@ -15,7 +15,8 @@ function boardCardState(t){
 function card(t){
   let html=plainCard(t);if(view!=='Board')return html;const state=boardCardState(t);
   html=html.replace('class="ticket"',`class="ticket readiness-${state.key}${state.key==='active'?' is-working':''}" data-readiness="${state.key}"`);
-  html=html.replace('</h3>',`</h3><p class="ticket-description" id="ticket-description-${t.id}">${escapeHTML(t.description||'No description yet.')}</p><span class="readiness-label">${state.label}</span>`);
+  html=html.replace('</h3>',`</h3><span class="readiness-label">${state.label}</span>`);
+  html=html.replace('</button><div class="ticket-session">',`</button><p class="ticket-description" id="ticket-description-${t.id}">${escapeHTML(t.description||'No description yet.')}</p><div class="ticket-session">`);
   html=html.replace('class="ticket-open"',`class="ticket-open" aria-describedby="ticket-description-${t.id}"`);
   return html.replace('</article>','<svg class="agent-trace" aria-hidden="true"><rect x="2" y="2" rx="7" pathLength="100"/></svg></article>');
 }
@@ -31,7 +32,9 @@ function agentBoardView(leaf){
   return [...groups.values()].map(({project:p,key,items})=>{const w=workflowMap[key];if(!p||!w)return '';const locked=!!p.laneLocks?.[w.id+'#*'];return `<section class="board-group" data-board-project="${p.id}" data-board-workflow="${escapeHTML(key)}"><header class="board-group-heading"><span>${escapeHTML(p.name)}${p.simulation?' · Simulation':''} / ${escapeHTML(w.title)} · v${w.version}</span><span class="header-space"></span><span class="board-scope-status" role="status"></span><button type="button" class="secondary board-brake ${locked?'engaged':''}" data-board-action="board-brake" aria-pressed="${locked}" ${roleAllowsMaintain(p.id)?'':'disabled'}>${boardBrakeIcon}${locked?'Resume board':'Pause board'}</button></header><div class="board">${w.phases.filter(phase=>phase.role!=='Cancelled').map(phase=>`<section class="lane" data-phase-id="${escapeHTML(phase.id)}"><header><h2>${escapeHTML(phase.title)}</h2><span class="lane-count">${items.filter(t=>t.phase===phase.id).length}</span><span class="lane-line"></span></header>${boardLaneControls(p,key,phase)}<div class="lane-body">${items.filter(t=>t.phase===phase.id).sort((a,b)=>Number(!!b.attention)-Number(!!a.attention)||a.id-b.id).map(card).join('')}</div></section>`).join('')}</div></section>`;}).join('')||'<div class="quiet-state">No board in this scope.</div>';
 }
 function mountBoardControls(){
+  cancelBoardTicketDrag();
   clearTimeout(boardObservationTimer);const epoch=++boardObservationEpoch;if(view!=='Board')return;
+  bindBoardDragging();
   const actor=session.account.id,generation=loadGeneration;const current=()=>epoch===boardObservationEpoch&&actor===session?.account.id&&generation===loadGeneration&&view==='Board';
   for(const group of root.querySelectorAll('.board-group'))group.onclick=async e=>{
     const button=e.target.closest('[data-board-action]');if(!button||boardBusy)return;const p=projects.find(row=>row.id===Number(group.dataset.boardProject)),key=group.dataset.boardWorkflow,w=workflowMap[key];

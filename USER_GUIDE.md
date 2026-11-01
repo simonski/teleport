@@ -48,6 +48,8 @@ Save latest before previewing a saved route or choosing Publish latest. Publicat
 
 ## Board controls and readiness
 
+Drag an eligible Todo ticket into its matching Refine lane to queue refinement. This uses the same versioned action as Send to refine. Card previews scale and fade over neighbouring tickets without moving the lane layout; previews stay closed while dragging.
+
 Board groups work by project and pinned workflow. Use a lane's pencil to open that workflow, then edit/publish a draft through the normal workflow controls. Existing tickets retain their pin. Pause board controls only that project's stable workflow; agentic-lane handbrakes pause that lane across its versions. Handbrakes stop new admissions and leave running work attached. Counts show observed active/effective configured agents within shared project pools; hover for reserved/unknown totals. Missing observations show unavailable values.
 
 Ready admission offers Automatically send to implementation or Final review by human required in the workflow editor. The review option calls for attention and holds implementation until Review readiness records exact human confirmation. Changed ticket/dependency/repository basis or a new Ready visit requires review again. Scope acceptance and final code Approval remain separate.

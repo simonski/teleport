@@ -54,6 +54,8 @@ Remembered-location contract: authenticated human `saveCurrentLocation {view,pro
 
 ### Human ticket queue and dates
 
+Board Todo → Refine drag/drop invokes the existing `requestRefinement {id,expectedVersion}` action only for the same project and exact declared destination in the applicable pinned/selected agent workflow. The client retains actor/view/version identity throughout the drag and rejects foreign/external payloads. Existing server admission, version and ownership guards remain authoritative. Hover descriptions overlay the card without lane reflow; transition only transform/opacity.
+
 Human queue contract: `requestRefinement {id,expectedVersion}` additionally accepts an eligible unclaimed human Todo task, atomically pins the project's current agent workflow, clears assignee and follows its declared refinement route. `returnRefinementToTodo {id,expectedVersion}` is human Contributor-only, task-only, Refine-only, and refuses any busy/reserved/local-unknown ownership, pending unresolved question, accepted scope or retained delivery/implementation history. It pins the project human Todo workflow, assigns the acting human and records conversion without removing history. Expected-version checks serialize both directions against scheduler admission; retrying a committed version returns conflict rather than repeating conversion. The browser uses existing `transitionTicket` for declared human moves and the existing exact Done confirmation. CSS date pickers retain ISO form values and server date validation; typed input and keyboard selection share the same save action.
 
 ### Isolated JavaScript jobs

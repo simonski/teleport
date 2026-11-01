@@ -20,7 +20,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--board-only", action="store_true", help="Run only Board browser checks in the disposable fixture")
     args = parser.parse_args()
+    if args.board_only and not args.browser:
+        parser.error("--board-only requires --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-init-proof-") as temporary:
         folder = Path(temporary)
         with socket.socket() as sock:
@@ -90,9 +93,15 @@ def main():
                 browser("fill", 'input[name="password"]', "password")
                 browser("click", '#login button[type="submit"],#login button')
                 browser("wait", "#nav-views")
-                verify_human_todos(browser, api, project)
-                verify_board_controls(browser, api, project)
-                verify_location(browser, api, project)
+                if args.board_only:
+                    project = api("setHandbrake", {"projectId": project["id"], "expectedVersion": project["version"], "engaged": True})
+                    browser("reload")
+                    browser("wait", "#nav-views")
+                else:
+                    verify_human_todos(browser, api, project)
+                verify_board_controls(browser, api, project, interactions_only=args.board_only)
+                if not args.board_only:
+                    verify_location(browser, api, project)
                 browser("close")
                 project = api("listProjects")["items"][0]
             tk("init", "-f", "-demo", fail=True)

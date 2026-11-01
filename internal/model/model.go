@@ -92,6 +92,8 @@ type State struct {
 }
 
 type Project struct {
+	Simulation         bool               `json:"simulation,omitempty"`
+	DemoSeed           string             `json:"demoSeed,omitempty"`
 	Repository         *RepositoryBinding `json:"repository,omitempty"`
 	RefineWorkers      int                `json:"refineWorkers"`
 	DoingWorkers       int                `json:"doingWorkers"`

@@ -64,18 +64,49 @@ func parse(raw json.RawMessage, dst any) error {
 }
 
 func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
-	err := db.Update(ctx, func(st *model.State) (bool, error) {
-		if st.Schema != 0 {
-			return false, nil
+	st, _, err := InitializeWithOptions(ctx, db, InitializeOptions{})
+	return st, err
+}
+
+type InitializeOptions struct{ Force, Demo bool }
+
+func freshInstallation() model.State {
+	st := model.State{Schema: model.SchemaVersion, InstallationID: randomID(), Accounts: map[string]model.Account{}, Sessions: map[string]model.Session{}, Workflows: model.SeedWorkflows()}
+	st.Accounts["admin"] = model.Account{ID: "admin", Username: "admin", PasswordHash: hashPassword("password"), Administrator: true}
+	return st
+}
+
+func InitializeWithOptions(ctx context.Context, db *store.Store, options InitializeOptions) (*model.State, string, error) {
+	if options.Force {
+		st := freshInstallation()
+		if options.Demo {
+			if _, err := seedPetStore(&st); err != nil {
+				return nil, "", err
+			}
 		}
-		*st = model.State{Schema: model.SchemaVersion, InstallationID: randomID(), Accounts: map[string]model.Account{}, Sessions: map[string]model.Session{}, Workflows: model.SeedWorkflows()}
-		st.Accounts["admin"] = model.Account{ID: "admin", Username: "admin", PasswordHash: hashPassword("password"), Administrator: true}
-		return true, nil
+		st.Revision = 1
+		backup, err := db.Reset(ctx, &st)
+		if err != nil {
+			return nil, backup, err
+		}
+		return &st, backup, nil
+	}
+	err := db.Update(ctx, func(st *model.State) (bool, error) {
+		changed := st.Schema == 0
+		if changed {
+			*st = freshInstallation()
+		}
+		if options.Demo {
+			seeded, err := seedPetStore(st)
+			return changed || seeded, err
+		}
+		return changed, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return db.Read(ctx)
+	st, err := db.Read(ctx)
+	return st, "", err
 }
 
 type Service struct {

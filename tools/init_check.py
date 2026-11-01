@@ -1,0 +1,109 @@
+"""Verify init/reset and PetStore through an isolated real binary and API."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import tempfile
+import time
+import urllib.request
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix="teleport-init-proof-") as temporary:
+        folder = Path(temporary)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        endpoint = f"http://127.0.0.1:{port}"
+        database = args.database or str(folder / "installation.sqlite")
+        environment = dict(os.environ, TELEPORT_DB=database, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+        process = None
+
+        def tk(*arguments, fail=False, input=None):
+            result = subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, text=True, input=input, capture_output=True, timeout=30)
+            if fail:
+                assert result.returncode != 0, result.stdout
+                return result.stderr
+            if result.returncode:
+                raise RuntimeError(result.stderr)
+            return result.stdout
+
+        def api(operation, data=None):
+            return json.loads(tk(operation, "--data", json.dumps(data or {})))
+
+        def start():
+            nonlocal process
+            process = subprocess.Popen([str(ROOT / "bin/tk"), "serve", "--addr", f"127.0.0.1:{port}", "--runtime-dir", str(folder / "runtime")], env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                try:
+                    with urllib.request.urlopen(endpoint + "/healthz", timeout=1) as response:
+                        if response.status == 200:
+                            tk("login", "--password-stdin", input="password\n")
+                            return api("getSession")
+                except OSError:
+                    pass
+                if process.poll() is not None:
+                    raise AssertionError("Isolated server exited")
+                time.sleep(0.05)
+            raise AssertionError("Isolated server did not start")
+
+        def stop():
+            nonlocal process
+            if process:
+                process.terminate()
+                process.wait(timeout=15)
+                process = None
+
+        try:
+            assert "PetStore simulation ready" in tk("init", "-demo")
+            first = start()
+            project = api("listProjects")["items"][0]
+            assert project["simulation"] and project["demoSeed"] == "petstore-v1"
+            tickets = api("listTickets", {"projectId": project["id"], "limit": 200})["items"]
+            ideas = api("listIdeas", {"projectId": project["id"], "limit": 200})["items"]
+            assert len(tickets) >= 25 and len(ideas) == 4, (len(tickets), len(ideas), project["id"])
+            assert not first["settings"]["agents"] and first["preferences"]["defaultProject"] == project["id"]
+            assert all(not ticket["agent"] for ticket in tickets if ticket["status"] == "Done")
+            tk("init", "-f", "-demo", fail=True)
+            assert api("getSession")["installationId"] == first["installationId"]
+            api("saveProject", {"id": project["id"], "expectedVersion": project["version"], "description": "Human-edited sample"})
+            stop()
+            tk("init", "-demo")
+            again = start()
+            assert again["installationId"] == first["installationId"]
+            assert api("listProjects")["items"][0]["description"] == "Human-edited sample"
+            stop()
+            if args.database:
+                assert "SQLite only" in tk("init", "-f", fail=True)
+                print("PASS: PostgreSQL demo bootstrap, idempotent human edits, API hierarchy, owned-init refusal and unsupported reset refusal", flush=True)
+                return
+            output = tk("init", "-f", "-demo")
+            backup = Path(next(line.removeprefix("Backup: ") for line in output.splitlines() if line.startswith("Backup: ")))
+            assert backup.is_file() and backup.stat().st_mode & 0o777 == 0o600
+            reset = start()
+            assert reset["installationId"] != first["installationId"]
+            assert api("listProjects")["items"][0]["description"] != "Human-edited sample"
+            stop()
+            restored = folder / "restored.sqlite"
+            shutil.copy2(backup, restored)
+            environment["TELEPORT_DB"] = str(restored)
+            recovery = start()
+            assert recovery["installationId"] == first["installationId"]
+            assert api("listProjects")["items"][0]["description"] == "Human-edited sample"
+            stop()
+            print("PASS: SQLite backed-up force reset, restored identity/data, private backup, demo hierarchy/Ideas, idempotent edits and owned-init refusal; zero model calls", flush=True)
+        finally:
+            stop()
+
+
+if __name__ == "__main__":
+    main()

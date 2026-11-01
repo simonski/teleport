@@ -27,6 +27,7 @@ def main():
     selection.add_argument("--smoke-only", action="store_true", help="Run only the application smoke against a fresh database")
     selection.add_argument("--shell-only", action="store_true", help="Run shared shell, landing and modal browser checks against a fresh database")
     selection.add_argument("--tests-only", action="store_true", help="Run only Go tests against disposable PostgreSQL")
+    selection.add_argument("--init-only", action="store_true", help="Verify PetStore initialization against a fresh database")
     parser.add_argument("--test-pattern", help="Go test -run pattern for a focused regression")
     args = parser.parse_args()
     if args.shell_only and not args.browser:
@@ -57,7 +58,7 @@ def main():
             started = True
             connection = "postgresql://teleport@/postgres?" + urlencode({"host": temporary, "sslmode": "disable"})
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
-            focused = args.native_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only
+            focused = args.native_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only or args.init_only
             if not focused:
                 test_command = ["go", "test", "-race", "-count=1"]
                 if args.test_pattern:
@@ -67,6 +68,11 @@ def main():
                 print("PASS: PostgreSQL Go test selection", flush=True)
                 return
             subprocess.run(["make", "build"], cwd=ROOT, env=environment, check=True)
+            if args.init_only:
+                pg("createdb", "--host", temporary, "--username", "teleport", "bootstrap")
+                bootstrap_url = "postgresql://teleport@/bootstrap?" + urlencode({"host": temporary, "sslmode": "disable"})
+                subprocess.run(["python3", "-B", "tools/init_check.py", "--database", bootstrap_url], cwd=ROOT, env=environment, check=True)
+                return
             if not focused or args.smoke_only or args.shell_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "smoke")
                 smoke_url = "postgresql://teleport@/smoke?" + urlencode({"host": temporary, "sslmode": "disable"})

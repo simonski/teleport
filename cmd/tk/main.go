@@ -47,7 +47,7 @@ func env(key, fallback string) string {
 }
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" {
-		fmt.Println("teleport (tk)\n\n  tk init [--db PATH]              Initialize storage; start nothing\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec | skill          Read server discovery\n  tk version\n\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
+		fmt.Println("teleport (tk)\n\n  tk init [-f] [-demo] [--db PATH]  Initialize; -f backs up/resets SQLite; -demo seeds PetStore\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec | skill          Read server discovery\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
 		return nil
 	}
 	command := args[0]
@@ -116,6 +116,11 @@ func run(args []string) error {
 	data := flags.String("data", "{}", "JSON request")
 	username := flags.String("username", "admin", "local username")
 	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
+	force, demo := false, false
+	if command == "init" {
+		flags.BoolVar(&force, "f", false, "back up and reset offline SQLite storage; replace all installation data")
+		flags.BoolVar(&demo, "demo", false, "add the PetStore simulation project and synthetic sample work")
+	}
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -124,14 +129,24 @@ func run(args []string) error {
 	}
 	ctx := context.Background()
 	if command == "init" || command == "serve" {
+		if force && (strings.HasPrefix(*dbPath, "postgres://") || strings.HasPrefix(*dbPath, "postgresql://")) {
+			return errors.New("force initialization supports SQLite only; PostgreSQL requires a separately verified backup/restore procedure")
+		}
 		db, err := store.Open(*dbPath, command == "init")
 		if err != nil {
 			return err
 		}
 		defer db.Close()
 		if command == "init" {
-			if _, err = app.Initialize(ctx, db); err != nil {
-				return err
+			_, backup, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{Force: force, Demo: demo})
+			if backup != "" {
+				fmt.Printf("Backup: %s\n", backup)
+			}
+			if initErr != nil {
+				return initErr
+			}
+			if demo {
+				fmt.Println("PetStore simulation ready: no real harnesses or model calls.")
 			}
 			fmt.Printf("Storage: %s\nInitialization complete. Run: tk serve\n", redactLocation(*dbPath))
 			return nil

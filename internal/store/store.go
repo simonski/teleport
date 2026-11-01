@@ -26,6 +26,7 @@ type Store struct {
 	db         *sql.DB
 	connection *sql.Conn
 	postgres   bool
+	sqlitePath string
 	mu         sync.Mutex
 	release    func()
 }
@@ -38,6 +39,7 @@ func Open(location string, initialize bool) (*Store, error) {
 		if err != nil {
 			return nil, err
 		}
+		s.sqlitePath = abs
 		if initialize {
 			if err = os.MkdirAll(filepath.Dir(abs), 0700); err != nil {
 				return nil, err

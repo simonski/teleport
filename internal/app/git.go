@@ -87,6 +87,9 @@ func (s *Service) gitCall(ctx context.Context, token, operation string, raw json
 			return false, failure(409, "demo_active", "Disable demo execution before preparing real delivery")
 		}
 		p := st.Projects[t.ProjectID]
+		if p.Simulation {
+			return false, failure(409, "simulation_only", "Simulation projects cannot prepare real delivery")
+		}
 		if p.Repository == nil {
 			return false, failure(409, "binding_required", "An administrator must grant this project's exact local repository and storage")
 		}
@@ -288,6 +291,9 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 	if _, ok := snapshot.Projects[in.ProjectID]; !ok {
 		return nil, failure(404, "not_found", "Project not found")
 	}
+	if snapshot.Projects[in.ProjectID].Simulation {
+		return nil, failure(409, "simulation_only", "Simulation projects cannot grant repositories or run real harnesses")
+	}
 	binding, err := gitwork.Inspect(ctx, in.Repository, in.StorageRoot)
 	if err != nil {
 		return nil, failure(422, "invalid_repository", "Choose the exact committed main checkout and separate absolute storage root")
@@ -304,6 +310,9 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 		p, ok := st.Projects[in.ProjectID]
 		if !ok {
 			return false, failure(404, "not_found", "Project not found")
+		}
+		if p.Simulation {
+			return false, failure(409, "simulation_only", "Simulation projects cannot grant repositories or run real harnesses")
 		}
 		if p.Version != in.ExpectedVersion {
 			return false, failure(409, "version_conflict", "Project changed")

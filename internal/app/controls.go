@@ -315,6 +315,9 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 			return nil, false, failure(422, "same_project", "Use moveTicket within one project")
 		}
 		p := st.Projects[in.DestinationProjectID]
+		if st.Projects[t.ProjectID].Simulation != p.Simulation {
+			return nil, false, failure(409, "simulation_boundary", "Simulation work cannot transfer between simulated and real projects")
+		}
 		ids := subtree(st, t.ID)
 		for _, id := range ids {
 			item := st.Tickets[id]

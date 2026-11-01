@@ -18,6 +18,7 @@ type ProjectDirectoryInput struct {
 }
 
 type ProjectSummary struct {
+	Simulation     bool       `json:"simulation,omitempty"`
 	ID             int64      `json:"id"`
 	Version        int64      `json:"version"`
 	Key            string     `json:"key"`
@@ -134,7 +135,7 @@ func (s *Service) projectDirectory(ctx context.Context, token string, raw json.R
 	for _, id := range ids {
 		p := st.Projects[id]
 		count := 0
-		rows[id] = &ProjectSummary{ID: id, Version: p.Version, Key: p.Key, Name: p.Name, Description: p.Description, Agents: &count, AgentsScope: "own-authorized", UsageStatus: "unavailable", ActivityStatus: "retained-events"}
+		rows[id] = &ProjectSummary{Simulation: p.Simulation, ID: id, Version: p.Version, Key: p.Key, Name: p.Name, Description: p.Description, Agents: &count, AgentsScope: "own-authorized", UsageStatus: "unavailable", ActivityStatus: "retained-events"}
 	}
 	for _, ticket := range st.Tickets {
 		row := rows[ticket.ProjectID]

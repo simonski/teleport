@@ -131,7 +131,7 @@ func demoAdmission(st *model.State, t model.Ticket, p model.Phase) error {
 	if t.Kind != "task" && !t.Planning {
 		return failure(409, "planning_closed", "A container's delivery rollup is not an executable implementation phase")
 	}
-	if st.Settings.ExecutionMode != "demo" || !st.Settings.Agents {
+	if !st.Projects[t.ProjectID].Simulation && (st.Settings.ExecutionMode != "demo" || !st.Settings.Agents) {
 		return failure(409, "execution_disabled", "Enable explicit demo execution first")
 	}
 	if !t.Agent || t.Archived || t.Deleted || t.Status == "Done" || t.Status == "Cancelled" || t.ResumeHold || t.StopRequested || busy(t) || t.Question != nil && !t.Question.Resolved && !t.Question.Obsolete {
@@ -310,12 +310,15 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 
 func (s *Service) PumpDemo(ctx context.Context) error {
 	return s.db.Update(ctx, func(st *model.State) (bool, error) {
-		if st.Settings.ExecutionMode != "demo" || !st.Settings.Agents {
-			return false, nil
-		}
 		collections(st)
 		ids := []int64{}
 		for id, t := range st.Tickets {
+			if !st.Projects[t.ProjectID].Simulation && (st.Settings.ExecutionMode != "demo" || !st.Settings.Agents) {
+				continue
+			}
+			if st.Projects[t.ProjectID].Simulation && time.Since(t.PhaseEnteredAt) < time.Second {
+				continue
+			}
 			if !t.Agent || t.Kind != "task" && !t.Planning || t.Status == "Done" || t.Status == "Cancelled" || t.Status == "Todo" || t.Status == "Approval" || t.Status == "Clarify" {
 				continue
 			}

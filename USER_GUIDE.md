@@ -38,6 +38,12 @@ Workflows hosts the graph and list editor in its own view; Project settings → 
 
 Save latest before previewing a saved route or choosing Publish latest. Publication freezes the next numbered version without selecting it. Retry an unconfirmed publication response using the same action; it returns the original version. Select for new work separately changes future tickets; existing Board sections retain their exact pin. Edit next version starts a new latest draft. Settings can make Workflows the sign-in default. The CLI also exposes stopped same-role migration and retains its older combined activation operation.
 
+## Reinitialize or explore PetStore
+
+Stop `tk serve` before initialization. `tk init -f` backs up the SQLite database (including WAL contents) to the printed adjacent private `.backup-….sqlite` file, then creates a fresh installation with bootstrap credentials. All old installation data and logins are replaced. Retained running/unknown jobs must be stopped and reconciled first. Backup failure prevents reset. PostgreSQL force reset is unavailable.
+
+`tk init -demo` adds a PetStore simulation project with goals, epics, Ideas and human/agentic tickets in varied states. `tk init -f -demo` starts fresh with that sample. Repeat `-demo` preserves sample edits; a conflicting non-demo project refuses. Init starts nothing; `tk serve` subsequently advances simulated work without real agents or repository access. Human acceptance gates still apply. Todos contains only human tasks in Todo/Doing/Done; Board also shows agentic examples.
+
 ## JavaScript console
 
 Press `/` or the terminal icon to open the command console. Type JavaScript or a supported `tk` command and press Enter. Expressions such as `1 + 2` return a value automatically. Shift+Enter inserts a newline; Up/Down recalls command history, Tab completes binding names, and Ctrl+L or `clear` clears visible output. Type `help` for commands. Ctrl+C requests Stop for the current run through its confirmation popup. Each command has its own isolated context; variables/functions can be shared within one multiline command.

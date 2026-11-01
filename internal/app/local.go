@@ -365,6 +365,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "local_mode_required", "Use single-user local mode with demo execution off")
 	}
 	p := st.Projects[in.ProjectID]
+	if p.Simulation {
+		return nil, failure(409, "simulation_only", "Simulation projects cannot run real harnesses")
+	}
 	if p.Repository == nil {
 		return nil, failure(409, "binding_required", "Grant this project's local repository and worktree storage in Settings")
 	}
@@ -384,6 +387,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		}
 		if err = require(st, a, in.ProjectID, "Contributor"); err != nil {
 			return false, err
+		}
+		if st.Projects[in.ProjectID].Simulation {
+			return false, failure(409, "simulation_only", "Simulation projects cannot run real harnesses")
 		}
 		if st.LocalSessions == nil {
 			st.LocalSessions = map[string]model.LocalSession{}

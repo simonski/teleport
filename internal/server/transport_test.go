@@ -39,4 +39,12 @@ func TestRejectsInvalidBodiesOriginsAndUnauthenticatedCalls(t *testing.T) {
 			}
 		})
 	}
+	r := httptest.NewRequest("POST", "http://attacker.test:9999/api/tools/login", strings.NewReader(`{"username":"admin","password":"password"}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Origin", "http://attacker.test:9999")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 421 {
+		t.Fatalf("untrusted Host reached login: status=%d", w.Code)
+	}
 }

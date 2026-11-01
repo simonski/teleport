@@ -86,3 +86,41 @@ func TestEpicPlanningSurvivesCompletedChildrenAndClosesWithoutImplementation(t *
 		t.Fatal("closed planning reentered implementation or completed unfinished children")
 	}
 }
+
+func TestDeclaredHaltDoesNotAutomaticallyRetryDecomposition(t *testing.T) {
+	svc, token := fixture(t)
+	p := call(t, svc, token, "createProject", map[string]any{"name": "Halt", "key": "halt", "requestId": "p"}).(model.Project)
+	epic := call(t, svc, token, "createTicket", map[string]any{"projectId": p.ID, "kind": "epic", "title": "Plan shipment", "requestId": "e"}).(model.Ticket)
+	call(t, svc, token, "setExecutionMode", app.ExecutionModeInput{Mode: "demo"})
+	epic = call(t, svc, token, "requestRefinement", app.VersionInput{ID: epic.ID, ExpectedVersion: epic.Version}).(model.Ticket)
+	result := call(t, svc, token, "runDemoStage", app.DemoStageInput{ID: epic.ID, ExpectedVersion: epic.Version, RequestID: "scope"}).(app.DemoStageResult)
+	epic = call(t, svc, token, "acceptRefinement", app.AcceptScopeInput{ID: epic.ID, ExpectedVersion: result.Ticket.Version, ProposalID: result.Ticket.Refinement.ID, Decompose: true}).(model.Ticket)
+	failed := call(t, svc, token, "runDemoStage", app.DemoStageInput{ID: epic.ID, ExpectedVersion: epic.Version, RequestID: "failed-plan", Outcome: "failure"}).(app.DemoStageResult)
+	for range 3 {
+		if err := svc.PumpDemo(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current := call(t, svc, token, "getTicket", app.IDInput{ID: epic.ID}).(model.Ticket)
+	if current.Attempts != failed.Ticket.Attempts || !current.Planning {
+		t.Fatal("halted decomposition retried automatically")
+	}
+}
+
+func TestMetadataEditsDoNotResetPhaseWaitingOrder(t *testing.T) {
+	svc, token := fixture(t)
+	p := call(t, svc, token, "createProject", map[string]any{"name": "Queue", "key": "queue", "requestId": "p"}).(model.Project)
+	first := call(t, svc, token, "createTicket", map[string]any{"projectId": p.ID, "title": "First waiting", "requestId": "first"}).(model.Ticket)
+	second := call(t, svc, token, "createTicket", map[string]any{"projectId": p.ID, "title": "Second waiting", "requestId": "second"}).(model.Ticket)
+	call(t, svc, token, "setExecutionMode", app.ExecutionModeInput{Mode: "demo"})
+	first = call(t, svc, token, "requestRefinement", app.VersionInput{ID: first.ID, ExpectedVersion: first.Version}).(model.Ticket)
+	call(t, svc, token, "requestRefinement", app.VersionInput{ID: second.ID, ExpectedVersion: second.Version})
+	call(t, svc, token, "updateTicket", map[string]any{"id": first.ID, "expectedVersion": first.Version, "labels": []string{"label-only"}})
+	if err := svc.PumpDemo(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	first = call(t, svc, token, "getTicket", app.IDInput{ID: first.ID}).(model.Ticket)
+	if first.Refinement == nil {
+		t.Fatal("metadata edit moved the older waiting phase behind newer work")
+	}
+}

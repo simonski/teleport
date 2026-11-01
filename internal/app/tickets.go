@@ -126,6 +126,9 @@ func saveTicket(st *model.State, t *model.Ticket, a model.Account, action string
 	if t.CreatedAt.IsZero() {
 		t.CreatedAt = t.UpdatedAt
 	}
+	if t.PhaseEnteredAt.IsZero() {
+		t.PhaseEnteredAt = t.CreatedAt
+	}
 	st.Tickets[t.ID] = *t
 	st.History[t.ID] = append(st.History[t.ID], model.Revision{Version: t.Version, Actor: a.ID, Action: action, At: t.UpdatedAt, Snapshot: *t})
 }

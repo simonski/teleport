@@ -58,6 +58,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	dbPath := flags.String("db", env("TELEPORT_DB", filepath.Join(home, ".teleport", "database.db")), "SQLite path or PostgreSQL URL (init/serve only)")
 	addr := flags.String("addr", "localhost:9999", "listen address")
+	publicHost := flags.String("public-host", "", "explicit additional trusted browser hostname (no scheme or path)")
 	endpoint := flags.String("server", env("TELEPORT_SERVER", "http://localhost:9999"), "server URL")
 	config := flags.String("config", env("TELEPORT_CONFIG", filepath.Join(home, ".teleport", "client.json")), "client credential file")
 	data := flags.String("data", "{}", "JSON request")
@@ -88,7 +89,10 @@ func run(args []string) error {
 			return err
 		}
 		service := app.New(db)
-		httpServer := server.HTTP(*addr, server.New(service, version))
+		if strings.ContainsAny(*publicHost, "/:@?# ") {
+			return errors.New("--public-host must be a bare hostname")
+		}
+		httpServer := server.HTTP(*addr, server.New(service, version, *publicHost))
 		stopCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 		go func() {

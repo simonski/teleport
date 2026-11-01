@@ -95,6 +95,8 @@ type Agreement struct {
 	BasisVersion int64     `json:"basisVersion"`
 }
 type Ticket struct {
+	RoutingHold        string       `json:"routingHold,omitempty"`
+	PhaseEnteredAt     time.Time    `json:"phaseEnteredAt"`
 	AttemptLimit       int          `json:"attemptLimit"`
 	Attempts           int          `json:"attempts"`
 	StageVisit         int64        `json:"stageVisit"`
@@ -157,17 +159,18 @@ type Refinement struct {
 	Simulated  bool      `json:"simulated"`
 }
 type Question struct {
-	ID            string    `json:"id"`
-	Text          string    `json:"text"`
-	OriginPhase   string    `json:"originPhase"`
-	OriginAttempt string    `json:"originAttempt"`
-	Workflow      string    `json:"workflow"`
-	Basis         string    `json:"basis"`
-	Answer        string    `json:"answer,omitempty"`
-	Resolved      bool      `json:"resolved"`
-	Obsolete      bool      `json:"obsolete"`
-	AskedAt       time.Time `json:"askedAt"`
-	AnsweredAt    time.Time `json:"answeredAt,omitempty"`
+	OriginWaitingSince time.Time `json:"originWaitingSince"`
+	ID                 string    `json:"id"`
+	Text               string    `json:"text"`
+	OriginPhase        string    `json:"originPhase"`
+	OriginAttempt      string    `json:"originAttempt"`
+	Workflow           string    `json:"workflow"`
+	Basis              string    `json:"basis"`
+	Answer             string    `json:"answer,omitempty"`
+	Resolved           bool      `json:"resolved"`
+	Obsolete           bool      `json:"obsolete"`
+	AskedAt            time.Time `json:"askedAt"`
+	AnsweredAt         time.Time `json:"answeredAt,omitempty"`
 }
 type AgentReview struct {
 	ID        string    `json:"id"`

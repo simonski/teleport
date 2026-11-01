@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -26,7 +28,7 @@ type Operation struct {
 
 var Operations = []Operation{{"login", "ACT-1316", "Sign in with local credentials"}, {"getSession", "ACT-1309", "Read the current authenticated session"}, {"logout", "ACT-1310", "Revoke the current sign-in session"}, {"listWorkflows", "ACT-0701", "Read published workflow definitions"}}
 
-func New(service *app.Service, version string) http.Handler {
+func New(service *app.Service, version string, configuredHosts ...string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]string{"status": "ok", "version": version})
@@ -38,13 +40,18 @@ func New(service *app.Service, version string) http.Handler {
 		fmt.Fprint(w, "# teleport\nUse tk OPERATION --data JSON for registered operations. Read tk spec and tk tools. All clients use authenticated server APIs. Human scope and code acceptance cannot be supplied by an agent. Unsupported operations fail explicitly.\n")
 	})
 	mux.HandleFunc("POST /api/tools/{operation}", func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		mediaType, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if mediaErr != nil || mediaType != "application/json" {
 			writeError(w, &app.Error{Status: 415, Code: "unsupported_media_type", Message: "Use application/json"})
 			return
 		}
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, err := url.Parse(origin)
-			if err != nil || u.Host != r.Host || (u.Scheme != "http" && u.Scheme != "https") {
+			scheme := "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+			if err != nil || !strings.EqualFold(u.Host, r.Host) || u.Scheme != scheme || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 				writeError(w, &app.Error{Status: 403, Code: "forbidden_origin", Message: "Cross-origin requests are not permitted"})
 				return
 			}
@@ -108,8 +115,30 @@ func New(service *app.Service, version string) http.Handler {
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		w.Header().Set("Cache-Control", "no-store")
+		if !trustedHost(r.Host, configuredHosts) {
+			writeError(w, &app.Error{Status: 421, Code: "untrusted_host", Message: "Request Host is not configured for this server"})
+			return
+		}
 		mux.ServeHTTP(w, r)
 	})
+}
+func trustedHost(host string, configured []string) bool {
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+	host = strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	for _, allowed := range configured {
+		if allowed != "" && host == strings.ToLower(strings.TrimSuffix(allowed, ".")) {
+			return true
+		}
+	}
+	return false
 }
 func write(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -84,6 +84,8 @@ func enterPhase(t *model.Ticket, w model.Workflow, target string) error {
 	}
 	t.Phase, t.Status = target, p.Role
 	t.StageVisit++
+	t.PhaseEnteredAt = time.Now().UTC()
+	t.RoutingHold = ""
 	return nil
 }
 func applyRoute(t *model.Ticket, w model.Workflow, outcome string, context map[string]string) (RoutePreview, error) {
@@ -93,6 +95,8 @@ func applyRoute(t *model.Ticket, w model.Workflow, outcome string, context map[s
 	}
 	if route.Target != "" {
 		err = enterPhase(t, w, route.Target)
+	} else if route.Action != "" {
+		t.RoutingHold = route.Action
 	}
 	return route, err
 }
@@ -100,6 +104,9 @@ func acceptedScope(t model.Ticket) bool {
 	return t.Refinement != nil && t.Refinement.AcceptedBy != "" && t.Refinement.Basis == scopeBasis(t)
 }
 func demoAdmission(st *model.State, t model.Ticket, p model.Phase) error {
+	if t.RoutingHold != "" {
+		return failure(409, "routing_hold", "A declared workflow wait/halt requires its explicit continuation")
+	}
 	if t.Kind != "task" && !t.Planning {
 		return failure(409, "planning_closed", "A container's delivery rollup is not an executable implementation phase")
 	}
@@ -173,6 +180,9 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 	if err = expected(t, in.ExpectedVersion); err != nil {
 		return DemoStageResult{}, false, err
 	}
+	if t.RoutingHold != "" {
+		return DemoStageResult{}, false, failure(409, "routing_hold", "A declared workflow wait/halt is still active")
+	}
 	w := st.Workflows[t.Workflow]
 	phase, ok := phaseByID(w, t.Phase)
 	if !ok {
@@ -182,6 +192,12 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 		route, err := ResolveOutcome(w, t.Phase, "start", nil)
 		if err != nil {
 			return DemoStageResult{}, false, err
+		}
+		if route.Action != "" {
+			t.RoutingHold = route.Action
+			t.Attention = "Workflow " + route.Action
+			saveTicket(st, &t, a, "routingHold")
+			return DemoStageResult{Ticket: t, Simulated: true, BlockedReason: t.Attention}, true, nil
 		}
 		target, ok := phaseByID(w, route.Target)
 		if !ok || target.Role != "Doing" {
@@ -241,7 +257,7 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 	serviceActor := model.Account{ID: "demo:" + attempt}
 	source := t.Phase
 	if outcome == "question" {
-		t.Question = &model.Question{ID: randomID(), Text: in.Question, OriginPhase: source, OriginAttempt: attempt, Workflow: t.Workflow, Basis: scopeBasis(t), AskedAt: now}
+		t.Question = &model.Question{ID: randomID(), Text: in.Question, OriginPhase: source, OriginAttempt: attempt, Workflow: t.Workflow, Basis: scopeBasis(t), AskedAt: now, OriginWaitingSince: t.PhaseEnteredAt}
 		route, err := applyRoute(&t, w, outcome, nil)
 		if err != nil {
 			return DemoStageResult{}, false, err
@@ -264,6 +280,9 @@ func demoStep(st *model.State, a model.Account, in DemoStageInput, internal bool
 		}
 		if _, err = applyRoute(&t, w, outcome, nil); err != nil {
 			return DemoStageResult{}, false, err
+		}
+		if t.RoutingHold != "" && t.Attention == "" {
+			t.Attention = "Workflow " + t.RoutingHold
 		}
 		if t.Status == "Approval" {
 			t.Attention = "Demo result: real delivery evidence is unavailable"
@@ -309,7 +328,17 @@ func (s *Service) PumpDemo(ctx context.Context) error {
 			if ranks[a.Priority] != ranks[b.Priority] {
 				return ranks[a.Priority] < ranks[b.Priority]
 			}
-			return a.UpdatedAt.Before(b.UpdatedAt)
+			aw, bw := a.PhaseEnteredAt, b.PhaseEnteredAt
+			if aw.IsZero() {
+				aw = a.CreatedAt
+			}
+			if bw.IsZero() {
+				bw = b.CreatedAt
+			}
+			if aw.Equal(bw) {
+				return a.ID < b.ID
+			}
+			return aw.Before(bw)
 		})
 		for _, id := range ids {
 			t := st.Tickets[id]
@@ -478,6 +507,9 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 			}
 			if target == q.OriginPhase {
 				t.ResumeAttempt = q.OriginAttempt
+				if !q.OriginWaitingSince.IsZero() {
+					t.PhaseEnteredAt = q.OriginWaitingSince
+				}
 			}
 			t.Attention = ""
 		}
@@ -570,6 +602,7 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 			}
 			t.ResumeHold = false
 			t.StopRequested = false
+			t.RoutingHold = ""
 		} else {
 			t.ResumeHold = true
 			if busy(t) {

@@ -62,6 +62,8 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
+	LocationWrites     int64                     `json:"locationWrites,omitempty"`
+	LastLocations      map[string]RecentContext  `json:"lastLocations,omitempty"`
 	NextScriptID       int64                     `json:"nextScriptId"`
 	ScriptRuns         map[string]ScriptRun      `json:"scriptRuns"`
 	NextLocalSessionID int64                     `json:"nextLocalSessionId"`

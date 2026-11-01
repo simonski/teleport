@@ -12,6 +12,10 @@ The landing rocket travels behind and in front of the wordmark, loops around the
 
 First browser sign-in opens Welcome to teleport: name/select a project, choose Codex or configure later, then select attention preferences. Names are checked while typing; the suggested prefix uses four letters, or three plus an available number on collision. Progress stays private until Finish setup atomically creates the project and completes setup. Escape, outside click or Later dismisses; Finish setup in the account menu resumes it. Repository/worktree paths and access grants are configured separately, after setup. Finishing starts no harness or paid work. Missing Codex installation is shown without claiming readiness. Attention preferences affect notifications; ticket badges remain visible.
 
+## Remembered location
+
+The latest view and selected project are remembered per account after refresh and sign-out/sign-in. The server saves this independently of appearance/layout preferences; a browser cache preserves an unacknowledged change. Restored projects are checked against current access. Settings' default view/project are fallbacks for a fresh or unavailable context; dialogs, unsaved editor contents and terminal input are not reopened automatically.
+
 ## Support boundary
 
 The compact header has permanent JavaScript and harness-session buttons; opening either viewer starts no execution. The harness button turns red when an accessible running session needs attention. The bottom-right footer shows the actual server build on login and in every view. The profile menu opens personal Settings and separate installation System popups over the current view. Choose Project settings for the selected project's repository, handbrake, native readiness and shortcut to Workflows. Escape/outside dismisses popups without changing the underlying view. Evolution remains a subsequent slice.

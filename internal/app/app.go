@@ -214,8 +214,17 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		}
 		switch operation {
 		case "getSession":
-			result = map[string]any{"account": publicAccount(a), "installationId": st.InstallationID, "revision": st.Revision, "settings": st.Settings, "preferences": personalPreferences(st, a), "welcomeSetup": welcomeSetup(st, a)}
+			body := map[string]any{"account": publicAccount(a), "installationId": st.InstallationID, "revision": st.Revision, "settings": st.Settings, "preferences": personalPreferences(st, a), "welcomeSetup": welcomeSetup(st, a)}
+			if location := currentLocation(st, a); location != nil {
+				body["lastLocation"] = location
+			}
+			body["contentRevision"] = st.Revision - st.LocationWrites
+			result = body
 			return false, nil
+		case "saveCurrentLocation":
+			var changed bool
+			result, changed, err = saveCurrentLocation(st, a, raw)
+			return changed, err
 		case "logout":
 			delete(st.Sessions, digest(token))
 			result = map[string]bool{"signedOut": true}

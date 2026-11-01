@@ -18,12 +18,14 @@ var contracts = map[string]contract{
 		Password string `json:"password"`
 	}{}, app.LoginResult{}},
 	"getSession": {struct{}{}, struct {
-		Account        model.Account      `json:"account"`
-		InstallationID string             `json:"installationId"`
-		Revision       int64              `json:"revision"`
-		Settings       model.Settings     `json:"settings"`
-		Preferences    model.Preferences  `json:"preferences"`
-		WelcomeSetup   model.WelcomeSetup `json:"welcomeSetup"`
+		Account         model.Account        `json:"account"`
+		InstallationID  string               `json:"installationId"`
+		Revision        int64                `json:"revision"`
+		ContentRevision int64                `json:"contentRevision"`
+		Settings        model.Settings       `json:"settings"`
+		Preferences     model.Preferences    `json:"preferences"`
+		WelcomeSetup    model.WelcomeSetup   `json:"welcomeSetup"`
+		LastLocation    *model.RecentContext `json:"lastLocation,omitempty"`
 	}{}},
 	"logout": {struct{}{}, struct {
 		SignedOut bool `json:"signedOut"`

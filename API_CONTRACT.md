@@ -46,9 +46,17 @@ Responses use the operation's JSON result. Failures use `{"error":{"code":"stabl
 
 ## Operations
 
-### Isolated JavaScript jobs
+### Remembered navigation
+
+Remembered-location contract: authenticated human `saveCurrentLocation {view,projectId}` assigns only the caller's latest permitted view/project; identical assignment is a no-op and concurrent assignments use last serialized write. `getSession.lastLocation` is omitted when missing or no longer accessible. This private state is separate from versioned appearance/navigation preferences and cannot overwrite their drafts or versions. Execution-scoped credentials cannot save it. No ticket/dialog/terminal state or input is restored. The browser retains only view/project IDs in a cache keyed by installation and account, with a pending marker for an unacknowledged assignment. Restoration validates current project access and shipped views before any scoped content request; invalid context falls back to permitted defaults. Sign-out flushes the latest assignment and never turns navigation into a domain action.
+
+`getSession.contentRevision` excludes navigation-only assignments; `revision` retains the installation transaction revision. Background workspace refresh uses contentRevision, so saving location does not rebuild the page. Hovered Board descriptions defer background content replacement; explicit user actions still refresh normally. Saved defaults are fallbacks when no permitted last location exists.
+
+### Human ticket queue and dates
 
 Human queue contract: `requestRefinement {id,expectedVersion}` additionally accepts an eligible unclaimed human Todo task, atomically pins the project's current agent workflow, clears assignee and follows its declared refinement route. `returnRefinementToTodo {id,expectedVersion}` is human Contributor-only, task-only, Refine-only, and refuses any busy/reserved/local-unknown ownership, pending unresolved question, accepted scope or retained delivery/implementation history. It pins the project human Todo workflow, assigns the acting human and records conversion without removing history. Expected-version checks serialize both directions against scheduler admission; retrying a committed version returns conflict rather than repeating conversion. The browser uses existing `transitionTicket` for declared human moves and the existing exact Done confirmation. CSS date pickers retain ISO form values and server date validation; typed input and keyboard selection share the same save action.
+
+### Isolated JavaScript jobs
 
 The browser console presents a command prompt and bounded plain-text transcript. Enter submits once; Shift+Enter edits multiline source, Up/Down recalls account-local commands, Tab completes binding names and Ctrl+L/`clear` clears the viewer. Escape detaches. `tk OPERATION [--data JSON]` parses an exact declared binding and one JSON object (optional surrounding shell quotes); arguments are serialized as data for the isolated runtime. Unsupported bindings, flags, pipes and malformed JSON reject without launch. `help`/`tk help`, `tk tools`, `tk version` and `clear` are local display actions. A command never becomes an OS shell invocation. Source/drafts/transcript reset on account invalidation; durable run history remains creator-private through existing APIs.
 

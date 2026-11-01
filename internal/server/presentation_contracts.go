@@ -16,6 +16,7 @@ func init() {
 		{"getViewPreferences", "ACT-1205", "Read current account preferences with revalidated context", struct{}{}, model.Preferences{}},
 		{"setAppearance", "ACT-0713", "Save only the current account's appearance", app.AppearanceInput{}, model.Preferences{}},
 		{"saveViewPreferences", "ACT-1205", "Save versioned personal navigation defaults", app.ViewPreferencesInput{}, model.Preferences{}},
+		{"saveCurrentLocation", "ACT-1205", "Remember the account's latest permitted view and project", app.CurrentLocationInput{}, model.RecentContext{}},
 	}
 	for _, e := range entries {
 		Operations = append(Operations, Operation{e.name, e.action, e.summary})

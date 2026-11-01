@@ -355,5 +355,5 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 		st.Preferences[a.ID] = p
 		return p, true, nil
 	}
-	return nil, false, failure(404, "unsupported_operation", "Operation is not available in this build")
+	return capabilityOperations(st, a, operation, raw)
 }

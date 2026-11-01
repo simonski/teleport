@@ -51,6 +51,8 @@ def main():
             assert len(json.loads(tk("tools"))["items"]) >= 4
             assert "passwordHash" not in json.dumps(session)
             project = json.loads(tk("createProject", "--data", json.dumps({"name": "Smoke flight", "key": "smoke-flight", "requestId": "smoke-project"})))
+            permission = json.loads(tk("getEffectivePermission", "--data", json.dumps({"projectId": project["id"], "adapter": "codex-structured", "command": ["git", "status"]})))
+            assert not permission["allowed"] and not permission["executable"] and permission["capabilities"]["missingProofs"]
             ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Pack the flight case", "agent": False, "requestId": "smoke-ticket"})))
             ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
             assert ticket["status"] == "Doing"
@@ -221,6 +223,9 @@ def main():
                     browser("wait", "--fn", "document.documentElement.dataset.mode==='dark'")
                     prefs = json.loads(tk("getViewPreferences"))
                     assert prefs["style"] == "instrument" and prefs["mode"] == "dark"
+                    browser("click", "#inspect-native")
+                    browser("wait", "--fn", "document.querySelector('dialog[open]')?.innerText.includes('fresh server authorization')")
+                    browser("click", '#editor button[type="submit"]')
                     browser("find", "role", "button", "click", "--name", "Graph", "--exact")
                     browser("wait", "--fn", "document.querySelector('#graph-state')?.innerText.includes('entities')")
                     browser("screenshot", "/tmp/teleport-graph-dark.png")

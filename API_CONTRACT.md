@@ -13,7 +13,7 @@ Responses use the operation's JSON result. Failures use `{"error":{"code":"stabl
 | Operation | Input | Result | Authority |
 | --- | --- | --- | --- |
 | `login` | `{username:string,password:string}` | `{token:string,account:{id,username,administrator,suspended}}` plus cookie | Public; password verified; throttled |
-| `getSession` | `{}` | `{account,installationId:string,revision:integer,settings:{agents,registrations,handbrake}}` | Current session |
+| `getSession` | `{}` | `{account,installationId:string,revision:integer,settings:{version,agents,registrations,handbrake,executionMode},preferences:Preferences}` | Current session; preferences share the authenticated snapshot |
 | `logout` | `{}` | `{signedOut:true}` | Revokes current session only |
 | `listWorkflows` | `{}` | `{items:Workflow[],nextCursor:""}` | Current session; two seeded definitions in P01 |
 
@@ -96,6 +96,10 @@ Ideas use a separate monotonic `idea:N` identity. `saveIdea` takes `{id?,expecte
 `getGraph` accepts `{projectId?,query?,kind?,agent?,maxNodes?}` and returns authorized unique `project:N`/`ticket:N` nodes, hierarchy/dependency edges, required context ancestors and a separately versioned layout. Default/maximum node limits are 1,000/2,000; oversized selections fail explicitly and must be narrowed. Context nodes retain current project authorization, including hidden required ancestors. `saveGraphLayout` accepts `{projectId?,expectedVersion,positions:{nodeId:{x,y,z}}}` as a bounded patch (maximum 2,000 finite coordinates within ±100,000). Project scope publishes shared coordinates with Contributor-or-higher rights; project-zero scope saves only the current actor's private All projects arrangement, including Viewer navigation arrangements. Recheck every node's current scope/access and layout version atomically. Layout changes never revise tickets, relationships or scheduling.
 
 `getAppearanceStyles` discovers bundled `paper` and `instrument` styles plus `light`/`dark` modes. `getViewPreferences` reads the current account's `{version,style,mode,defaultView,defaultProject,recent}`. `setAppearance` takes `{expectedVersion,style,mode}` and edits only appearance; `saveViewPreferences` takes `{expectedVersion,defaultView,defaultProject,recent}` and edits only navigation. Both share optimistic preference versioning, are available to owners regardless of project role, and never accept another account ID. Recent contexts are bounded to 20 `{view,projectId,ticketId?}` entries. Validate referenced resources against current rights on save and sanitize inaccessible retained defaults on read. Preferences affect future defaults and presentation; polling never redirects an active client or overwrites its foreground editor. Live Graph camera/selection and anonymous appearance remain local and are cleared on account switch.
+
+## Execution capability inspection
+
+`getEffectivePermission` accepts `{projectId,adapter,command}` from a current project Viewer-or-higher. The command is an argv array of 1–128 strings, each within 4 KiB and 64 KiB combined. Initial adapter IDs are `codex-structured` and `codex-pty`. The response is a non-executing inspection: `{allowed:false,executable:false,winningRestriction,policyVersion,capabilities}`. Both native adapters remain blocked for missing verified per-operation dispatch/recovery enforcement. Inspection neither runs a command, reserves work, changes a grant nor authorizes a later dispatch. The installed-version/schema probe is a separate development tool and cannot enable an adapter.
 
 ## Storage envelope
 

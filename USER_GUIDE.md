@@ -44,6 +44,8 @@ Human Approval integrates the exact eligible candidate with a fast-forward and r
 
 ## Development
 
+Select a project in Settings and choose Inspect native execution readiness to see the exact missing adapter proofs. CLI `tk getEffectivePermission --data '{"projectId":1,"adapter":"codex-structured","command":["git","status"]}'` performs the same read-only inspection. It does not authorize or execute the inspected command. `python3 -B tools/codex_probe.py --output /tmp/teleport-codex-capabilities.json` exports installed protocol schemas for development without starting an agent session or using provider credits.
+
 SQLite is the default. For PostgreSQL, provide an existing dedicated database URL through `TELEPORT_DB`, then run the same `tk init` and `tk serve` commands. Only init creates the application table; server/client startup never resets it. Keep database credentials in the environment rather than shell history, and configure transport/authentication for the intended host. The server holds exclusive installation ownership; loss of its retained PostgreSQL connection requires a controlled restart. Backend conversion, backup/restore commands, automatic schema upgrades and large-workspace performance remain pending.
 
 `python3 -B tools/postgres_check.py --browser` creates a private disposable PostgreSQL cluster, runs the same race/domain suite with one fresh database per fixture, exercises the real binary/browser flow, and stops/removes the cluster. PostgreSQL 17+ server utilities must be on PATH or supplied with `--postgres-bin`; Postgres.app is also discovered. The runner opens no TCP listener and modifies no existing service. PostgreSQL 17.7 is the current parity target.

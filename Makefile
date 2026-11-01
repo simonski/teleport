@@ -25,6 +25,7 @@ check: lint
 	python3 -B tools/test_sbom.py
 	python3 -B tools/test_tool_history.py
 	python3 -B tools/test_timing.py
+	python3 -B tools/test_smoke_timeout.py
 	python3 -B tools/spec_sources.py --verify
 	python3 -B tools/client_scope.py
 	go test -race ./...

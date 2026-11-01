@@ -1,5 +1,6 @@
 """Exercise the actual tk init/server/client path in a disposable installation."""
 import argparse
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -14,11 +15,12 @@ from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
 from graph_browser import verify_graph
+from smoke_timeout import TIMEOUT_SECONDS
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(temporary_root=None):
+    parser = argparse.ArgumentParser(description=__doc__, epilog=f"Total wall-clock budget: {TIMEOUT_SECONDS} seconds, including cleanup.")
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--shell-only", action="store_true", help="Verify only the shared shell and profile popups; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
@@ -29,11 +31,14 @@ def main():
     args = parser.parse_args()
     if (args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
-    with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
+    context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
+    with context as temporary:
         folder = Path(temporary)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
+        if args.browser:
+            (folder / "smoke-control.json").write_text(json.dumps({"browserSession": f"teleport-smoke-{port}"}))
         endpoint = f"http://127.0.0.1:{port}"
         environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
         # Hidden test tabs must keep polling during long acceptance flows.
@@ -519,5 +524,10 @@ def main():
         assert "Initialization complete" in tk("init")
 
 if __name__ == "__main__":
+    from smoke_timeout import execute_worker, supervise, worker_directory
     from tool_history import run
-    run(main)
+    worker = worker_directory(__file__)
+    if worker is not None:
+        execute_worker(main, worker)
+    else:
+        run(lambda: supervise(__file__))

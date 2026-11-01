@@ -87,6 +87,10 @@ class _Terminated(BaseException):
         self.signum = signum
 
 
+class ToolTimeout(SystemExit):
+    """A supervised tool exhausted its wall-clock budget (exit status 124)."""
+
+
 def record_handoff():
     """Record an exec handoff; the replacement process owns its eventual result."""
     if _current is not None:
@@ -109,10 +113,13 @@ def run(action, tool=None):
     signal.signal(signal.SIGTERM, terminated)
     try:
         return action()
+    except ToolTimeout:
+        outcome, exit_code, error_type = "timeout", 124, "TimeoutError"
+        raise
     except SystemExit as error:
         exit_code = error.code if isinstance(error.code, int) else (0 if error.code is None else 1)
         outcome = "success" if exit_code == 0 else "failure"
-        error_type = "" if exit_code == 0 else "SystemExit"
+        error_type = "" if exit_code == 0 else getattr(error, "error_type", "SystemExit")
         raise
     except KeyboardInterrupt:
         outcome, exit_code, error_type = "interrupted", 130, "KeyboardInterrupt"

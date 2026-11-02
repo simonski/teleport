@@ -1,0 +1,60 @@
+/* An optional restrained desktop treatment. Layout and action semantics stay shared. */
+:root[data-style=studio]{--paper:#f5f7f6;--surface:#fff;--ink:#29332f;--muted:#65736c;--line:#dce3df;--accent:#356f9e;--soft:#e7eeeb;--graph-connection:#aaa0bf;--graph-flow:#5c9d58;--graph-done:#87a891;--graph-dependency:#b38751;--graph-dot:#cbd5ce}
+:root[data-style=studio][data-mode=dark]{--paper:#1a211f;--surface:#222c28;--ink:#e6eee9;--muted:#a1b4a9;--line:#3e5047;--accent:#91bce0;--soft:#30463b;--graph-connection:#a899c3;--graph-flow:#8cc783;--graph-done:#7ea28b;--graph-dependency:#d6b182;--graph-dot:#405449}
+:root[data-style=studio] body{font-family:"Avenir Next","Segoe UI",sans-serif;font-size:13px;-webkit-font-smoothing:antialiased}
+:root[data-style=studio] h1,:root[data-style=studio] h2,:root[data-style=studio] h3{font-family:inherit;letter-spacing:-.025em;font-weight:650}
+:root[data-style=studio] button,:root[data-style=studio] input,:root[data-style=studio] textarea,:root[data-style=studio] select{font-family:inherit;border-radius:6px}
+:root[data-style=studio] button{font-weight:550}
+:root[data-style=studio] button.secondary{background:var(--surface)}
+:root[data-style=studio] button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+:root[data-style=studio] .topbar{background:color-mix(in srgb,var(--soft) 50%,var(--surface));border-bottom-color:var(--line);padding-left:20px;padding-right:20px}
+:root[data-style=studio] .topbar .wordmark{font-size:20px;letter-spacing:-.8px;gap:8px}
+:root[data-style=studio] .topbar .wordmark .rocket{width:22px;height:22px}
+:root[data-style=studio] .topbar .project-switch .choice-button{font-size:12px;padding:6px 9px;background:var(--surface);box-shadow:0 1px 2px #00000004}
+:root[data-style=studio] .topbar .avatar{border-radius:7px}
+:root[data-style=studio] .workspace{padding-left:24px;padding-right:24px}
+:root[data-style=studio] .tabs{height:52px;padding-left:22px;padding-right:22px;gap:16px;background:var(--surface)}
+:root[data-style=studio][data-navigation=top]{--header-offset:111px}
+:root[data-style=studio] .nav-views{gap:5px;align-items:center}
+:root[data-style=studio] .nav-views .tab{height:32px;min-height:32px;gap:7px;padding:6px 10px;border:0;border-radius:5px;font-size:12px;color:var(--muted);box-shadow:none}
+:root[data-style=studio] .nav-views .tab svg{display:block;width:16px;height:16px;color:var(--accent);opacity:.8}
+:root[data-style=studio] .nav-views .tab.selected{background:var(--soft);color:var(--ink);box-shadow:none}
+:root[data-style=studio] .nav-views .tab.selected::after{display:none}
+:root[data-style=studio] .nav-views .tab:hover{background:color-mix(in srgb,var(--soft) 65%,transparent)}
+:root[data-style=studio] .nav-grip{position:absolute;left:0;margin-left:-3px;font-size:11px}
+:root[data-style=studio] #workspace-nav .new-button{font-size:12px;padding:7px 11px;border-radius:5px}
+:root[data-style=studio][data-navigation=left],:root[data-style=studio][data-navigation=right]{--nav-width:192px}
+:root[data-style=studio][data-navigation-collapsed=true]:is([data-navigation=left],[data-navigation=right]){--nav-width:64px}
+:root[data-style=studio]:is([data-navigation=left],[data-navigation=right]) #workspace-nav{background:color-mix(in srgb,var(--soft) 48%,var(--surface));padding:20px 10px 30px;gap:12px}
+:root[data-style=studio]:is([data-navigation=left],[data-navigation=right]) #workspace-nav::before{content:'Workspace';font-size:10px;letter-spacing:.025em;color:var(--muted);padding-left:10px}
+:root[data-style=studio][data-navigation-collapsed=true] #workspace-nav::before{content:'';height:0}
+:root[data-style=studio]:is([data-navigation=left],[data-navigation=right]) .nav-views{gap:3px;align-items:stretch}
+:root[data-style=studio]:is([data-navigation=left],[data-navigation=right]) .nav-views .tab{padding-left:11px;min-height:34px}
+:root[data-style=studio] table{border-collapse:collapse;background:var(--surface);font-size:12px;width:100%;text-align:left;font-variant-numeric:tabular-nums}
+:root[data-style=studio] table thead{background:color-mix(in srgb,var(--paper) 80%,var(--surface))}
+:root[data-style=studio] table thead th{padding:10px 14px;font-size:10px;text-transform:uppercase;letter-spacing:.065em;font-weight:600;color:var(--muted);border-bottom:1px solid var(--line)}
+:root[data-style=studio] table tbody :is(th,td){padding:12px 14px;border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent);vertical-align:middle}
+:root[data-style=studio] table tbody tr:last-child :is(th,td){border-bottom:0}
+:root[data-style=studio] table tbody tr:hover{background:color-mix(in srgb,var(--soft) 40%,var(--surface))}
+:root[data-style=studio] .project-table-scroll{border-radius:8px;box-shadow:0 1px 3px #00000004}
+:root[data-style=studio] .project-link.secondary{font-size:12px;font-weight:650}
+:root[data-style=studio] .project-table .project-description,:root[data-style=studio] .project-table time{color:var(--muted);font-size:11px}
+:root[data-style=studio] .project-table .project-edit{display:inline-block;margin:4px 0 0;font-size:10px;padding:2px 6px;color:var(--muted)}
+:root[data-style=studio] .status-chip{font-family:inherit;font-size:10px;padding:3px 7px;border-radius:5px;background:var(--soft);color:var(--ink)}
+:root[data-style=studio] .project-card,:root[data-style=studio] .ticket,:root[data-style=studio] .idea-card{border-color:var(--line);border-radius:8px;box-shadow:0 1px 3px #00000005}
+:root[data-style=studio] .work-row,:root[data-style=studio] .upcoming{font-size:12px;border-color:var(--line)}
+:root[data-style=studio] .section-title h2{font-size:19px}
+:root[data-style=studio] .section-title{border-bottom-color:var(--line)}
+:root[data-style=studio] .graph-workspace{border-radius:9px;overflow:hidden;background:var(--surface);box-shadow:0 2px 6px #00000004}
+:root[data-style=studio] .graph-inspector{padding:18px;background:var(--surface)}
+:root[data-style=studio] .graph-inspector h3{font-size:16px}
+:root[data-style=studio] .graph-inspector .eyebrow{font-size:9px;color:var(--muted);letter-spacing:.08em}
+:root[data-style=studio] .graph-entity{border:0;border-bottom:1px solid var(--line);border-radius:0;box-shadow:none;padding:10px 0}
+:root[data-style=studio] .graph-entity strong{font-size:12px;font-weight:600}
+:root[data-style=studio] .graph-entity span{font-size:9px}
+:root[data-style=studio] .workflow-view .flow-heading h2{font-size:23px;margin:7px 0 13px}
+:root[data-style=studio] .workflow-view .flow-toolbar label{flex:1 1 270px;margin:0 10px 0 0;min-width:220px}
+:root[data-style=studio] .workflow-view .flow-toolbar button{font-size:11px;padding:7px 10px}
+:root[data-style=studio] .workflow-view .flow-toolbar .choice-button{font-size:12px;padding:8px 10px}
+:root[data-style=studio] .project-table .project-edit{margin-left:7px}
+@media(max-width:760px){:root[data-style=studio] .topbar{padding-left:12px;padding-right:12px}:root[data-style=studio] .workspace{padding-left:16px;padding-right:16px}:root[data-style=studio] .tabs{height:48px;padding-left:12px;padding-right:12px}:root[data-style=studio][data-navigation=top]{--header-offset:96px}:root[data-style=studio] .nav-views .tab{padding:6px 8px}:root[data-style=studio] table tbody :is(th,td){padding:11px 10px}}

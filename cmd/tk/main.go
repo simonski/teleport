@@ -48,7 +48,7 @@ func env(key, fallback string) string {
 }
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" {
-		fmt.Println("teleport (tk)\n\n  tk init [-f] [-demo] [--db PATH]  Initialize; -f backs up/resets SQLite; -demo seeds PetStore\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec                  Read server discovery\n  tk skill                         Export the bundled harness SKILL.md\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
+		fmt.Println("teleport (tk)\n\n  tk init [-f] [-demo] [--db PATH] [--admin-password-stdin]  Initialize; -f backs up/resets SQLite; -demo seeds PetStore\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec                  Read server discovery\n  tk skill                         Export the bundled harness SKILL.md\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
 		return nil
 	}
 	command := args[0]
@@ -134,7 +134,9 @@ func run(args []string) error {
 	username := flags.String("username", "admin", "local username")
 	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
 	force, demo := false, false
+	adminPasswordStdin := false
 	if command == "init" {
+		flags.BoolVar(&adminPasswordStdin, "admin-password-stdin", false, "read a strong initial admin password from standard input; never reset an existing password")
 		flags.BoolVar(&force, "f", false, "back up and reset offline SQLite storage; replace all installation data")
 		flags.BoolVar(&demo, "demo", false, "add the PetStore simulation project and synthetic sample work")
 	}
@@ -143,6 +145,17 @@ func run(args []string) error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected arguments; use --data JSON")
+	}
+	var initialPassword string
+	if adminPasswordStdin {
+		input, err := io.ReadAll(io.LimitReader(os.Stdin, 1026))
+		if err != nil {
+			return errors.New("could not read initial admin password")
+		}
+		initialPassword = strings.TrimRight(string(input), "\r\n")
+		if len(initialPassword) < 12 || len(initialPassword) > 1024 {
+			return errors.New("initial admin password must be between 12 and 1,024 bytes")
+		}
 	}
 	ctx := context.Background()
 	if command == "init" || command == "serve" {
@@ -155,7 +168,7 @@ func run(args []string) error {
 		}
 		defer db.Close()
 		if command == "init" {
-			_, backup, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{Force: force, Demo: demo})
+			_, backup, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{Force: force, Demo: demo, AdminPassword: initialPassword})
 			if backup != "" {
 				fmt.Printf("Backup: %s\n", backup)
 			}

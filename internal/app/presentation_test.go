@@ -114,3 +114,54 @@ func TestPersonalAppearanceOptimisticUpdatesPreserveNavigation(t *testing.T) {
 		t.Fatal("stale preference update succeeded")
 	}
 }
+
+func TestGraphProjectionLayoutsAreIndependent(t *testing.T) {
+	svc, token := fixture(t)
+	p := call(t, svc, token, "createProject", app.CreateProjectInput{Name: "Projection", RequestID: "projection"}).(model.Project)
+	ticket := call(t, svc, token, "createTicket", app.CreateTicketInput{ProjectID: p.ID, Title: "Card", RequestID: "card"}).(model.Ticket)
+	id := app.GraphTicketID(ticket.ID)
+	three := model.Point3{X: 30, Y: 40, Z: 50}
+	two := model.Point3{X: 300, Y: 400}
+	call(t, svc, token, "saveGraphLayout", app.GraphLayoutInput{ProjectID: p.ID, Positions: map[string]model.Point3{id: three}})
+	saved := call(t, svc, token, "saveGraphLayout", app.GraphLayoutInput{Projection: "2d", ProjectID: p.ID, Positions: map[string]model.Point3{id: two}}).(model.GraphLayout)
+	for _, projection := range []string{"", "3d", "2d"} {
+		g := call(t, svc, token, "getGraph", app.GraphInput{ProjectID: p.ID, Projection: projection}).(app.Graph)
+		expected := three
+		if projection == "2d" {
+			expected = two
+		}
+		if g.Layout.Version != 1 || g.Layout.Positions[id] != expected {
+			t.Fatalf("projection %q lost its own layout: %+v", projection, g.Layout)
+		}
+	}
+	for _, denied := range []struct {
+		op   string
+		in   any
+		code string
+	}{
+		{"getGraph", app.GraphInput{Projection: "flat"}, "invalid_graph_projection"},
+		{"saveGraphLayout", app.GraphLayoutInput{Projection: "flat"}, "invalid_graph_projection"},
+		{"saveGraphLayout", app.GraphLayoutInput{Projection: "2d", ProjectID: p.ID, ExpectedVersion: saved.Version, Positions: map[string]model.Point3{id: three}}, "invalid_coordinate"},
+		{"saveGraphLayout", app.GraphLayoutInput{Projection: "2d", ProjectID: p.ID, Positions: map[string]model.Point3{id: two}}, "layout_conflict"},
+	} {
+		body, _ := json.Marshal(denied.in)
+		if _, err := svc.Call(context.Background(), token, denied.op, body); err == nil || app.ErrorResponse(err).Code != denied.code {
+			t.Fatalf("%s should fail with %s: %v", denied.op, denied.code, err)
+		}
+	}
+	current := call(t, svc, token, "getTicket", app.IDInput{ID: ticket.ID}).(model.Ticket)
+	if current.Version != ticket.Version || current.ParentID != ticket.ParentID {
+		t.Fatal("projection layout changed work")
+	}
+}
+
+func TestStudioStyleRetainsSavedNavigationAcrossReload(t *testing.T) {
+	svc, token, db := fixtureWithStore(t)
+	position := "left"
+	p := call(t, svc, token, "saveViewPreferences", app.ViewPreferencesInput{DefaultView: "Graph", NavigationPosition: &position}).(model.Preferences)
+	p = call(t, svc, token, "setAppearance", app.AppearanceInput{ExpectedVersion: p.Version, Style: "studio", Mode: "dark"}).(model.Preferences)
+	loaded := call(t, app.New(db), token, "getViewPreferences", struct{}{}).(model.Preferences)
+	if loaded.Style != "studio" || loaded.Mode != "dark" || loaded.NavigationPosition != "left" || loaded.DefaultView != "Graph" || loaded.Version != p.Version {
+		t.Fatal("Studio changed or lost saved preferences", loaded)
+	}
+}

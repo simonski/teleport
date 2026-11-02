@@ -1,10 +1,15 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install sbom browser-tools check test lint clean
+.PHONY: help build install sbom browser-tools deploy check test lint clean
+DEPLOY_HOST ?= exedev@teleport.engineering
+DEPLOY_DIR ?= /home/exedev/teleport
+DEPLOY_BUILDER ?= auto
+export DEPLOY_HOST DEPLOY_DIR DEPLOY_BUILDER
 help:
 	@echo "build    Build bin/tk with a local build identity"
 	@echo "install  Build and install tk into GOBIN or GOPATH/bin"
 	@echo "sbom     Generate sbom.cdx.json for Go and bundled browser dependencies"
 	@echo "browser-tools Prepare the pinned persistent browser client"
+	@echo "deploy   Build Linux tk, scp to /home/exedev/teleport and start it"
 	@echo "check    Run documentation, vet, unit, integration and race checks"
 	@echo "test     Run Go tests"
 	@echo "lint     Verify Go formatting and run vet"
@@ -17,6 +22,8 @@ sbom:
 	python3 -B tools/sbom.py
 browser-tools:
 	python3 -B tools/browser_setup.py
+deploy:
+	python3 -B tools/deploy.py
 test:
 	go test ./...
 lint:
@@ -32,6 +39,7 @@ check: lint
 	python3 -B tools/test_smoke_profile.py
 	python3 -B tools/test_browser_driver.py
 	python3 -B tools/test_source_cache.py
+	python3 -B tools/test_deploy.py
 	python3 -B tools/spec_sources.py --verify
 	python3 -B tools/client_scope.py
 	go test -race ./...

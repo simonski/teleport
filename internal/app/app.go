@@ -68,17 +68,26 @@ func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
 	return st, err
 }
 
-type InitializeOptions struct{ Force, Demo bool }
+type InitializeOptions struct {
+	Force, Demo   bool
+	AdminPassword string
+}
 
-func freshInstallation() model.State {
+func freshInstallation(adminPassword string) model.State {
+	if adminPassword == "" {
+		adminPassword = "password"
+	}
 	st := model.State{Schema: model.SchemaVersion, InstallationID: randomID(), Accounts: map[string]model.Account{}, Sessions: map[string]model.Session{}, Workflows: model.SeedWorkflows()}
-	st.Accounts["admin"] = model.Account{ID: "admin", Username: "admin", PasswordHash: hashPassword("password"), Administrator: true}
+	st.Accounts["admin"] = model.Account{ID: "admin", Username: "admin", PasswordHash: hashPassword(adminPassword), Administrator: true}
 	return st
 }
 
 func InitializeWithOptions(ctx context.Context, db *store.Store, options InitializeOptions) (*model.State, string, error) {
+	if options.AdminPassword != "" && (len(options.AdminPassword) < 12 || len(options.AdminPassword) > 1024) {
+		return nil, "", failure(422, "invalid_password", "Use an initial password between 12 and 1,024 bytes")
+	}
 	if options.Force {
-		st := freshInstallation()
+		st := freshInstallation(options.AdminPassword)
 		if options.Demo {
 			if _, err := seedPetStore(&st); err != nil {
 				return nil, "", err
@@ -94,7 +103,9 @@ func InitializeWithOptions(ctx context.Context, db *store.Store, options Initial
 	err := db.Update(ctx, func(st *model.State) (bool, error) {
 		changed := st.Schema == 0
 		if changed {
-			*st = freshInstallation()
+			*st = freshInstallation(options.AdminPassword)
+		} else if options.AdminPassword != "" && !passwordMatches(st.Accounts["admin"].PasswordHash, options.AdminPassword) {
+			return false, failure(409, "initial_password_mismatch", "Existing admin credentials differ; initialization never resets a password")
 		}
 		if options.Demo {
 			seeded, err := seedPetStore(st)

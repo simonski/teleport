@@ -4,25 +4,35 @@ import json
 
 def verify_landing(browser):
     browser("wait", ".login-scene")
+    browser("wait", "--fn", "typeof landingFlight!=='undefined'&&!!landingFlight")
     browser("eval", "if(document.querySelector('.login-scene rect,.login-scene foreignObject')||getComputedStyle(document.querySelector('.login-brand')).backgroundColor!=='rgba(0, 0, 0, 0)')throw new Error('Landing flight has an opaque rectangular mask')")
-    positions = json.loads(browser("eval", "(()=>{const ships=[...document.querySelectorAll('.login-ship')],animations=ships.flatMap(ship=>ship.getAnimations());animations.forEach(animation=>animation.pause());const moon=document.querySelector('.login-moon').getBoundingClientRect();return Array.from({length:44},(_,index)=>{animations.forEach(animation=>animation.currentTime=index*250);const box=ships[0].querySelector('use').getBoundingClientRect();return {at:index*250,x:box.x+box.width/2,y:box.y+box.height/2,distance:Math.hypot(box.x+box.width/2-moon.x-moon.width/2,box.y+box.height/2-moon.y-moon.height/2)};});})()"))
-    assert max(point["x"] for point in positions) - min(point["x"] for point in positions) > 200, positions
-    moon = min(positions, key=lambda point: point["distance"])
-    assert moon["distance"] < 30, moon
-    for name, at in [("rear", 1800), ("moon", moon["at"]), ("front", 8200)]:
-        browser("eval", f"document.querySelectorAll('.login-ship').forEach(ship=>ship.getAnimations().forEach(animation=>animation.currentTime={at}))")
-        if name != "moon":
-            browser("eval", "if(getComputedStyle(document.querySelector('.ship-" + ("back" if name == "rear" else "front") + "')).visibility!=='visible')throw new Error('Incorrect flight depth')")
+    states = json.loads(browser("eval", "(()=>{const times=[0,2875,4300,7000,10000,16000,19000,21000];return times.map(time=>{const state=landingFlight.seek(time,0);const box=document.querySelector('.flight-rocket use').getBoundingClientRect();return {...state,screenX:box.x,screenY:box.y};});})()"))
+    assert states[0]["phase"] == "rest" and states[0]["engine"] == 0
+    assert states[1]["phase"] == "ignite" and 0 < abs(states[1]["angle"] + 90) < 3
+    assert max(point["screenX"] for point in states) - min(point["screenX"] for point in states) > 200
+    assert any(point["phase"] == "orbit" and point["engine"] == 0 for point in states)
+    for name, at in [("ignition", 2875), ("orbit", 10000), ("catch", 19900), ("smoke", 20800)]:
+        browser("eval", f"landingFlight.seek({at},0)")
         browser("screenshot", "/tmp/teleport-landing-" + name + ".png")
+    browser("eval", "landingFlight.seek(10000,0)")
+    original = json.loads(browser("eval", "landingFlight.snapshot()"))
+    point = json.loads(browser("eval", "(()=>{const r=document.querySelector('.login-moon').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()"))
+    browser("mouse", "move", str(point["x"]), str(point["y"]))
+    browser("mouse", "down", "left")
+    browser("mouse", "move", str(point["x"]-65), str(point["y"]+30))
+    browser("mouse", "up", "left")
+    moved = json.loads(browser("eval", "landingFlight.snapshot()"))
+    assert moved["moon"]["x"] < original["moon"]["x"] - 20 and moved["moon"]["y"] > original["moon"]["y"]
+    assert abs((moved["x"]-original["x"]) - (moved["moon"]["x"]-original["moon"]["x"])) < .01
     browser("set", "viewport", "390", "844")
-    browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Landing animation overflows mobile')")
+    browser("eval", "landingFlight.seek(0,0);if(document.documentElement.scrollWidth>innerWidth)throw new Error('Landing animation overflows mobile')")
     browser("screenshot", "/tmp/teleport-landing-mobile.png")
     browser("set", "media", "light", "reduced-motion")
-    browser("eval", "if([...document.querySelectorAll('.login-ship')].some(ship=>ship.getAnimations().length)||getComputedStyle(document.querySelector('.ship-front')).visibility!=='visible'||getComputedStyle(document.querySelector('.ship-back')).visibility!=='hidden')throw new Error('Reduced motion does not provide one static rocket')")
+    browser("eval", "if(document.querySelectorAll('.flight-rocket').length!==1||document.querySelector('.login-scene').dataset.engine!=='0'||document.querySelector('.flight-rocket').getAnimations().length)throw new Error('Reduced motion is not one landed rocket')")
     browser("screenshot", "/tmp/teleport-landing-static.png")
     browser("set", "media", "light")
     browser("set", "viewport", "1280", "800")
-    print("PASS: transparent rear/front landing flight, moon loop, mobile bounds and static reduced motion")
+    print("PASS: supported launch, preflight wobble, ignition/coast/return/catch/smoke, draggable moon retargeting, mobile bounds and reduced motion")
 
 
 def verify_profile_dialogs(browser):

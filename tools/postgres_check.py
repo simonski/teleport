@@ -27,12 +27,13 @@ def main():
     selection.add_argument("--terminal-only", action="store_true", help="Run only the plain PTY fixture against a fresh database")
     selection.add_argument("--smoke-only", action="store_true", help="Run only the application smoke against a fresh database")
     selection.add_argument("--shell-only", action="store_true", help="Run shared shell, landing and modal browser checks against a fresh database")
+    selection.add_argument("--studio-only", action="store_true", help="Run 2D graph, Studio and workflow Map acceptance against a fresh database")
     selection.add_argument("--tests-only", action="store_true", help="Run only Go tests against disposable PostgreSQL")
     selection.add_argument("--init-only", action="store_true", help="Verify PetStore initialization against a fresh database")
     parser.add_argument("--test-pattern", help="Go test -run pattern for a focused regression")
     args = parser.parse_args()
-    if args.shell_only and not args.browser:
-        parser.error("--shell-only requires --browser")
+    if (args.shell_only or args.studio_only) and not args.browser:
+        parser.error("--shell-only/--studio-only requires --browser")
     candidates = [args.postgres_bin]
     if shutil.which("initdb"):
         candidates.append(Path(shutil.which("initdb")).parent)
@@ -59,7 +60,7 @@ def main():
             started = True
             connection = "postgresql://teleport@/postgres?" + urlencode({"host": temporary, "sslmode": "disable"})
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
-            focused = args.native_only or args.workflows_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only or args.init_only
+            focused = args.native_only or args.workflows_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only or args.studio_only or args.init_only
             if not focused:
                 test_command = ["go", "test", "-race", "-count=1"]
                 if args.test_pattern:
@@ -85,9 +86,9 @@ def main():
                     bootstrap_command.append("--browser")
                 subprocess.run(bootstrap_command, cwd=ROOT, env=environment, check=True)
                 return
-            if not focused or args.smoke_only or args.shell_only:
+            if not focused or args.smoke_only or args.shell_only or args.studio_only:
                 commands = []
-                for part in (("core", "shell", "views") if args.browser and not args.shell_only else (None,)):
+                for part in (("core", "shell", "views") if args.browser and not args.shell_only and not args.studio_only else (None,)):
                     database = "smoke_" + part if part else "smoke"
                     pg("createdb", "--host", temporary, "--username", "teleport", database)
                     smoke_url = "postgresql://teleport@/" + database + "?" + urlencode({"host": temporary, "sslmode": "disable"})
@@ -96,12 +97,17 @@ def main():
                         command.append("--browser")
                     if args.shell_only:
                         command.append("--shell-only")
+                    if args.studio_only:
+                        command.append("--studio-only")
                     if part:
                         command.extend(("--browser-slice", part))
                     commands.append(command)
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=3) as checks:
                     list(checks.map(lambda command: subprocess.run(command, cwd=ROOT, env=environment, check=True), commands))
+                if args.studio_only:
+                    print("PASS: PostgreSQL 2D graph, Studio and workflow Map acceptance",flush=True)
+                    return
             if not args.shell_only and not args.smoke_only and not args.native_only and not args.scripts_only:
                 pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
                 terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})

@@ -19,6 +19,7 @@ def verify_graph(browser, tk, project_id, ticket):
 
     browser("select", "#project", str(project_id))
     browser("find", "role", "button", "click", "--name", "Graph", "--exact")
+    browser("click", "#graph-3d")
     browser("wait", "--fn", "!!graphRuntime?.scene&&!!document.querySelector('#graph-stage canvas')")
     browser("click", f'[data-node="ticket:{ticket["id"]}"]')
     browser("fill", '[data-coordinate="x"]', "125")
@@ -46,6 +47,7 @@ def verify_graph(browser, tk, project_id, ticket):
     browser("reload")
     browser("wait", "#welcome-status")
     browser("press", "Escape")
+    browser("click", "#graph-3d")
     browser("wait", "--fn", "!!graphRuntime?.scene&&!!document.querySelector('#graph-stage canvas')")
     graph = call("getGraph", {"projectId": project_id})
     assert graph["layout"]["positions"][f'ticket:{ticket["id"]}']["x"] == 125

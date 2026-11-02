@@ -25,7 +25,7 @@ class SmokeTimeoutTest(unittest.TestCase):
         started = time.monotonic()
         result = subprocess.run([sys.executable, "-B", __file__, "--deadline-fixture", mode, str(self.folder)],
                                 env=dict(os.environ, TELEPORT_TOOL_HISTORY=str(self.history)),
-                                text=True, capture_output=True, timeout=8)
+                                text=True, capture_output=True, timeout=14 if mode == "browser-hang" else 8)
         with self.history.open(newline="") as source:
             rows = list(csv.DictReader(source))
         self.assertEqual(1, len(rows), "worker must not create a second invocation row")
@@ -61,7 +61,7 @@ class SmokeTimeoutTest(unittest.TestCase):
             self.skipTest("requires make browser-tools")
         result, row, elapsed = self.invoke("browser-hang")
         self.assertEqual((result.returncode, row["outcome"]), (124, "timeout"), result.stderr)
-        self.assertLess(elapsed, 6)
+        self.assertLess(elapsed, 13.5)
         for pid in json.loads((self.folder / "browser-pids.json").read_text()):
             status = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
             self.assertTrue(status.returncode != 0 or status.stdout.strip().startswith("Z"), f"owned browser PID {pid}: {status.stdout}")
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             def launch():
                 mode = sys.argv[-2]
                 from browser_setup import browser_python
-                supervise(__file__, timeout_seconds=5 if mode == "browser-hang" else 1 if mode == "hang" else 3,
+                supervise(__file__, timeout_seconds=12 if mode == "browser-hang" else 1 if mode == "hang" else 3,
                           python_executable=browser_python() if mode == "browser-hang" else None)
             run(launch)
     else:

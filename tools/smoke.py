@@ -16,6 +16,7 @@ from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
 from graph_browser import verify_graph, verify_camera_retained
+from studio_browser import verify_studio
 from smoke_timeout import TIMEOUT_SECONDS
 from smoke_profile import Profile
 
@@ -31,18 +32,19 @@ def main(temporary_root=None):
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
     parser.add_argument("--graph-only", action="store_true", help="Verify the bundled graph renderer, persistence and fallback; requires --browser")
+    parser.add_argument("--studio-only", action="store_true", help="Verify the 2D graph, Studio appearance and workflow map; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only) and not args.browser:
+    if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     with context as temporary:
         folder = Path(temporary)
-        if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only)):
+        if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
-        focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph", "studio") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
         profile = Profile(("postgres" if args.database else "sqlite") + "/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
@@ -93,7 +95,7 @@ def main(temporary_root=None):
             ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
             assert ticket["status"] == "Doing"
             if args.browser:
-                seeded_browser = args.browser_slice in ("core", "views")
+                seeded_browser = args.browser_slice in ("core", "views") or args.studio_only
                 if seeded_browser:
                     setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
                     assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
@@ -177,6 +179,10 @@ def main(temporary_root=None):
                     browser("wait", "#project + .choice-button")
                     browser("select", "#project", str(project["id"]))
                     browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
+                    if args.studio_only:
+                        profile.start("studio")
+                        verify_studio(browser,tk,project,ticket,profile.start)
+                        return
                     if args.navigation_only:
                         profile.start("navigation")
                         verify_navigation(browser, tk, project["id"])
@@ -445,6 +451,7 @@ def main(temporary_root=None):
                     browser("click", "#dismiss")
                     profile.start("graph")
                     browser("find", "role", "button", "click", "--name", "Graph", "--exact")
+                    browser("click", "#graph-3d")
                     browser("wait", "--fn", "document.querySelector('#graph-state')?.innerText.includes('entities')")
                     browser("click", f'[data-node="ticket:{idea_ticket["id"]}"]')
                     browser("fill", '[data-coordinate="x"]', "125")

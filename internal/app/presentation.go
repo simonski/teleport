@@ -13,11 +13,12 @@ import (
 )
 
 type GraphInput struct {
-	ProjectID int64  `json:"projectId,omitempty"`
-	Query     string `json:"query,omitempty"`
-	Kind      string `json:"kind,omitempty"`
-	Agent     *bool  `json:"agent,omitempty"`
-	MaxNodes  int    `json:"maxNodes,omitempty"`
+	Projection string `json:"projection,omitempty"`
+	ProjectID  int64  `json:"projectId,omitempty"`
+	Query      string `json:"query,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Agent      *bool  `json:"agent,omitempty"`
+	MaxNodes   int    `json:"maxNodes,omitempty"`
 }
 type GraphNode struct {
 	ID        string       `json:"id"`
@@ -42,6 +43,7 @@ type Graph struct {
 	CanSave bool              `json:"canSave"`
 }
 type GraphLayoutInput struct {
+	Projection      string                  `json:"projection,omitempty"`
 	ProjectID       int64                   `json:"projectId,omitempty"`
 	ExpectedVersion int64                   `json:"expectedVersion"`
 	Positions       map[string]model.Point3 `json:"positions"`
@@ -67,11 +69,15 @@ type AppearanceStyles struct {
 
 func GraphTicketID(id int64) string  { return fmt.Sprintf("ticket:%d", id) }
 func graphProjectID(id int64) string { return fmt.Sprintf("project:%d", id) }
-func graphScope(a model.Account, project int64) string {
-	if project != 0 {
-		return graphProjectID(project)
+func graphScope(a model.Account, project int64, projection string) string {
+	suffix := ""
+	if projection == "2d" {
+		suffix = ":2d"
 	}
-	return "account:" + a.ID
+	if project != 0 {
+		return graphProjectID(project) + suffix
+	}
+	return "account:" + a.ID + suffix
 }
 func graphNodeProject(st *model.State, key string) (int64, error) {
 	parts := strings.Split(key, ":")
@@ -95,6 +101,9 @@ func graphNodeProject(st *model.State, key string) (int64, error) {
 	return 0, failure(404, "not_found", "Graph node not found")
 }
 func readGraph(st *model.State, a model.Account, in GraphInput) (Graph, error) {
+	if !contains([]string{"", "2d", "3d"}, in.Projection) {
+		return Graph{}, failure(422, "invalid_graph_projection", "Choose 2d or 3d")
+	}
 	if in.MaxNodes == 0 {
 		in.MaxNodes = 1000
 	}
@@ -163,7 +172,7 @@ func readGraph(st *model.State, a model.Account, in GraphInput) (Graph, error) {
 	if len(ids)+len(projects) > in.MaxNodes {
 		return Graph{}, failure(422, "graph_too_large", "Narrow project/type/search before loading more than the selected node limit")
 	}
-	layout := st.GraphLayouts[graphScope(a, in.ProjectID)]
+	layout := st.GraphLayouts[graphScope(a, in.ProjectID, in.Projection)]
 	g := Graph{Nodes: []GraphNode{}, Edges: []GraphEdge{}, Layout: model.GraphLayout{Version: layout.Version, Positions: map[string]model.Point3{}}, CanSave: in.ProjectID == 0 || require(st, a, in.ProjectID, "Contributor") == nil}
 	projectIDs := []int64{}
 	for id := range projects {
@@ -262,12 +271,15 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 		if err := parse(raw, &in); err != nil {
 			return nil, false, err
 		}
+		if !contains([]string{"", "2d", "3d"}, in.Projection) {
+			return nil, false, failure(422, "invalid_graph_projection", "Choose 2d or 3d")
+		}
 		if in.ProjectID != 0 {
 			if err := require(st, a, in.ProjectID, "Contributor"); err != nil {
 				return nil, false, err
 			}
 		}
-		key := graphScope(a, in.ProjectID)
+		key := graphScope(a, in.ProjectID, in.Projection)
 		layout := st.GraphLayouts[key]
 		if layout.Version != in.ExpectedVersion {
 			return nil, false, failure(409, "layout_conflict", "Graph layout changed; reload before saving")
@@ -280,6 +292,9 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 		}
 		changed := false
 		for id, point := range in.Positions {
+			if in.Projection == "2d" && point.Z != 0 {
+				return nil, false, failure(422, "invalid_coordinate", "2D coordinates require zero depth")
+			}
 			project, err := graphNodeProject(st, id)
 			if err != nil {
 				return nil, false, err
@@ -316,7 +331,7 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 		if err := parse(raw, &struct{}{}); err != nil {
 			return nil, false, err
 		}
-		return AppearanceStyles{Styles: []string{"paper", "instrument"}, Modes: []string{"light", "dark"}}, false, nil
+		return AppearanceStyles{Styles: []string{"paper", "instrument", "studio"}, Modes: []string{"light", "dark"}}, false, nil
 	case "getViewPreferences":
 		if err := parse(raw, &struct{}{}); err != nil {
 			return nil, false, err
@@ -333,7 +348,7 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 			if in.ExpectedVersion != p.Version {
 				return nil, false, failure(409, "preference_conflict", "Account preferences changed; refresh before saving")
 			}
-			if !contains([]string{"paper", "instrument"}, in.Style) || !contains([]string{"light", "dark"}, in.Mode) {
+			if !contains([]string{"paper", "instrument", "studio"}, in.Style) || !contains([]string{"light", "dark"}, in.Mode) {
 				return nil, false, failure(422, "invalid_appearance", "Choose a bundled style and mode")
 			}
 			p.Style, p.Mode = in.Style, in.Mode

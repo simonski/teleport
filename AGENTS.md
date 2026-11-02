@@ -31,11 +31,13 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 - `make install`: install the executable.
 - `make sbom`: generate `sbom.cdx.json` with Go and bundled browser dependencies, licenses and hashes.
 - `make browser-tools`: prepare a cached, pinned Python Playwright client and its matching headless Chromium for browser acceptance checks.
+- `make deploy`: detect Linux architecture over SSH, build a static target executable and SCP/start it below `/home/exedev/teleport`; strong first-run credentials are written to protected remote/local config files, never command arguments or tool history. Existing installations are never reset.
 - `go test ./...`: run Go tests.
 - `go test -race ./...`: check Go code for data races.
 - `make check`: verify formatting, vet, documentation and race tests.
 - `python3 -B tools/web_check.py`: check browser syntax, asynchronous-state regressions and bundled Three.js hashes.
 - `python3 -B tools/smoke.py --browser`: exercise an isolated real binary/browser installation after building.
+- `python3 -B tools/smoke.py --browser --studio-only`: check the Three.js 2D graph, hover/flow, independent layout persistence, Studio menus/tables and workflow Map.
 - `python3 -B tools/postgres_check.py --browser`: run the same suite and real browser path against a disposable PostgreSQL cluster; requires local server binaries.
 
 Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations.

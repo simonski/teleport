@@ -12,3 +12,4 @@ __pycache__/
 /tool_calls_history.csv
 /tool_calls_stages.csv
 /.cache/
+/.deploy/

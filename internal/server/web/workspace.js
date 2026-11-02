@@ -39,6 +39,7 @@ function boardView(){
 function projectsView(){return projectDirectoryHTML();}
 function navigateView(name){if(typeof workflowNavigationBlocked==='function'&&workflowNavigationBlocked()){notice('Save latest or discard changes, and wait for pending workflow changes before switching.');return;}loadGeneration++;if(view!==name){calendarDirty=false;}detailEpoch++;view=name;render();root.querySelector(`#nav-views [data-view="${CSS.escape(name)}"]`)?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}
 function render(){
+  if(typeof leaveWorkflowMap==='function')leaveWorkflowMap();
   const restoreFocus=captureShellFocus(),restoreBoardFocus=captureBoardFocus();
   leaveGraph();calendarEpoch++;
   const content=view==='Home'?homeView():view==='Projects'?projectsView():view==='Ideas'?ideasView():view==='Graph'?graphView():view==='Workflows'?workflowsView():view==='Cost'?costView():view==='Goals'?hierarchyView('goal'):view==='Epics'?hierarchyView('epic'):view==='Calendar'?calendarView():boardView();

@@ -29,7 +29,7 @@ def verify_navigation(browser, tk, project_id):
     def point(kind, value):
         browser("mouse", kind, str(round(value["x"])), str(round(value["y"])))
 
-    expected = ["Home", "Ideas", "Goals", "Epics", "Board", "Todos", "Calendar", "Graph", "Workflows", "Cost", "Projects"]
+    expected = ["Home", "Ideas", "Goals", "Epics", "Board", "Tickets", "Todos", "Calendar", "Graph", "Workflows", "Cost", "Projects"]
     appearance_before = prefs()
     assert visible() == expected
     browser("eval", "document.querySelector('#nav-views [data-view=Ideas]').focus()")

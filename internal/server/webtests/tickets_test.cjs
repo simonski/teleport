@@ -24,6 +24,8 @@ test('ticket defaults follow view and Board intent without changing the hierarch
   for(const [view,lens,kind,human] of [['Goals','agent','goal',false],['Epics','agent','epic',false],['Todos','agent','task',true],['Board','human','task',true],['Board','both','task',false]]){
     f.context.input={view,lens};const result=f.run('ticketCreationContext(input.view,input.lens)');assert.equal(result.kind,kind);assert.equal(result.human,human);
   }
+  assert.equal(f.run("ticketCreationContext('Tickets','agent','human').human"),true);
+  assert.equal(f.run("ticketCreationContext('Tickets','human','agent').human"),false);
 });
 
 test('board edit respects foreground ownership, input, composing and modifier keys',()=>{

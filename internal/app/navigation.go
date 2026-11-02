@@ -1,7 +1,7 @@
 package app
 
 func canonicalNavigationOrder() []string {
-	return []string{"Home", "Ideas", "Goals", "Epics", "Board", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost", "Projects"}
+	return []string{"Home", "Ideas", "Goals", "Epics", "Board", "Tickets", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost", "Projects"}
 }
 
 func normalizeNavigationOrder(saved []string) []string {
@@ -17,7 +17,7 @@ func normalizeNavigationOrder(saved []string) []string {
 }
 
 func validNavigationOrder(order []string) bool {
-	if len(order) != len(canonicalNavigationOrder()) {
+	if len(order) != len(canonicalNavigationOrder()) && !(len(order) == len(canonicalNavigationOrder())-1 && !contains(order, "Tickets")) {
 		return false
 	}
 	seen := map[string]bool{}

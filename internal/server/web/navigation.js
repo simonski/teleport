@@ -1,6 +1,6 @@
 "use strict";
-const canonicalNavigation=['Home','Ideas','Goals','Epics','Board','Todos','Calendar','Graph','Workflows','Evolution','Cost','Projects'];
-const supportedNavigation=['Home','Ideas','Goals','Epics','Board','Todos','Calendar','Graph','Workflows','Cost','Projects'];
+const canonicalNavigation=['Home','Ideas','Goals','Epics','Board','Tickets','Todos','Calendar','Graph','Workflows','Evolution','Cost','Projects'];
+const supportedNavigation=['Home','Ideas','Goals','Epics','Board','Tickets','Todos','Calendar','Graph','Workflows','Cost','Projects'];
 let navigationGesture=null,navigationDeferred=false,navigationSuppressClick=0,navigationApplied=null;
 
 function navigationValues(){return {...preferences,...preferenceDraft};}
@@ -8,13 +8,14 @@ function navigationOrder(values=navigationValues()){
   return [...new Set([...(values.navigationOrder||[]),...canonicalNavigation])].filter(name=>canonicalNavigation.includes(name));
 }
 function navigationIcon(name){
+  if(name==='Tickets')return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h5v5H3ZM16 3h5v5h-5ZM16 16h5v5h-5ZM8 5h4q2 0 2 3v8q0 3 2 3M14 5h2"/></svg>';
   if(name==='Workflows')return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h6v5H4ZM14 16h6v5h-6ZM4 16h6v5H4ZM7 8v8M10 5h7v11M10 18h4"/></svg>';
   const paths={Home:'m3 11 9-8 9 8M6 10v11h12V10M10 21v-7h4v7',Ideas:'M9 18h6M10 21h4M8 14a7 7 0 1 1 8 0l-1 4H9Z',Goals:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10M12 11v2',Epics:'m3 7 9-4 9 4-9 4ZM3 12l9 4 9-4M3 17l9 4 9-4',Board:'M3 4h18v16H3ZM9 4v16M15 4v16M5 8h2M11 8h2M17 8h2',Todos:'M9 6h12M9 12h12M9 18h12M3 6l1 1 2-3M3 12l1 1 2-3M3 18l1 1 2-3',Calendar:'M3 5h18v16H3ZM7 3v4M17 3v4M3 10h18M7 14h2M13 14h2M7 18h2',Graph:'M5 5h4v4H5ZM16 15h4v4h-4ZM3 17h4v4H3ZM9 7l9 8M7 9l-2 8M7 19l9-2',Cost:'M4 7c0-5 16-5 16 0s-16 5-16 0ZM4 7v10c0 5 16 5 16 0V7M4 12c0 5 16 5 16 0',Projects:'M3 6h7l2 3h9v12H3ZM3 6V3h7l2 3'};
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]||'M3 12h18M12 3v18'}"/></svg>`;
 }
 function navigationHTML(){
   const names=navigationOrder().filter(name=>supportedNavigation.includes(name));
-  return `<nav id="workspace-nav" class="tabs" aria-label="Workspace views"><div id="nav-views" class="nav-views">${names.map(name=>`<button type="button" data-view="${name}" class="tab ${name===view?'selected':''}" ${name===view?'aria-current="page"':''} aria-label="${name}" title="${name} · Alt+Shift+Arrow to reorder" aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight Alt+Shift+ArrowUp Alt+Shift+ArrowDown"><span class="nav-grip" aria-hidden="true">⠿</span>${navigationIcon(name)}<span class="tab-label">${name}</span></button>`).join('')}</div><span class="header-space"></span><div class="nav-save"><span id="nav-save-status" role="status"></span><button type="button" class="secondary" id="nav-retry" hidden>Retry</button></div><button type="button" class="secondary" id="nav-collapse" aria-controls="nav-views">${navigationIcon('Board')}<span class="tab-label">Collapse navigation</span></button><button class="new-button" id="new" aria-label="New ticket">＋ <span class="tab-label">New</span> <kbd>N</kbd></button></nav>`;
+  return `<nav id="workspace-nav" class="tabs" aria-label="Workspace views"><div id="nav-views" class="nav-views">${names.map(name=>`<button type="button" data-view="${name}" class="tab ${name===view?'selected':''}" ${name===view?'aria-current="page"':''} aria-label="${name}" title="${name} · Alt+Shift+Arrow to reorder" aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight Alt+Shift+ArrowUp Alt+Shift+ArrowDown"><span class="nav-grip" aria-hidden="true">⠿</span>${navigationIcon(name)}<span class="tab-label">${name}</span></button>`).join('')}</div><span class="header-space"></span><div class="nav-save"><span id="nav-save-status" role="status"></span><button type="button" class="secondary" id="nav-retry" hidden>Retry</button></div><button type="button" class="secondary" id="nav-collapse" aria-controls="nav-views">${navigationIcon('Board')}<span class="tab-label">Collapse navigation</span></button></nav>`;
 }
 function navigationBusy(){return !!navigationGesture;}
 function moveNavigation(order,source,target,after=false){

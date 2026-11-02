@@ -197,6 +197,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	if operation == "listProjectSummaries" {
 		return s.projectDirectory(ctx, token, raw)
 	}
+	if operation == "getHome" {
+		return s.home(ctx, token, raw)
+	}
 	if operation == "getBoardExecution" {
 		return s.boardExecution(ctx, token, raw)
 	}

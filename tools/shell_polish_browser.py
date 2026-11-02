@@ -74,7 +74,7 @@ def verify_profile_dialogs(browser):
         else:
             browser("press", "Escape")
         browser("eval", "if(document.querySelector('tk-dialog[open]')||document.querySelector('#app').inert||document.activeElement!==document.querySelector('#account')||document.querySelector('main')!==window.popupUnderlying)throw new Error('Popup dismissal changed the view or lost focus')")
-    browser("click", "#new")
+    browser("eval", "document.activeElement?.blur()"); browser("press", "n")
     browser("eval", "window.modalKeyLeaks=0")
     for key in ("n", "q", "/", "`", "e"):
         browser("press", key)

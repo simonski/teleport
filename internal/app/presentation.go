@@ -232,7 +232,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	return p
 }
 func validRecent(st *model.State, a model.Account, c model.RecentContext) error {
-	if !contains([]string{"Home", "Board", "Todos", "Goals", "Epics", "Calendar", "Graph", "Workflows", "Ideas", "Cost", "Projects"}, c.View) {
+	if !contains([]string{"Home", "Board", "Tickets", "Todos", "Goals", "Epics", "Calendar", "Graph", "Workflows", "Ideas", "Cost", "Projects"}, c.View) {
 		return failure(422, "invalid_view", "Choose a shipped workspace view")
 	}
 	if c.ProjectID != 0 {
@@ -376,7 +376,7 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 				if !validNavigationOrder(*in.NavigationOrder) {
 					return nil, false, failure(422, "invalid_navigation", "Provide each canonical view exactly once")
 				}
-				p.NavigationOrder = append([]string{}, (*in.NavigationOrder)...)
+				p.NavigationOrder = normalizeNavigationOrder(*in.NavigationOrder)
 			}
 			if in.NavigationPosition != nil {
 				if !contains([]string{"top", "left", "right"}, *in.NavigationPosition) {

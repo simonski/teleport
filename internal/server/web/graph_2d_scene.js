@@ -136,6 +136,7 @@ export function createGraphScene(element,graph,callbacks,retained={}) {
   function up(event){
     if(!gesture)return;const previous=gesture;gesture=null;callbacks.interacting(false);if(element.hasPointerCapture(previous.pointer))element.releasePointerCapture(previous.pointer);
     if(previous.id&&!previous.moved&&event.type==='pointerup')select(previous.id);
+    if(previous.id&&previous.moved&&event.type==='pointerup')callbacks.drop?.(previous.id,{...positions.get(previous.id)});
   }
   function cancelGesture(){if(!gesture)return;if(gesture.id&&gesture.moved)move(gesture.id,gesture.origin);else if(gesture.moved){camera.position.x=gesture.origin.x;camera.position.y=gesture.origin.y;updateView();}up({type:'pointercancel'});}
   function wheel(event){event.preventDefault();zoom(Math.exp(Math.max(-100,Math.min(100,event.deltaY))*.002),{x:event.clientX,y:event.clientY});}
@@ -147,7 +148,7 @@ export function createGraphScene(element,graph,callbacks,retained={}) {
     if(event.key==='Escape'){event.preventDefault();cancelGesture();return;}
     if(event.key==='Enter'&&id){event.preventDefault();callbacks.open(id);return;}
     if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();
-    if(event.altKey&&graph.canSave&&id){const point={...positions.get(id)},amount=event.shiftKey?50:10;point.x+=event.key==='ArrowRight'?amount:event.key==='ArrowLeft'?-amount:0;point.y+=event.key==='ArrowUp'?amount:event.key==='ArrowDown'?-amount:0;if(Math.abs(point.x)<=100000&&Math.abs(point.y)<=100000)move(id,point);}
+    if(event.altKey&&graph.canSave&&id){const point={...positions.get(id)},amount=event.shiftKey?50:10;point.x+=event.key==='ArrowRight'?amount:event.key==='ArrowLeft'?-amount:0;point.y+=event.key==='ArrowUp'?amount:event.key==='ArrowDown'?-amount:0;if(Math.abs(point.x)<=100000&&Math.abs(point.y)<=100000){move(id,point);callbacks.drop?.(id,point);}}
     else{const ids=[...nodes.keys()],direction=['ArrowLeft','ArrowUp'].includes(event.key)?-1:1,next=ids[(ids.indexOf(id)+direction+ids.length)%ids.length];select(next);const point=positions.get(next);if(point&&cards.get(next)?.hidden){camera.position.x=point.x;camera.position.y=point.y;updateView();}cards.get(next)?.focus({preventScroll:true});}
   }
   function appearance(){palette=readPalette();for(const edge of edges){edge.line.material.color.set(colorFor(edge));if(edge.arrow)edge.arrow.material.color.set(colorFor(edge));}draw();}
@@ -163,7 +164,7 @@ export function createGraphScene(element,graph,callbacks,retained={}) {
   if(retained.projection==='2d'&&retained.camera){[camera.position.x,camera.position.y,camera.zoom]=retained.camera;updateView();}else fit();
   select(selected);syncLoop();
   if(retained.focused)queueMicrotask(()=>{if(!disposed&&document.activeElement===document.body)cards.get(retained.focused)?.focus({preventScroll:true});});
-  return {select,move,zoom,fit,snapshot:()=>({projection:'2d',camera:[camera.position.x,camera.position.y,camera.zoom],target:[0,0,0],selected,focused,hovered: hovered||focused,flowingEdges:particleRecords.length/3,animationRunning:loop,phase}),dispose(){
+  return {select,move,zoom,fit,clientToWorld:world,snapshot:()=>({projection:'2d',camera:[camera.position.x,camera.position.y,camera.zoom],target:[0,0,0],selected,focused,hovered: hovered||focused,flowingEdges:particleRecords.length/3,animationRunning:loop,phase}),dispose(){
     disposed=true;renderer.setAnimationLoop(null);resize.disconnect();intersection.disconnect();
     element.removeEventListener('pointerdown',down);element.removeEventListener('pointermove',drag);element.removeEventListener('pointerup',up);element.removeEventListener('pointercancel',cancelGesture);element.removeEventListener('wheel',wheel);element.removeEventListener('keydown',key);
     element.removeEventListener('pointerleave',leavePointer);

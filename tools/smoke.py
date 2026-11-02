@@ -17,6 +17,7 @@ from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
 from graph_browser import verify_graph, verify_camera_retained
 from studio_browser import verify_studio
+from overview_browser import verify_overview
 from smoke_timeout import TIMEOUT_SECONDS
 from smoke_profile import Profile
 
@@ -33,18 +34,19 @@ def main(temporary_root=None):
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
     parser.add_argument("--graph-only", action="store_true", help="Verify the bundled graph renderer, persistence and fallback; requires --browser")
     parser.add_argument("--studio-only", action="store_true", help="Verify the 2D graph, Studio appearance and workflow map; requires --browser")
+    parser.add_argument("--overview-only", action="store_true", help="Verify Home, Tickets, Attention and workflow assembly; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only) and not args.browser:
+    if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     with context as temporary:
         folder = Path(temporary)
-        if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only)):
+        if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
-        focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph", "studio") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
         profile = Profile(("postgres" if args.database else "sqlite") + "/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
@@ -95,7 +97,7 @@ def main(temporary_root=None):
             ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
             assert ticket["status"] == "Doing"
             if args.browser:
-                seeded_browser = args.browser_slice in ("core", "views") or args.studio_only
+                seeded_browser = args.browser_slice in ("core", "views") or args.studio_only or args.overview_only
                 if seeded_browser:
                     setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
                     assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
@@ -178,7 +180,11 @@ def main(temporary_root=None):
                         assert not json.loads(tk("getSession"))["settings"]["agents"]
                     browser("wait", "#project + .choice-button")
                     browser("select", "#project", str(project["id"]))
-                    browser("wait", "--fn", "document.body.innerText.includes('Latest work')")
+                    browser("wait", "--fn", "document.body.innerText.includes('Recently completed')")
+                    if args.overview_only:
+                        profile.start("overview")
+                        verify_overview(browser,tk,project,profile.start)
+                        return
                     if args.studio_only:
                         profile.start("studio")
                         verify_studio(browser,tk,project,ticket,profile.start)
@@ -250,14 +256,14 @@ def main(temporary_root=None):
                         browser("press", "ArrowDown")
                         browser("press", "Escape")
                         browser("eval", "if(document.querySelector('.choice-list')||document.activeElement!==document.querySelector('#project + .choice-button'))throw new Error('Choice keyboard dismissal lost focus')")
-                        browser("click", "#new")
+                        browser("eval", "document.activeElement?.blur()"); browser("press", "n")
                         browser("fill", '[name="title"]', "Unsaved dismissal check")
                         browser("eval", "document.querySelector('#editor button[type=submit]').focus()")
                         browser("press", "Tab")
                         browser("eval", "if(document.activeElement!==document.querySelector('#dismiss'))throw new Error('Modal focus escaped')")
                         browser("press", "Escape")
                         browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!document.querySelector('#app').inert")
-                        browser("click", "#new")
+                        browser("eval", "document.activeElement?.blur()"); browser("press", "n")
                         browser("mouse", "move", "3", "3")
                         browser("mouse", "down", "left")
                         browser("mouse", "up", "left")

@@ -3,6 +3,8 @@
 function closeAccountMenu() {
   const menu=byId('account-menu');if(menu)menu.hidden=true;
   byId('account')?.setAttribute('aria-expanded','false');
+  if(byId('attention-submenu'))byId('attention-submenu').hidden=true;
+  byId('account-attention')?.setAttribute('aria-expanded','false');
 }
 
 function closeOnlyDialog(title,body) {

@@ -16,7 +16,11 @@ else{title=kind==='revise'?'Revise implementation':'Change scope';body=`<p>${kin
 const dialog=openDialog(title,body,submit);byId('editor-form').onsubmit=async e=>{e.preventDefault();try{await api(operation,build(new FormData(e.currentTarget)));dialog.close();await workspace();notice(title+' saved');}catch(error){showError(error);}};}
 async function setMode(){const field=byId('execution-mode'),status=byId('execution-save-status'),actor=session.account.id;field.disabled=true;status.textContent='Saving…';try{const result=await api('setExecutionMode',{mode:field.value,expectedVersion:session.settings.version});if(session?.account.id!==actor)return;session.settings=result;status.textContent='';}catch(error){if(session?.account.id===actor){status.textContent=error.message;status.classList.add('error');}}finally{if(field.isConnected)field.disabled=false;}}
 async function toggleProjectBrake(){const project=currentProject();try{await api('setHandbrake',{projectId:project.id,expectedVersion:project.version,engaged:!project.handbrake});await workspace();notice(project.handbrake?'Project admissions released':'Project admissions paused');}catch(error){showError(error);}}
-function accountMenuHTML(){const attention=tickets.filter(t=>t.attention&&!['Done','Cancelled'].includes(t.status));return `<div id="account-menu" hidden class="account-menu" role="menu" aria-label="Account and attention"><p class="eyebrow">${escapeHTML(session.account.username)} / ${attention.length} REQUIRING ATTENTION</p>${attention.map(t=>`<button role="menuitem" data-attention-ticket="${t.id}"><span class="number">#${t.id}</span><strong>${escapeHTML(t.title)}</strong><small>${escapeHTML(t.attention)}</small></button>`).join('')}${session.welcomeSetup&&!session.welcomeSetup.completed?'<button role="menuitem" id="account-welcome">Finish setup</button>':''}<button role="menuitem" id="account-settings">Settings</button><button role="menuitem" id="menu-sign-out">Sign out</button></div>`;}
+function accountMenuHTML(){return profileMenuHTML();}
+function profileMenuHTML(){
+  const attention=tickets.filter(ticket=>ticket.attention&&!ticket.archived&&!ticket.deleted&&!['Done','Cancelled'].includes(ticket.status)).sort((a,b)=>String(a.question?.askedAt||a.phaseEnteredAt||a.createdAt).localeCompare(String(b.question?.askedAt||b.phaseEnteredAt||b.createdAt))||a.id-b.id);
+  return `<div id="account-menu" hidden class="account-menu" role="menu" aria-label="Account"><p class="eyebrow">${escapeHTML(session.account.username)}</p><div class="account-attention"><button type="button" role="menuitem" id="account-attention" aria-haspopup="menu" aria-expanded="false" aria-controls="attention-submenu"><span>Attention</span><span class="attention-count">${attention.length} <span aria-hidden="true">‹</span></span></button><div id="attention-submenu" class="attention-submenu" role="menu" aria-label="Attention" hidden>${attention.map(ticket=>`<button type="button" role="menuitem" data-attention-ticket="${ticket.id}"><span class="number">#${ticket.id}</span><strong>${escapeHTML(ticket.title)}</strong><small>${escapeHTML(ticket.attention)}</small></button>`).join('')||'<p class="quiet-state" role="status">Nothing requires attention.</p>'}</div></div>${session.welcomeSetup&&!session.welcomeSetup.completed?'<button role="menuitem" id="account-welcome">Finish setup</button>':''}<button role="menuitem" id="account-settings">Settings</button><button role="menuitem" id="menu-sign-out">Sign out</button></div>`;
+}
 function bindAccountMenu(){
   const menu=byId('account-menu');if(!menu)return;
   const trigger=byId('account'),close=closeAccountMenu;
@@ -27,9 +31,18 @@ function bindAccountMenu(){
   on('account-settings','click',()=>{close();openPersonalSettings();});
   on('menu-sign-out','click',()=>{close();signOut();});
   menu.querySelectorAll('[data-attention-ticket]').forEach(button=>button.onclick=()=>{close();editTicket(Number(button.dataset.attentionTicket));});
+  const attention=byId('account-attention'),submenu=byId('attention-submenu');
+  const openAttention=(focus=false)=>{submenu.hidden=false;attention.setAttribute('aria-expanded','true');if(focus)submenu.querySelector('[role=menuitem]')?.focus();};
+  const closeAttention=()=>{submenu.hidden=true;attention.setAttribute('aria-expanded','false');};
+  attention.onclick=()=>openAttention(true);
+  attention.parentElement.addEventListener('pointerenter',()=>openAttention());
+  attention.parentElement.addEventListener('pointerleave',()=>{if(!submenu.contains(document.activeElement))closeAttention();});
+  menu.addEventListener('focusin',event=>{if(!attention.parentElement.contains(event.target))closeAttention();});
   menu.addEventListener('keydown',e=>{
-    const buttons=[...menu.querySelectorAll('[role=menuitem]')];let index=buttons.indexOf(document.activeElement);
+    const container=e.target.closest('[role=menu]')||menu,inside=container===submenu,buttons=[...container.querySelectorAll('[role=menuitem]')].filter(button=>button.closest('[role=menu]')===container);let index=buttons.indexOf(document.activeElement);
     if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();index=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[index]?.focus();}
+    else if(e.key==='ArrowRight'&&document.activeElement===attention){e.preventDefault();openAttention(true);}
+    else if((e.key==='ArrowLeft'||e.key==='Escape')&&(inside||document.activeElement===attention&&!submenu.hidden)){e.preventDefault();e.stopPropagation();closeAttention();attention.focus();}
     else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();byId('account')?.focus();}
     else if(e.key==='Tab')close();
   });

@@ -14,7 +14,7 @@ def verify_ticket_keyboard(browser, tk, project_id):
         browser("click", f'#nav-views [data-view="{view}"]')
         for trigger in ["button", "key"]:
             if trigger == "button":
-                browser("click", "#new")
+                browser("eval", "document.activeElement?.blur()"); browser("press", "n")
             else:
                 browser("press", "n")
             browser("wait", '#editor [name="title"]')
@@ -28,7 +28,7 @@ def verify_ticket_keyboard(browser, tk, project_id):
     created[2] = call("transitionTicket", {"id": created[2]["id"], "expectedVersion": created[2]["version"], "target": "Doing"})
     browser("click", '#nav-views [data-view="Board"]')
     browser("select", "#lens", "human")
-    browser("click", "#new")
+    browser("eval", "document.activeElement?.blur()"); browser("press", "n")
     browser("eval", "if(document.querySelector('[name=kind]').value!=='task'||document.querySelector('[name=intent]').value!=='human')throw new Error('Board lens ignored')")
     browser("press", "Escape")
     browser("wait", f'.ticket-open[data-ticket="{created[0]["id"]}"]')

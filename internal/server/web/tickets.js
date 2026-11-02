@@ -1,7 +1,7 @@
 "use strict";
 
-function ticketCreationContext(currentView,currentLens){
-  return {kind:currentView==='Goals'?'goal':currentView==='Epics'?'epic':'task',human:currentView==='Todos'||currentView==='Board'&&currentLens==='human'};
+function ticketCreationContext(currentView,currentLens,workflowFamily){
+  return {kind:currentView==='Goals'?'goal':currentView==='Epics'?'epic':'task',human:currentView==='Todos'||currentView==='Board'&&currentLens==='human'||currentView==='Tickets'&&workflowFamily==='human'};
 }
 
 function boardArrowTarget(lanes,id,key){

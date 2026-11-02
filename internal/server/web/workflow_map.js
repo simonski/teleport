@@ -1,7 +1,7 @@
 "use strict";
 let workflowPresentation='editor',workflowMapRuntime=null,workflowMapEpoch=0,workflowTrace=false;
 const workflowMapCameras=new Map();
-function leaveWorkflowMap(){workflowMapEpoch++;if(workflowMapRuntime){workflowMapCameras.set(workflowMapRuntime.scope,workflowMapRuntime.scene.snapshot());workflowMapRuntime.scene.dispose();workflowMapRuntime=null;}}
+function leaveWorkflowMap(){workflowMapEpoch++;if(typeof workflowInventoryDispose==='function'){workflowInventoryDispose();workflowInventoryDispose=null;}if(workflowMapRuntime){workflowMapCameras.set(workflowMapRuntime.scope,workflowMapRuntime.scene.snapshot());workflowMapRuntime.scene.dispose();workflowMapRuntime=null;}}
 const resetWorkflowViewBeforeMap=resetWorkflowView;
 resetWorkflowView=function(){leaveWorkflowMap();workflowMapCameras.clear();workflowPresentation='editor';workflowTrace=false;resetWorkflowViewBeforeMap();};
 
@@ -24,10 +24,11 @@ async function mountWorkflowMap(){
     const scene=module.createGraphScene(host,graph,{
       select:selectWorkflowMapPhase,open:openWorkflowMapPhase,
       constrain:point=>({x:Math.max(-9885,Math.min(10115,point.x)),y:Math.max(-10035,Math.min(9965,point.y)),z:0}),
-      move:(id,point)=>{if(!flowWritable(source)||flow!==source)return;flow.layout??={};flow.layout[id]={x:point.x-115,y:-point.y-35};flowDirty=true;flowMessage('Unsaved phase arrangement');},
+      move:(id,point)=>{if(!flowWritable(source)||flow!==source)return;flow.layout??={};flow.layout[id]={x:point.x-115,y:-point.y-35};flowDirty=true;const candidate=workflowNearbyConnection(flow,id);host.querySelectorAll('.workflow-nearby').forEach(node=>node.classList.remove('workflow-nearby'));if(candidate)for(const key of [candidate.source,candidate.target])host.querySelector(`[data-graph-node="${CSS.escape(key)}"]`)?.classList.add('workflow-nearby');flowMessage(candidate?`Release to connect ${candidate.outcome} to ${flow.phases.find(phase=>phase.id===candidate.target).title}`:'Unsaved phase arrangement');},
+      drop:id=>{if(!flowWritable(source)||flow!==source)return;if(attachNearbyWorkflowStep(id)){workflowTrace=true;mountWorkflowMap();flowMessage('Nearby outcome route added to the draft. Review and save latest.');}},
       interacting:active=>{if(active)flowDrag={kind:'map'};else if(flowDrag?.kind==='map')flowDrag=null;},
     },snapshot);
-    workflowMapRuntime={scope,scene};selectWorkflowMapPhase(snapshot.selected||flow.phases[0]?.id);
+    workflowMapRuntime={scope,scene};selectWorkflowMapPhase(snapshot.selected||flow.phases[0]?.id);bindWorkflowInventory();
   }catch(error){if(epoch===workflowMapEpoch&&host.isConnected)host.innerHTML='<div class="graph-fallback"><h3>Map unavailable</h3><p>The editor remains available for all phases and outcome rules.</p></div>';}
 }
 const drawWorkflowBeforeMap=drawWorkflow;
@@ -40,7 +41,7 @@ drawWorkflow=function(){
   const canvas=host.querySelector('.flow-canvas-wrap'),lists=host.querySelector('.flow-lists');canvas.hidden=lists.hidden=workflowPresentation==='map';
   if(workflowPresentation!=='map')return;
   const map=document.createElement('section');map.className='workflow-map';
-  map.innerHTML=`<div class="workflow-map-toolbar"><button type="button" class="secondary" id="workflow-map-fit">Fit</button><button type="button" class="secondary" id="workflow-map-zoom-in" aria-label="Zoom workflow in">＋</button><button type="button" class="secondary" id="workflow-map-zoom-out" aria-label="Zoom workflow out">−</button><button type="button" class="secondary" id="workflow-map-trace" aria-pressed="${workflowTrace}">Trace routes</button><span>Definition preview · ${flow.published?'published':'save latest to retain layout'}</span></div><div class="workflow-map-workspace"><div id="workflow-map-stage" aria-label="Workflow phase map"></div><aside id="workflow-map-inspector" class="graph-inspector"></aside></div>`;
+  map.innerHTML=`<div class="workflow-map-toolbar"><button type="button" class="secondary" id="workflow-map-fit">Fit</button><button type="button" class="secondary" id="workflow-map-zoom-in" aria-label="Zoom workflow in">＋</button><button type="button" class="secondary" id="workflow-map-zoom-out" aria-label="Zoom workflow out">−</button><button type="button" class="secondary" id="workflow-map-trace" aria-pressed="${workflowTrace}">Trace routes</button><span>Definition preview · ${flow.published?'published':'save latest to retain layout'}</span></div><div class="workflow-map-workspace">${workflowInventoryHTML()}<div id="workflow-map-stage" aria-label="Workflow phase map"></div><aside id="workflow-map-inspector" class="graph-inspector"></aside></div>`;
   canvas.before(map);
   byId('workflow-map-fit').onclick=()=>workflowMapRuntime?.scene.fit();byId('workflow-map-zoom-in').onclick=()=>workflowMapRuntime?.scene.zoom(.8);byId('workflow-map-zoom-out').onclick=()=>workflowMapRuntime?.scene.zoom(1.25);
   byId('workflow-map-trace').onclick=()=>{workflowTrace=!workflowTrace;byId('workflow-map-trace').setAttribute('aria-pressed',String(workflowTrace));mountWorkflowMap();};

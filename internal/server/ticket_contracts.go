@@ -13,6 +13,7 @@ func init() {
 		{"createProject", "ACT-0504", "Create a project with protected defaults", app.CreateProjectInput{}, model.Project{}},
 		{"listProjects", "ACT-0502", "List accessible projects", app.ListInput{}, app.Page[model.Project]{}},
 		{"listProjectSummaries", "ACT-0502", "List authorized project aggregates with verified own-session counts", app.ProjectDirectoryInput{}, app.Page[app.ProjectSummary]{}},
+		{"getHome", "ACT-0608", "Read project completion, phase and retained timing summaries", app.HomeInput{}, app.HomeSummary{}},
 		{"saveProject", "ACT-0505", "Edit versioned project name and description", app.SaveProjectInput{}, model.Project{}},
 		{"createTicket", "ACT-0101", "Create a Todo ticket", app.CreateTicketInput{}, model.Ticket{}},
 		{"getTicket", "ACT-0102", "Read a ticket", app.IDInput{}, model.Ticket{}},

@@ -52,7 +52,7 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, err := url.Parse(origin)
 			scheme := "http"
-			if r.TLS != nil {
+			if secureRequest(r, configuredHosts) {
 				scheme = "https"
 			}
 			if err != nil || !strings.EqualFold(u.Host, r.Host) || u.Scheme != scheme || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
@@ -105,10 +105,10 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 		}
 		if op == "login" {
 			login := result.(app.LoginResult)
-			http.SetCookie(w, &http.Cookie{Name: "teleport_session", Value: login.Token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode, MaxAge: 43200})
+			http.SetCookie(w, &http.Cookie{Name: "teleport_session", Value: login.Token, Path: "/", HttpOnly: true, Secure: secureRequest(r, configuredHosts), SameSite: http.SameSiteStrictMode, MaxAge: 43200})
 		}
 		if op == "logout" {
-			http.SetCookie(w, &http.Cookie{Name: "teleport_session", Value: "", Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+			http.SetCookie(w, &http.Cookie{Name: "teleport_session", Value: "", Path: "/", HttpOnly: true, Secure: secureRequest(r, configuredHosts), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		}
 		write(w, 200, result)
 	})
@@ -152,23 +152,36 @@ func contentPolicy(nonce string) string {
 	}
 	return "default-src 'self'; script-src 'self'; " + style + "; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 }
-func trustedHost(host string, configured []string) bool {
+
+// Configured public hosts terminate HTTPS at the deployment proxy. Forwarding
+// headers never select the security mode; only explicit operator configuration does.
+func secureRequest(r *http.Request, configured []string) bool {
+	return r.TLS != nil || configuredHost(r.Host, configured)
+}
+func normalizedHost(host string) string {
 	if hostname, _, err := net.SplitHostPort(host); err == nil {
 		host = hostname
 	}
-	host = strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
+	return strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
+}
+func configuredHost(host string, configured []string) bool {
+	host = normalizedHost(host)
+	for _, allowed := range configured {
+		if allowed != "" && host == normalizedHost(allowed) {
+			return true
+		}
+	}
+	return false
+}
+func trustedHost(host string, configured []string) bool {
+	host = normalizedHost(host)
 	if host == "localhost" {
 		return true
 	}
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return true
 	}
-	for _, allowed := range configured {
-		if allowed != "" && host == strings.ToLower(strings.TrimSuffix(allowed, ".")) {
-			return true
-		}
-	}
-	return false
+	return configuredHost(host, configured)
 }
 func write(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -125,7 +125,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	dbPath := flags.String("db", env("TELEPORT_DB", filepath.Join(home, ".teleport", "database.db")), "SQLite path or PostgreSQL URL (init/serve only)")
 	addr := flags.String("addr", "localhost:9999", "listen address")
-	publicHost := flags.String("public-host", "", "explicit additional trusted browser hostname (no scheme or path)")
+	publicHost := flags.String("public-host", "", "explicit trusted HTTPS browser hostname behind a TLS proxy (no scheme or path)")
 	runtimeRoot := flags.String("runtime-dir", env("TELEPORT_RUNTIME_DIR", ""), "private local session daemon state directory (serve only)")
 	terminalFixture := flags.Bool("enable-terminal-fixture", false, "enable the no-model development terminal fixture (serve only)")
 	endpoint := flags.String("server", env("TELEPORT_SERVER", "http://localhost:9999"), "server URL")

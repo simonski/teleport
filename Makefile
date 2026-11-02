@@ -3,7 +3,8 @@
 DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
-export DEPLOY_HOST DEPLOY_DIR DEPLOY_BUILDER
+DEPLOY_ADDR ?= 0.0.0.0:8000
+export DEPLOY_HOST DEPLOY_DIR DEPLOY_BUILDER DEPLOY_ADDR
 help:
 	@echo "build    Build bin/tk with a local build identity"
 	@echo "install  Build and install tk into GOBIN or GOPATH/bin"

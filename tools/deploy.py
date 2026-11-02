@@ -71,7 +71,7 @@ def main():
     parser.add_argument("--directory",default=os.environ.get("DEPLOY_DIR","/home/exedev/teleport"))
     parser.add_argument("--arch",choices=("amd64","arm64"))
     parser.add_argument("--builder",choices=("auto","native","zig","docker"),default=os.environ.get("DEPLOY_BUILDER","auto"))
-    parser.add_argument("--addr",default=os.environ.get("DEPLOY_ADDR","127.0.0.1:9999"))
+    parser.add_argument("--addr",default=os.environ.get("DEPLOY_ADDR","0.0.0.0:8000"))
     parser.add_argument("--build-only",action="store_true")
     parser.add_argument("--dry-run",action="store_true")
     args=parser.parse_args()

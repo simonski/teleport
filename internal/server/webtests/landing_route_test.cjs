@@ -7,7 +7,7 @@ const at=(plan,name,fraction=.5)=>{const stage=plan.stages.find(stage=>stage.nam
 
 test('launch wobbles on the support, lifts vertically, and lands under gimballed thrust',async()=>{
   const {flightPlan,sampleFlight,LANDING_HOME}=await route,plan=flightPlan();
-  const rest=sampleFlight(0),ignite=sampleFlight(at(plan,'ignite',.375)),lift=sampleFlight(at(plan,'lift'));
+  const rest=sampleFlight(at(plan,'rest')),ignite=sampleFlight(at(plan,'ignite',.375)),lift=sampleFlight(at(plan,'lift'));
   assert.equal(rest.engine,0);assert.equal(rest.arms,1);
   assert.equal(ignite.y,LANDING_HOME.y);assert.ok(Math.abs(ignite.angle+90)>0&&Math.abs(ignite.angle+90)<3);assert.ok(ignite.engine>0);
   assert.equal(lift.x,LANDING_HOME.x);assert.ok(lift.y<LANDING_HOME.y);assert.ok(lift.engine>0);
@@ -36,4 +36,38 @@ test('Perlin route variation stays continuous and returns to the same landing su
   assert.ok(Math.abs(perlin1D(1-1e-6)-perlin1D(1+1e-6))<1e-4);
   for(let cycle=0;cycle<4;cycle++)for(let t=0;t<flightPlan(cycle).duration;t+=75){const frame=sampleFlight(t,cycle);assert.ok(['x','y','angle','engine','gimbal','arms'].every(key=>Number.isFinite(frame[key])));}
   assert.equal(sampleFlight(at(plan,'pause')).y,LANDING_HOME.y);
+});
+
+test('carrier delivers and releases a supported rocket before leaving the pad',async()=>{
+  const {flightPlan,sampleFlight,LANDING_HOME}=await route,plan=flightPlan();
+  const arriving=sampleFlight(at(plan,'delivery',.5)),unloaded=sampleFlight(at(plan,'carrier-exit',0)),ready=sampleFlight(at(plan,'rest'));
+  assert.equal(arriving.vehicle.kind,'carrier');assert.equal(arriving.x,arriving.vehicle.x);assert.equal(arriving.engine,0);
+  assert.ok(arriving.x<LANDING_HOME.x);assert.equal(unloaded.x,LANDING_HOME.x);assert.equal(unloaded.y,LANDING_HOME.y);assert.equal(unloaded.arms,1);
+  assert.equal(ready.vehicle,null);assert.ok(ready.fins>.9);assert.equal(sampleFlight(at(plan,'ignite',0)).fins,0);
+});
+
+test('refuelling connects, fills and vents steam, disconnects, then backs away before relaunch',async()=>{
+  const {flightPlan,sampleFlight}=await route,plan=flightPlan(1),frame=(name,t=.5)=>sampleFlight(at(plan,name,t),1);
+  assert.equal(plan.replacement,false);
+  assert.equal(frame('tanker-arrive').vehicle.kind,'tanker');
+  assert.ok(frame('connect').hose>0&&frame('connect').hose<1);
+  assert.equal(frame('refuel').hose,1);assert.ok(frame('refuel').steam>0);assert.equal(frame('refuel').engine,0);
+  assert.ok(frame('refuel',.9).fuel>frame('refuel',.1).fuel);
+  assert.ok(frame('disconnect',.9).hose<frame('disconnect',.1).hose);
+  assert.equal(frame('tanker-back').hose,0);assert.ok(frame('tanker-back',.9).vehicle.x<frame('tanker-back',.1).vehicle.x);
+  assert.equal(frame('tanker-exit').steam,0);assert.ok(frame('ignite').exhaust>0);assert.ok(frame('lift').exhaust>0);
+});
+
+test('occasional broken panels leave on a recovery truck and replacements cycle through six distinct rockets',async()=>{
+  const {flightPlan,sampleFlight,ROCKETS,LANDING_HOME}=await route,seen=new Set();
+  assert.equal(new Set(ROCKETS.map(rocket=>rocket.id)).size,6);assert.equal(ROCKETS.at(-1).id,'starship');
+  for(let cycle=0;cycle<18;cycle++){
+    const plan=flightPlan(cycle),frame=(name,t=.5)=>sampleFlight(at(plan,name,t),cycle);
+    seen.add(frame('rest').variant);
+    if(!plan.replacement)continue;
+    const old=frame('fault'),taken=frame('recovery-exit'),fresh=frame('replacement-unload',.999999),next=sampleFlight(0,cycle+1);
+    assert.ok(old.broken&&old.debris.y>LANDING_HOME.y);assert.equal(taken.vehicle.kind,'recovery');assert.equal(taken.x,taken.vehicle.x);assert.ok(taken.broken);
+    assert.notEqual(old.variant,fresh.variant);assert.equal(next.variant,fresh.variant);assert.equal(fresh.engine,0);assert.ok(!fresh.broken);assert.equal(fresh.x,next.x);assert.ok(Math.abs(fresh.y-next.y)<.0001);
+  }
+  assert.equal(seen.size,6);
 });

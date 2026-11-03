@@ -90,10 +90,12 @@ def main(database_url=None):
                 browser("click", '#login button[type="submit"],#login button')
                 browser("wait", "#welcome-status")
                 browser("press", "Escape")
-                browser("eval", "window.__originalApi=api;api=(op,data)=>op==='stopSession'?Promise.reject(Object.assign(new Error('Stop is recorded, but ownership is unknown and no signal was sent.'),{code:'session_ownership_unknown'})):window.__originalApi(op,data);confirmTerminalAction('H3','Stop harness','Confirm the stop request')")
+                browser("eval", "window.__originalApi=api;api=(op,data)=>op==='stopSession'?new Promise((resolve,reject)=>{window.__rejectStop=()=>reject(Object.assign(new Error('Stop is recorded, but ownership is unknown and no signal was sent.'),{code:'session_ownership_unknown'}));}):window.__originalApi(op,data);confirmTerminalAction('H3','Stop harness','Confirm the stop request')")
                 browser("wait", "#terminal-action-status")
                 browser("click", '#editor button[type="submit"]')
-                browser("wait", "--fn", "!document.querySelector('#editor').open&&document.querySelector('#notice').textContent.includes('Stop is recorded')")
+                browser("wait", "--fn", "!document.querySelector('#editor').open&&typeof window.__rejectStop==='function'")
+                browser("eval", "window.__rejectStop()")
+                browser("wait", "--fn", "document.querySelector('#notice').textContent.includes('Stop is recorded')")
                 browser("screenshot", "/tmp/teleport-stop-feedback.png")
                 print("PASS: stop confirmation closes before the ownership message appears", flush=True)
                 return
@@ -133,6 +135,8 @@ def main(database_url=None):
                     browser("click", '#editor button[type="submit"]')
                     external.wait(timeout=5)
                     assert external.returncode != 0, "The fixture process was not stopped"
+                    browser("wait", "--fn", "!document.querySelector('#editor').open")
+                    browser("click", "#harness-console")
                     browser("wait", f'[data-host-stop="{forced.pid}"][data-force]')
                     browser("scrollintoview", f'[data-host-stop="{forced.pid}"][data-force]')
                     browser("click", f'[data-host-stop="{forced.pid}"][data-force]')

@@ -49,8 +49,8 @@ async function sessionSwitcher(){
   loadHost();
 }
 function confirmHostHarnessStop(row,force=false){
-  const dialog=openDialog(force?'Force stop non-Teleport harness':'Stop non-Teleport harness',`<p>${force?'Force stop':'Request a stop for'} ${escapeHTML(row.harness)} process ${Number(row.pid)}?</p><p>This is not associated with a Teleport session. Stopping it may interrupt work in another application or an unresolved session. Only the selected process is signalled; child processes may continue. A stop request does not confirm exit.</p><p id="host-stop-status" class="save-status" role="status"></p>`,force?'Force stop':'Request stop'),guard=captureDialogCompletion(dialog);let pending=false;
-  byId('editor-form').onsubmit=async event=>{event.preventDefault();if(pending)return;pending=true;try{await api('stopHostHarness',{pid:row.pid,identity:row.identity,confirm:true,force});if(!guard.current())return;dialog.close();notice('Stop requested; exit has not yet been confirmed.');await sessionSwitcher();}catch(error){if(guard.current())byId('host-stop-status').textContent=error.message||'Stop failed.';}finally{pending=false;}};
+  const dialog=openDialog(force?'Force stop non-Teleport harness':'Stop non-Teleport harness',`<p>${force?'Force stop':'Request a stop for'} ${escapeHTML(row.harness)} process ${Number(row.pid)}?</p><p>This is not associated with a Teleport session. Stopping it may interrupt work in another application or an unresolved session. Only the selected process is signalled; child processes may continue. A stop request does not confirm exit.</p>`,force?'Force stop':'Request stop');let pending=false;
+  byId('editor-form').onsubmit=async event=>{event.preventDefault();if(pending)return;pending=true;const guard=captureDialogCompletion(dialog);dialog.close();try{await api('stopHostHarness',{pid:row.pid,identity:row.identity,confirm:true,force});if(guard.follow())notice('Stop requested; exit has not yet been confirmed.');}catch(error){if(guard.follow())showError(error);}};
 }
 
 function terminalBytes(data){const bytes=new Uint8Array(data.length);for(let i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i);return bytes;}
@@ -87,9 +87,13 @@ async function openTerminal(id){
   write(first);terminal.focus();read();
 }
 function confirmTerminalAction(id,title,text,bytes=null){
-  disconnectTerminal();const dialog=openDialog(title,`<p>${text}</p><p id="terminal-action-status" class="save-status" role="status"></p>`,bytes?'Send Ctrl+C':'Stop harness'),form=byId('editor-form'),requestId=crypto.randomUUID();
-  dialog.classList.remove('terminal-dialog');form.onsubmit=async e=>{e.preventDefault();const guard=captureDialogCompletion(dialog);try{if(bytes)await api('sendSessionInput',{id,requestId,data:base64Bytes(bytes)});else await api('stopSession',{id,confirm:true});if(!guard.current())return;dialog.close();await openTerminal(id);}catch(error){if(!guard.current())return;if(bytes)byId('terminal-action-status').textContent=error.message||'Action failed.';else{dialog.close();showError(error);}}};
+  disconnectTerminal();const dialog=openDialog(title,`<p>${text}</p><p id="terminal-action-status" class="save-status" role="status"></p>`,bytes?'Send Ctrl+C':'Stop harness'),form=byId('editor-form'),requestId=crypto.randomUUID();let pending=false;
+  dialog.classList.remove('terminal-dialog');form.onsubmit=async e=>{e.preventDefault();if(pending)return;pending=true;const guard=captureDialogCompletion(dialog);
+    if(!bytes){dialog.close();try{await api('stopSession',{id,confirm:true});if(guard.follow())notice('Stop requested; exit has not yet been confirmed.');}catch(error){if(guard.follow())showError(error);}return;}
+    try{await api('sendSessionInput',{id,requestId,data:base64Bytes(bytes)});if(!guard.current())return;dialog.close();await openTerminal(id);}catch(error){if(guard.current())byId('terminal-action-status').textContent=error.message||'Action failed.';}finally{pending=false;}
+  };
 }
+
 document.addEventListener('click',e=>{const target=e.target.closest('[data-session],[data-session-switch]');if(!target)return;e.preventDefault();e.stopPropagation();if(target.hasAttribute('data-session-switch'))sessionSwitcher().catch(showError);else openTerminal(target.dataset.session).catch(showError);});
 document.addEventListener('keydown',e=>{if(!session||e.ctrlKey||e.metaKey||e.altKey||e.isComposing||foregroundOpen()||e.target.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key==='`'){e.preventDefault();chooseHarness().catch(showError);}});
 setInterval(refreshSessionRoster,1000);

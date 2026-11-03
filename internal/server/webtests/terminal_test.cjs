@@ -31,26 +31,31 @@ test('unknown sessions offer a recorded stop intent and ended sessions are group
   assert.match(html,/Ended sessions \(2\)/);assert.match(html,/Ownership unconfirmed/);assert.match(html,/data-stop-managed="H3" data-unknown="true"/);
 });
 
-test('stop failures close the confirmation before displaying the toast',async()=>{
-  const form={},status={textContent:''},events=[];
+test('stop confirmation closes immediately and reports the eventual error',async()=>{
+  const form={},events=[];let reject;
   const dialog={classList:{remove(){}},close(){events.push('close')}};
-  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>dialog,byId:id=>id==='editor-form'?form:status,captureDialogCompletion:()=>({current:()=>true}),api:async()=>{throw new Error('Ownership is unknown')},showError:error=>events.push(error.message)});
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>dialog,byId:()=>form,captureDialogCompletion:()=>({follow:()=>true}),api:()=>new Promise((resolve,fail)=>{reject=fail}),showError:error=>events.push(error.message)});
   vm.runInContext(source,context);vm.runInContext("confirmTerminalAction('H3','Stop harness','Confirm')",context);
-  await form.onsubmit({preventDefault(){}});
+  const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);reject(new Error('Ownership is unknown'));await pending;
   assert.deepEqual(events,['close','Ownership is unknown']);
 });
 
-test('stop errors from a dismissed confirmation do not close or notify over a newer view',async()=>{
-  const form={},events=[];
-  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>({classList:{remove(){}},close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({current:()=>false}),api:async()=>{throw new Error('late')},showError:()=>events.push('toast')});
-  vm.runInContext(source,context);vm.runInContext("confirmTerminalAction('H3','Stop harness','Confirm')",context);
-  await form.onsubmit({preventDefault(){}});assert.deepEqual(events,[]);
+test('successful stop closes immediately and does not reopen the terminal',async()=>{
+  const form={},events=[];let resolve;
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>({classList:{remove(){}},close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({follow:()=>true}),api:()=>new Promise(done=>{resolve=done}),notice:value=>events.push(value),openTerminal:()=>events.push('open')});
+  vm.runInContext(source,context);vm.runInContext("confirmTerminalAction('H1','Stop harness','Confirm')",context);
+  const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);resolve({});await pending;
+  assert.deepEqual(events,['close','Stop requested; exit has not yet been confirmed.']);
 });
 
-test('non-Teleport stop failures remain visible in the confirmation',async()=>{
-  const form={},status={textContent:''};let notices=0;
-  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String,openDialog:()=>({}),byId:id=>id==='editor-form'?form:status,captureDialogCompletion:()=>({current:()=>true}),api:async()=>{throw new Error('Process changed; refresh')},showError:()=>notices++});
+test('late stop results do not notify over a newer view',async()=>{
+  const form={},events=[];const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>({classList:{remove(){}},close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({follow:()=>false}),api:async()=>{throw new Error('late')},showError:()=>events.push('toast')});
+  vm.runInContext(source,context);vm.runInContext("confirmTerminalAction('H3','Stop harness','Confirm')",context);await form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);
+});
+
+test('non-Teleport stop confirmation closes before an error is shown',async()=>{
+  const form={},events=[];let reject;
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String,openDialog:()=>({close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({follow:()=>true}),api:()=>new Promise((resolve,fail)=>{reject=fail}),showError:error=>events.push(error.message)});
   vm.runInContext(source,context);vm.runInContext("confirmHostHarnessStop({pid:12,harness:'codex',identity:'identity'})",context);
-  await form.onsubmit({preventDefault(){}});
-  assert.equal(status.textContent,'Process changed; refresh');assert.equal(notices,0);
+  const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);reject(new Error('Process changed; refresh'));await pending;assert.deepEqual(events,['close','Process changed; refresh']);
 });

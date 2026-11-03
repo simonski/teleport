@@ -137,7 +137,7 @@ def main():
             page.evaluate("landingFlight.simulate(50)")
             assert page.evaluate("()=>{const current=landingFlight.snapshot();const old=window.flightBeforeMove;const distance=Math.hypot(current.x-old.x,current.y-old.y);return distance>0&&distance<=4.5}")
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
-            maximum, held, launches, delivered, collected = 0, False, set(), False, False
+            maximum, held, launches, delivered, collected, different_moons = 0, False, set(), False, False, False
             for _ in range(160):
                 state = page.evaluate("landingFlight.simulate(1000)")
                 maximum = max(maximum, len(state["fleet"]))
@@ -146,12 +146,25 @@ def main():
                 delivered = delivered or any(craft.get("phase") == "delivery" for craft in state["fleet"])
                 collected = collected or any(craft.get("phase") == "pickup" for craft in state["fleet"])
                 for craft in state["fleet"]:
+                    if state["phase"] == "orbit" and craft.get("destination"):
+                        assert craft["destination"] != page.evaluate("landingFlight.snapshot().destination"), state
+                        different_moons = True
                     if craft.get("phase") == "delivery" and craft["groundTime"] < 2400 or craft.get("phase") == "pickup" and craft["groundTime"] > 3500:
                         serial = str(craft["serial"])
                         aligned = page.evaluate("serial=>{const rocket=document.querySelector('.fleet-rocket[data-rocket=\"'+serial+'\"]');const carrier=document.querySelector('.fleet-carrier[data-rocket=\"'+serial+'\"]');return Math.abs(rocket.getCTM().e-carrier.getCTM().e)<.01}", serial)
                         assert aligned, "A transported rocket detached from its carrier"
                         if args.screenshot:
                             page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem + "-carrier")))
+                orbiting = []
+                if state["phase"] == "orbit" and not state["holding"]:
+                    orbiting.append((state["position"], page.evaluate("landingFlight.snapshot().destination")))
+                orbiting.extend((craft["position"], craft["destination"]) for craft in state["fleet"] if craft.get("phase") == "orbit")
+                for position, destination in orbiting:
+                    centre = page.evaluate("name=>name==='moon'?landingFlight.snapshot().moon:{x:175,y:24}", destination)
+                    radius = ((position["x"]-centre["x"])**2+(position["y"]-centre["y"])**2)**.5
+                    other_positions = [p for p in [state["position"]] + [craft["position"] for craft in state["fleet"]] if p is not position]
+                    if all((position["x"]-p["x"])**2+(position["y"]-p["y"])**2 > 55**2 for p in other_positions):
+                        assert 24 <= radius <= 42, (destination, radius, state)
                 assert state["minimum"] is None or state["minimum"] >= 29, state
                 assert state["maxTurn"] <= 13.500001, state
                 assert len(state["fleet"]) <= 1, state
@@ -166,6 +179,7 @@ def main():
             assert maximum == 1, maximum
             assert held, "A returning rocket never entered the holding pattern"
             assert delivered and collected, "A rocket skipped its carrier delivery or pickup"
+            assert different_moons, "No second rocket was assigned the other moon during an orbit"
             assert len(launches) >= 3, "Rockets did not land and release the pad for later launches"
             assert not errors, json.dumps(errors)
         finally:

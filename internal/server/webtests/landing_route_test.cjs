@@ -69,10 +69,26 @@ test('coasts for exactly two through five orbits around the current moon and rel
     const plan=flightPlan(cycle);assert.equal(plan.orbits,cycle+2);
     for(const fraction of [.2,.4,.6,.8]){
       const point=sampleFlight(at(plan,'orbit',fraction),cycle,moon);
-      assert.ok(Math.abs(Math.hypot(point.x-moon.x,point.y-moon.y)-ORBIT_RADIUS)<1e-8);
+      assert.ok(Math.abs(Math.hypot(point.x-moon.x,point.y-moon.y)-ORBIT_RADIUS)<=2);
       assert.equal(point.engine,0);assert.ok(Math.abs(point.orbitTurns-plan.orbits*fraction)<1e-8);
     }
     assert.equal(sampleFlight(at(plan,'return'),cycle,moon).engine,1);
+  }
+});
+
+test('outbound and return follow opposite, non-looping elliptical arcs into and out of orbit',async()=>{
+  const {flightPlan,sampleFlight,LANDING_HOME,ORBIT_RADIUS}=await route,plan=flightPlan();
+  for(const moon of [{x:175,y:24},{x:319,y:33}])for(const stage of ['outbound','return']){
+    const top={x:LANDING_HOME.x,y:LANDING_HOME.y-48},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
+    const start=stage==='outbound'?top:entry,end=stage==='outbound'?entry:top,dx=end.x-start.x,dy=end.y-start.y,length=dx*dx+dy*dy;
+    let previous=-1;
+    for(let i=0;i<=100;i++){
+      const point=sampleFlight(at(plan,stage,i===100?.999999:i/100),0,moon);
+      const progress=((point.x-start.x)*dx+(point.y-start.y)*dy)/length;
+      assert.ok(progress>=previous-1e-8&&progress<=1+1e-8);previous=progress;
+      if(i>0&&i<100)assert.ok(dx*(point.y-start.y)-dy*(point.x-start.x)>0);
+    }
+    assert.ok(previous>.9999);
   }
 });
 

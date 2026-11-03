@@ -14,8 +14,8 @@ async function openWelcome() {
   welcomeSeenActor=actor;
   let setup={...options.setup},timer=null,availabilityTimer=null,availabilityEpoch=0,keyAutomatic=!options.setup.projectKey,chain=Promise.resolve(),closed=false,pending=0,error='',stepping=false,finishing=false;
   if(setup.step===2)setup.step=3;
-  setup.repository='';setup.storageRoot='';
-  const fields=['step','projectId','projectName','projectKey','repository','storageRoot','harness','attention'];
+  setup.repository='';setup.storageRoot='';setup.projectRoot=setup.projectRoot||'~/code/teleport';
+  const fields=['step','projectId','projectName','projectKey','projectRoot','repository','storageRoot','harness','attention'];
   const steps=[0,1,3,4,5],titles=['Welcome to teleport','Project','','Agent harness','Attention','Review setup'];
   const attention={questions:'Questions and approvals',all:'All workflow updates',quiet:'Badges only'};
   function current(){return !closed&&session?.account.id===actor&&epoch===welcomeEpoch;}
@@ -56,16 +56,16 @@ async function openWelcome() {
   function content(){
     const project=projects.find(p=>p.id===setup.projectId);
     if(setup.step===0)return '<p>Set up a project, local harness and attention preferences.</p>';
-    if(setup.step===1)return `<label>Project<select name="projectId"><option value="0">Create a project</option>${projects.map(p=>`<option value="${p.id}" ${p.id===setup.projectId?'selected':''}>${escapeHTML(p.name)}</option>`).join('')}</select></label><div id="welcome-new-project" ${setup.projectId?'hidden':''}><label>Project name<input name="projectName" maxlength="200" aria-describedby="welcome-project-status" value="${escapeHTML(setup.projectName)}"></label><label>Project prefix<input name="projectKey" maxlength="80" pattern="[a-z0-9][a-z0-9_-]{0,79}" aria-describedby="welcome-project-status" value="${escapeHTML(setup.projectKey)}"></label><p id="welcome-project-status" class="save-status" role="status"></p></div>`;
+    if(setup.step===1)return `<label>Project<select name="projectId"><option value="0">Create a project</option>${projects.map(p=>`<option value="${p.id}" ${p.id===setup.projectId?'selected':''}>${escapeHTML(p.name)}</option>`).join('')}</select></label><div id="welcome-new-project" ${setup.projectId?'hidden':''}><label>Project name<input name="projectName" maxlength="200" aria-describedby="welcome-project-status" value="${escapeHTML(setup.projectName)}"></label><label>Project prefix<input name="projectKey" maxlength="80" pattern="[a-z0-9][a-z0-9_-]{0,79}" aria-describedby="welcome-project-status" value="${escapeHTML(setup.projectKey)}"></label><label>Project root<input name="projectRoot" maxlength="4096" value="${escapeHTML(setup.projectRoot)}"></label><p id="welcome-project-status" class="save-status" role="status"></p></div>`;
     if(setup.step===3)return `<label>Harness<select name="harness"><option value="">Configure later</option>${options.harnesses.map(h=>`<option value="${escapeHTML(h.id)}" ${setup.harness===h.id?'selected':''}>${escapeHTML(h.title)}${h.available?'':' · not installed'}</option>`).join('')}</select></label><p>Local mode uses the harness’s native permissions. Setup starts no agent.</p>`;
     if(setup.step===4)return `<label>Attention notifications<select name="attention">${Object.entries(attention).map(([value,label])=>`<option value="${value}" ${setup.attention===value?'selected':''}>${label}</option>`).join('')}</select></label><p>Ticket and harness attention badges stay visible in every mode.</p>`;
-    return `<dl class="setup-summary"><dt>Project</dt><dd>${escapeHTML(project?.name||setup.projectName)}</dd><dt>Prefix</dt><dd>${escapeHTML(project?.key||setup.projectKey)}</dd><dt>Harness</dt><dd>${escapeHTML(options.harnesses.find(h=>h.id===setup.harness)?.title||'Configure later')}</dd><dt>Attention</dt><dd>${attention[setup.attention]}</dd></dl>`;
+    return `<dl class="setup-summary"><dt>Project</dt><dd>${escapeHTML(project?.name||setup.projectName)}</dd><dt>Prefix</dt><dd>${escapeHTML(project?.key||setup.projectKey)}</dd><dt>Project root</dt><dd>${escapeHTML(project?.root||project?.repository?.repository||setup.projectRoot)}</dd><dt>Harness</dt><dd>${escapeHTML(options.harnesses.find(h=>h.id===setup.harness)?.title||'Configure later')}</dd><dt>Attention</dt><dd>${attention[setup.attention]}</dd></dl>`;
   }
   function syncForm(){
     const form=byId('editor-form');if(!form)return;
     const creating=setup.step===1&&!Number(form.elements.namedItem('projectId')?.value);
     if(byId('welcome-new-project'))byId('welcome-new-project').hidden=!creating;
-    for(const field of ['projectName','projectKey']){const input=form.elements.namedItem(field);if(input){input.disabled=!creating;input.required=creating;}}
+    for(const field of ['projectName','projectKey','projectRoot']){const input=form.elements.namedItem(field);if(input){input.disabled=!creating;input.required=creating;}}
     const submit=form.querySelector('button[type=submit]');submit.textContent=setup.step===5?'Finish setup':'Continue';
   }
   function draw(){

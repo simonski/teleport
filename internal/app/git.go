@@ -3,7 +3,11 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"teleport/internal/gitwork"
@@ -13,8 +17,8 @@ import (
 type RepositoryInput struct {
 	ProjectID       int64  `json:"projectId"`
 	ExpectedVersion int64  `json:"expectedVersion"`
-	Repository      string `json:"repository"`
-	StorageRoot     string `json:"storageRoot"`
+	Repository      string `json:"repository,omitempty"`
+	StorageRoot     string `json:"storageRoot,omitempty"`
 }
 type GitTaskInput struct {
 	ID              int64  `json:"id"`
@@ -307,9 +311,37 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 	if snapshot.Projects[in.ProjectID].Simulation {
 		return nil, failure(409, "simulation_only", "Simulation projects cannot grant repositories or run real harnesses")
 	}
-	binding, err := gitwork.Inspect(ctx, in.Repository, in.StorageRoot)
+	root := strings.TrimSpace(in.Repository)
+	if root == "" {
+		root = snapshot.Projects[in.ProjectID].Root
+	}
+	if root == "" && snapshot.Projects[in.ProjectID].Repository != nil {
+		root = snapshot.Projects[in.ProjectID].Repository.Repository
+	}
+	if root == "" {
+		root = defaultProjectRoot
+	}
+	if !validProjectRoot(root) {
+		return nil, failure(422, "invalid_project_root", "Use an absolute project root or a path starting with ~/")
+	}
+	repository, err := expandProjectRoot(root)
 	if err != nil {
-		return nil, failure(422, "invalid_repository", "Choose the exact committed main checkout and separate absolute storage root")
+		return nil, failure(422, "invalid_project_root", "Cannot resolve the project root")
+	}
+	storage := in.StorageRoot
+	if storage == "" && snapshot.Projects[in.ProjectID].Repository != nil {
+		storage = snapshot.Projects[in.ProjectID].Repository.StorageRoot
+	}
+	if storage == "" {
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return nil, failure(422, "invalid_repository", "Cannot resolve worktree storage")
+		}
+		storage = filepath.Join(home, ".teleport", "worktrees", snapshot.InstallationID, fmt.Sprintf("project-%d", in.ProjectID))
+	}
+	binding, err := gitwork.Inspect(ctx, repository, storage)
+	if err != nil {
+		return nil, failure(422, "invalid_repository", "Choose a committed project root with main checked out and compatible internal storage")
 	}
 	var result model.Project
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
@@ -330,7 +362,7 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 		if p.Version != in.ExpectedVersion {
 			return false, failure(409, "version_conflict", "Project changed")
 		}
-		if p.Repository != nil && p.Repository.Repository == binding.Repository && p.Repository.StorageRoot == binding.StorageRoot {
+		if p.Repository != nil && p.Repository.Repository == binding.Repository && p.Repository.StorageRoot == binding.StorageRoot && (p.Root == root || p.Root == "") {
 			result = p
 			return false, nil
 		}
@@ -349,6 +381,7 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 			version = p.Repository.Version + 1
 		}
 		p.Repository = &model.RepositoryBinding{Repository: binding.Repository, StorageRoot: binding.StorageRoot, Version: version}
+		p.Root = root
 		p.Version++
 		st.Projects[p.ID] = p
 		reconcileReadyAttention(st, a)

@@ -35,6 +35,7 @@ type IDInput struct {
 }
 type CreateProjectInput struct {
 	Description string `json:"description,omitempty"`
+	Root        string `json:"root,omitempty"`
 	Name        string `json:"name"`
 	Key         string `json:"key"`
 	RequestID   string `json:"requestId"`
@@ -300,6 +301,14 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			return nil, false, err
 		}
 		in.Name = strings.TrimSpace(in.Name)
+		in.Root = strings.TrimSpace(in.Root)
+		root := in.Root
+		if root == "" {
+			root = defaultProjectRoot
+		}
+		if !validProjectRoot(root) {
+			return nil, false, failure(422, "invalid_project_root", "Use an absolute project root or a path starting with ~/")
+		}
 		if in.Key == "" {
 			in.Key = strings.ToLower(strings.ReplaceAll(in.Name, " ", "-"))
 		}
@@ -328,7 +337,7 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		}
 		st.NextProjectID++
 		p := model.Project{ID: st.NextProjectID, Version: 1, Key: in.Key, Name: in.Name, Creator: a.ID, Members: map[string]string{a.ID: "Maintainer"}, HumanWorkflow: "human@1", AgentWorkflow: "agent@1"}
-		p.Description = in.Description
+		p.Description, p.Root = in.Description, root
 		goal := newTicket(st, p, a, "goal", "Unassigned", false, true)
 		epic := newTicket(st, p, a, "epic", "Unassigned", false, true)
 		epic.ParentID = goal.ID

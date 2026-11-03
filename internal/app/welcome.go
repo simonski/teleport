@@ -25,6 +25,7 @@ type SaveWelcomeSetupInput struct {
 	ProjectID       int64  `json:"projectId"`
 	ProjectName     string `json:"projectName"`
 	ProjectKey      string `json:"projectKey"`
+	ProjectRoot     string `json:"projectRoot,omitempty"`
 	Repository      string `json:"repository"`
 	StorageRoot     string `json:"storageRoot"`
 	Harness         string `json:"harness"`
@@ -43,7 +44,7 @@ func welcomeSetup(st *model.State, a model.Account) model.WelcomeSetup {
 	// A private draft never keeps access to a project after rights loss.
 	if w.ProjectID != 0 && role(st, a, w.ProjectID) == "" {
 		w.ProjectID, w.Repository, w.StorageRoot = 0, "", ""
-		w.ProjectName, w.ProjectKey = "", ""
+		w.ProjectName, w.ProjectKey, w.ProjectRoot = "", "", ""
 	}
 	return w
 }
@@ -74,10 +75,10 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 		if w.Completed || in.ExpectedVersion != w.Version {
 			return nil, false, failure(409, "welcome_conflict", "Setup changed; reopen to load the current progress")
 		}
-		if in.Step < 0 || in.Step > 5 || len(in.ProjectName) > 200 || len(in.ProjectKey) > 80 || len(in.Repository) > 4096 || len(in.StorageRoot) > 4096 || !contains([]string{"", "codex"}, in.Harness) || !contains([]string{"questions", "all", "quiet"}, in.Attention) {
+		if in.Step < 0 || in.Step > 5 || len(in.ProjectName) > 200 || len(in.ProjectKey) > 80 || len(in.ProjectRoot) > 4096 || len(in.Repository) > 4096 || len(in.StorageRoot) > 4096 || !contains([]string{"", "codex"}, in.Harness) || !contains([]string{"questions", "all", "quiet"}, in.Attention) {
 			return nil, false, failure(422, "invalid_setup", "Choose supported setup values within the field limits")
 		}
-		for _, v := range []string{in.ProjectName, in.ProjectKey, in.Repository, in.StorageRoot} {
+		for _, v := range []string{in.ProjectName, in.ProjectKey, in.ProjectRoot, in.Repository, in.StorageRoot} {
 			if strings.ContainsRune(v, 0) {
 				return nil, false, failure(422, "invalid_setup", "Setup fields cannot contain NUL")
 			}
@@ -93,6 +94,9 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 		w.Version++
 		w.Step, w.ProjectID = in.Step, in.ProjectID
 		w.ProjectName, w.ProjectKey = in.ProjectName, in.ProjectKey
+		if in.ProjectRoot != "" {
+			w.ProjectRoot = in.ProjectRoot
+		}
 		w.Repository, w.StorageRoot = "", ""
 		w.Harness, w.Attention = in.Harness, in.Attention
 	case "completeWelcomeSetup":
@@ -110,13 +114,13 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 			return nil, false, failure(409, "welcome_conflict", "Select a project and review the current setup before completion")
 		}
 		if w.ProjectID == 0 {
-			input, _ := json.Marshal(CreateProjectInput{Name: w.ProjectName, Key: w.ProjectKey, RequestID: "welcome-project-" + w.ID})
+			input, _ := json.Marshal(CreateProjectInput{Name: w.ProjectName, Key: w.ProjectKey, Root: w.ProjectRoot, RequestID: "welcome-project-" + w.ID})
 			result, _, err := projectOperations(st, a, "createProject", input)
 			if err != nil {
 				return nil, false, err
 			}
 			p := result.(model.Project)
-			w.ProjectID, w.ProjectName, w.ProjectKey = p.ID, p.Name, p.Key
+			w.ProjectID, w.ProjectName, w.ProjectKey, w.ProjectRoot = p.ID, p.Name, p.Key, p.Root
 		}
 		if err := require(st, a, w.ProjectID, "Viewer"); err != nil {
 			return nil, false, err

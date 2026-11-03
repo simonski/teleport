@@ -110,6 +110,7 @@ type Project struct {
 	Key                string             `json:"key"`
 	Name               string             `json:"name"`
 	Description        string             `json:"description"`
+	Root               string             `json:"root,omitempty"`
 	Creator            string             `json:"creator"`
 	Members            map[string]string  `json:"members"`
 	UnassignedGoal     int64              `json:"unassignedGoal"`

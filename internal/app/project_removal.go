@@ -234,6 +234,7 @@ func removeProject(st *model.State, a model.Account, raw json.RawMessage, previe
 			w.ProjectID = 0
 			w.ProjectName = ""
 			w.ProjectKey = ""
+			w.ProjectRoot = ""
 			w.Version++
 			st.WelcomeSetups[key] = w
 		}

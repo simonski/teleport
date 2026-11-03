@@ -40,6 +40,7 @@ type SaveProjectInput struct {
 	ExpectedVersion int64   `json:"expectedVersion"`
 	Name            *string `json:"name,omitempty"`
 	Description     *string `json:"description,omitempty"`
+	Root            *string `json:"root,omitempty"`
 }
 
 func saveProject(st *model.State, a model.Account, raw json.RawMessage) (any, bool, error) {
@@ -54,12 +55,27 @@ func saveProject(st *model.State, a model.Account, raw json.RawMessage) (any, bo
 	if p.Version != in.ExpectedVersion {
 		return nil, false, failure(409, "version_conflict", "Project changed; refresh before saving")
 	}
-	name, description := p.Name, p.Description
+	name, description, root := p.Name, p.Description, p.Root
+	if root == "" && p.Repository != nil {
+		root = p.Repository.Repository
+	}
+	if root == "" {
+		root = defaultProjectRoot
+	}
 	if in.Name != nil {
 		name = strings.TrimSpace(*in.Name)
 	}
 	if in.Description != nil {
 		description = *in.Description
+	}
+	if in.Root != nil {
+		root = strings.TrimSpace(*in.Root)
+		if !validProjectRoot(root) {
+			return nil, false, failure(422, "invalid_project_root", "Use an absolute project root or a path starting with ~/")
+		}
+		if p.Repository != nil && root != p.Root && root != p.Repository.Repository {
+			return nil, false, failure(409, "binding_required", "Change a granted project root through the administrator binding")
+		}
 	}
 	if name == "" || len(name) > 200 || len(description) > 20000 {
 		return nil, false, failure(422, "invalid_project", "Provide a name within 200 bytes and description within 20000 bytes")
@@ -69,10 +85,13 @@ func saveProject(st *model.State, a model.Account, raw json.RawMessage) (any, bo
 			return nil, false, failure(409, "project_name_exists", "Project name already exists")
 		}
 	}
-	if name == p.Name && description == p.Description {
+	if name == p.Name && description == p.Description && (in.Root == nil || root == p.Root) {
 		return p, false, nil
 	}
 	p.Name, p.Description, p.Version = name, description, p.Version+1
+	if in.Root != nil {
+		p.Root = root
+	}
 	st.Projects[p.ID] = p
 	return p, true, nil
 }

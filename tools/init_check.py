@@ -21,9 +21,10 @@ def main(database_url=None):
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--board-only", action="store_true", help="Run only Board browser checks in the disposable fixture")
+    parser.add_argument("--root-only", action="store_true", help="Run only project-root browser checks in the disposable fixture")
     args = parser.parse_args()
-    if args.board_only and not args.browser:
-        parser.error("--board-only requires --browser")
+    if (args.board_only or args.root_only) and not args.browser:
+        parser.error("--board-only and --root-only require --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-init-proof-") as temporary:
         folder = Path(temporary)
         with socket.socket() as sock:
@@ -78,6 +79,37 @@ def main(database_url=None):
                 process = None
 
         try:
+            if args.root_only:
+                assert "Initialization complete" in tk("init")
+                start()
+                browser("open", endpoint)
+                browser("fill", 'input[name="username"]', "admin")
+                browser("fill", 'input[name="password"]', "password")
+                browser("click", '#login button[type="submit"],#login button')
+                browser("wait", "#welcome-status")
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", '#editor [name="projectRoot"]')
+                assert json.loads(browser("eval", "document.querySelector('#editor [name=projectRoot]').value")) == "~/code/teleport"
+                browser("click", "#cancel")
+                browser("select", "#project", "new-project")
+                browser("wait", '#editor [name="root"]')
+                assert json.loads(browser("eval", "document.querySelector('#editor [name=root]').value")) == "~/code/teleport"
+                browser("fill", '#editor [name="name"]', "Root fixture")
+                browser("fill", '#editor [name="root"]', "~/code/fixture")
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", "--fn", "projects.some(p=>p.name==='Root fixture')")
+                project = api("listProjects")["items"][0]
+                assert project["root"] == "~/code/fixture" and not project.get("repository")
+                browser("click", "#account")
+                browser("click", "#account-project-settings")
+                browser("wait", "#configure-repository")
+                browser("click", "#configure-repository")
+                browser("wait", '#editor [name="repository"]')
+                assert json.loads(browser("eval", "document.querySelector('#editor [name=repository]').value")) == "~/code/fixture"
+                browser("eval", "if(document.querySelector('#editor [name=storageRoot]'))throw new Error('Worktree setting remains')")
+                browser("screenshot", "/tmp/teleport-project-root.png")
+                print("PASS: browser project root defaults, creation, and worktree-free project settings", flush=True)
+                return
             assert "Initialization complete" in tk("init")
             first = start()
             assert api("listProjects")["items"] == []

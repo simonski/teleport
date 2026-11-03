@@ -9,6 +9,7 @@ type WelcomeSetup struct {
 	ProjectID   int64  `json:"projectId"`
 	ProjectName string `json:"projectName"`
 	ProjectKey  string `json:"projectKey"`
+	ProjectRoot string `json:"projectRoot,omitempty"`
 	Repository  string `json:"repository"`
 	StorageRoot string `json:"storageRoot"`
 	Harness     string `json:"harness"`

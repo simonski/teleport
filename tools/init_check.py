@@ -106,6 +106,13 @@ def main(database_url=None):
             tk("init", fail=True)
             assert api("getSession")["installationId"] == first["installationId"]
             api("saveProject", {"id": project["id"], "expectedVersion": project["version"], "description": "Human-edited sample"})
+            disposable = api("createProject", {"name": "Disposable", "requestId": "disposable-project"})
+            api("createTicket", {"projectId": disposable["id"], "title": "Temporary work", "requestId": "disposable-ticket"})
+            api("saveIdea", {"projectId": disposable["id"], "title": "Temporary idea", "text": "test", "requestId": "disposable-idea"})
+            tk("project", "rm", "Disposable", fail=True, input="no\n")
+            assert len(api("listProjects")["items"]) == 2
+            tk("project", "rm", "Disposable", input="Disposable\n")
+            assert [p["id"] for p in api("listProjects")["items"]] == [project["id"]]
             stop()
             tk("init")
             again = start()

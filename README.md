@@ -29,6 +29,8 @@ Run `tk skill > SKILL.md` to export the bundled agent skill for a harness. No ru
 
 Bare `tk` or `tk help` lists the top-level commands. Use `tk agent` (or `tk help agent`) to list that command's actions, and `tk agent ls -h` for typed flags. `tk commands` prints the full catalogue; add `-json` for machine-readable output. Examples: `tk project ls`, `tk ticket show 35`, `tk agent ls -project 2`, `tk idea ls`, and `tk workflow ls`. Agent listing reads accessible harness sessions; starting one remains explicit. Existing API-style commands such as `tk listTickets -data '{"projectId":2,"limit":50}'` keep working.
 
+`tk project ls` lists accessible projects. A signed-in administrator can run `tk project rm NAME`; the command previews affected records and retained artifacts, then requires the exact project name as confirmation. Active execution and cross-project references must be resolved first.
+
 After `tk init`, start the server and sign in, then run `tk setup` to create the Teleport project and choose its description and agent limit. Administrators can also choose the server execution mode. Setup refuses an existing Teleport project without changing settings.
 
 Capture freeform text with `tk import -project Teleport notes.txt` or `tk import -project Teleport` and paste multiple lines, finishing with Ctrl-D. Piped input and `tk import -` work too. Capture creates one Idea in the required named project and preserves up to 20,000 UTF-8 bytes without truncation. `-title` overrides the derived title; `-request-id` reuses the identity printed on stderr for an uncertain retry; `-json` emits the full Idea on stdout. Classification and goal creation follow separately and no agent is started by capture.

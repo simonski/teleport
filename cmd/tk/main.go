@@ -52,6 +52,9 @@ func run(args []string) error {
 	}
 	args = expanded
 	command := args[0]
+	if command == "_project-remove" {
+		return removeProjectCommand(args[1:], os.Stdin, os.Stdout, os.Stderr)
+	}
 	if command == "setup" {
 		return setupProject(args[1:], os.Stdin, os.Stdout, os.Stderr)
 	}

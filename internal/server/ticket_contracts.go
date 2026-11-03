@@ -10,6 +10,8 @@ func init() {
 		name, action, summary string
 		input, output         any
 	}{
+		{"previewProjectRemoval", "ACT-0513", "Preview administrator project removal", app.ProjectRemovalInput{}, app.ProjectRemovalPreview{}},
+		{"deleteProject", "ACT-0513", "Remove a project after reviewed confirmation", app.ProjectRemovalInput{}, app.ProjectRemovalPreview{}},
 		{"createProject", "ACT-0504", "Create a project with protected defaults", app.CreateProjectInput{}, model.Project{}},
 		{"listProjects", "ACT-0502", "List accessible projects", app.ListInput{}, app.Page[model.Project]{}},
 		{"listProjectSummaries", "ACT-0502", "List authorized project aggregates with verified own-session counts", app.ProjectDirectoryInput{}, app.Page[app.ProjectSummary]{}},

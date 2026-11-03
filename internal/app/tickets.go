@@ -290,6 +290,10 @@ func reconcile(st *model.State, parent int64, a model.Account) {
 
 func projectOperations(st *model.State, a model.Account, operation string, raw json.RawMessage) (any, bool, error) {
 	switch operation {
+	case "previewProjectRemoval":
+		return removeProject(st, a, raw, true)
+	case "deleteProject":
+		return removeProject(st, a, raw, false)
 	case "createProject":
 		var in CreateProjectInput
 		if err := parse(raw, &in); err != nil {

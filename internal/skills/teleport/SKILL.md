@@ -64,6 +64,8 @@ tk createTicket -data '{"projectId":1,"kind":"task","title":"Describe the reques
 
 Choose human or agent intent from the actual request. Omit `parentId` only when the project's protected Unassigned parent is appropriate. Agent work has no human execution assignee. Original title, description and criteria are editable only while the ticket is already Todo; returning to Todo is a separate allowed operation, not a way to discard an implementation awaiting review.
 
+`tk project rm NAME` is a destructive, administrator-only operation. Use it only when removal has been explicitly requested. It previews affected records and retained artifacts and requires the exact project name for confirmation. Active work and foreign references block removal; never bypass a refusal.
+
 ## Capture freeform text
 
 `tk import -project NAME FILE` captures a regular UTF-8 text file as one Idea. `tk import -project NAME` or `tk import -project NAME -i` reads multiline stdin until EOF (Ctrl-D in a terminal). Preserve the text exactly, up to the current 20,000-byte Idea limit; oversized or invalid text is rejected without saving. The required project name must match an accessible project. `-title` overrides the file basename or first nonblank input line. Stdin capture verifies authentication before consuming a long paste.

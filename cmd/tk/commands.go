@@ -142,6 +142,7 @@ func commandCatalogue() []cliCommand {
 		{Command: "api OPERATION", Summary: "Call a server operation with explicit JSON; native/private commands are rejected"},
 		{Command: "help [NOUN [ACTION]]", Summary: "Show command groups or command-specific help (offline)"},
 		{Command: "commands [-json]", Summary: "Print the complete offline command catalogue"},
+		{Command: "project rm NAME", Summary: "Preview and confirm administrator project removal"},
 		{Command: "setup", Summary: "Configure common settings and create the Teleport project"},
 		{Command: "init", Summary: "Initialize configured PostgreSQL; never starts services"},
 		{Command: "serve", Summary: "Run the web/API server and configured components"},
@@ -245,6 +246,9 @@ func expandCommand(args []string, out io.Writer) ([]string, bool, error) {
 			return nil, true, nil
 		}
 		return nil, true, printCatalogue(out, strings.Join(topic, " "), machine)
+	}
+	if len(args) >= 2 && args[0] == "project" && args[1] == "rm" {
+		return append([]string{"_project-remove"}, args[2:]...), false, nil
 	}
 	for _, native := range []string{"init", "setup", "serve", "login", "logout", "skill", "version", "tools", "spec", "import"} {
 		if args[0] == native || strings.HasPrefix(args[0], "_") {

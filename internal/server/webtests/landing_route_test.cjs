@@ -78,7 +78,7 @@ test('coasts for exactly two through five orbits around the current moon and rel
 
 test('outbound and return follow opposite, non-looping elliptical arcs into and out of orbit',async()=>{
   const {flightPlan,sampleFlight,LANDING_HOME,ORBIT_RADIUS}=await route,plan=flightPlan();
-  for(const moon of [{x:110,y:24},{x:319,y:33}])for(const stage of ['outbound','return']){
+  for(const moon of [{x:85,y:12},{x:319,y:33}])for(const stage of ['outbound','return']){
     const top={x:LANDING_HOME.x,y:LANDING_HOME.y-48},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
     const start=stage==='outbound'?top:entry,end=stage==='outbound'?entry:top,dx=end.x-start.x,dy=end.y-start.y,length=dx*dx+dy*dy;
     let previous=-1;

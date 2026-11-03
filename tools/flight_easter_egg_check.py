@@ -48,6 +48,7 @@ def verify_flight_easter_egg(page, screenshot=None):
     page.keyboard.type("iddqd")
     page.wait_for_function("!!landingFlight")
     assert page.evaluate("landingFlight.snapshot().phase==='rest'&&landingFlight.snapshot().engine===0")
+    assert page.evaluate("getComputedStyle(document.querySelector('.landing-chroma')).display==='none'")
     page.keyboard.press("Escape")
     assert page.evaluate("!flightEasterEgg&&!landingFlight&&!document.querySelector('#app').inert")
     page.emulate_media(reduced_motion="no-preference")
@@ -124,6 +125,10 @@ def main():
             page.goto("http://localhost:14318/", wait_until="domcontentloaded")
             page.locator('#nav-views [data-view="Todos"]').wait_for()
             verify_flight_easter_egg(page, args.screenshot)
+            page.evaluate("{const sweep=document.querySelector('.landing-chroma').getAnimations()[0];sweep.pause();sweep.currentTime=1000;window.chromaStart=getComputedStyle(sweep.effect.target).transform;sweep.currentTime=1700}")
+            assert page.evaluate("getComputedStyle(document.querySelector('.landing-chroma')).transform!==window.chromaStart")
+            if args.screenshot:
+                page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem + "-chroma")))
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
             assert page.locator('.landing-planet').count() == 1
             assert page.locator('.login-moon').count() == 1

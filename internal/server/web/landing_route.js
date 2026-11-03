@@ -36,7 +36,7 @@ export function orbitAttitude(current,position,centre,dt){
 }
 export function holdingPoint(serial,clock){
   const lane=serial%2,drift=clock/9000;
-  return {x:130+lane*55+perlin1D(drift+serial*.37,serial+7)*12,y:38+lane*45+perlin1D(drift+.4,serial+13)*9};
+  return {x:130+lane*55+perlin1D(drift+serial*.37,serial+7)*12,y:-30+lane*35+perlin1D(drift+.4,serial+13)*9};
 }
 // Choose a bounded step that maintains clearance from every other rocket.
 export function separatedStep(position,target,others,maxDistance,clearance=ROCKET_CLEARANCE){

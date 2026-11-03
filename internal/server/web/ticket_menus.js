@@ -21,7 +21,7 @@ function ticketMenuEntries(ticket,rows,nativePending=false){
   if(typeof roleAllowsWrite==='function'&&roleAllowsWrite(ticket.projectId)){
     if(view==='Todos'&&!ticket.agent)for(const move of humanMoves(ticket))entries.push({id:'move-'+move.target,label:'Move to '+move.role,target:move.target});
     if(canQueueRefinement(ticket)&&ticket.status==='Todo')entries.push({id:'refine',label:'Send to refine'});
-    if(ticket.agent&&ticket.status==='Refine'&&canQueueRefinement(ticket))entries.push({id:'return-todo',label:'Send back to Todos'});
+    if(ticket.agent&&ticket.status==='Refine'&&canQueueRefinement(ticket))entries.push({id:'return-todo',label:'Send back to todo'});
   }
   if(ticket.question&&!ticket.question.resolved&&!ticket.question.obsolete||nativePending)entries.push({id:'questions',label:'Questions'});
   if(attached&&view!=='Todos')entries.push({id:'teleport',label:'Teleport · '+attached.id,sessionId:attached.id});

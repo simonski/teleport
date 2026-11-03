@@ -20,6 +20,18 @@ test('reordering stable view IDs preserves hidden target views and the input ord
   assert.ok(value.after.includes('Workflows')&&value.after.includes('Evolution'));
 });
 
+test('visible tab names are lowercase while persisted view identifiers remain stable',()=>{
+  const f=fixture();f.run("view='Todos'");
+  const html=f.run('navigationHTML()');
+  const buttons=[...html.matchAll(/<button[^>]*data-view="([^"]+)"[^>]*aria-label="([^"]+)"[^>]*>(.*?)<\/button>/g)];
+  assert.deepEqual(buttons.map(match=>[match[1],match[2]]),[
+    ['Home','home'],['Backlog','backlog'],['Board','board'],['Todos','todo'],
+    ['Calendar','calendar'],['Graph','graph'],['Workflows','workflows'],['Cost','cost'],
+  ]);
+  for(const match of buttons)assert.ok(match[3].includes(`<span class="tab-label">${match[2]}</span>`));
+  assert.match(html,/data-view="Todos"[^>]*aria-current="page"/);
+});
+
 test('remote layout changes defer for foreground ownership and reset without actor leakage',()=>{
   const f=fixture();f.state.foreground=true;f.run('applyNavigation()');
   assert.equal(f.context.document.documentElement.dataset.navigation,undefined);

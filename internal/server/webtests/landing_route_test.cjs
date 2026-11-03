@@ -53,12 +53,27 @@ test('opposing rockets steer without crossing the clearance boundary',async()=>{
   }
 });
 
+test('outbound avoidance never steers downward while the destination is above',async()=>{
+  const {separatedStep,ROCKET_CLEARANCE}=await route;
+  let position={x:0,y:0};
+  for(let i=0;i<30;i++){
+    const next=separatedStep(position,{x:0,y:-100},[{x:0,y:-31}],2,ROCKET_CLEARANCE,true);
+    assert.ok(next.y<=position.y+1e-9);
+    assert.ok(Math.hypot(next.x,next.y+31)>=ROCKET_CLEARANCE);
+    position=next;
+  }
+});
+
 test('launch wobbles on the support, lifts vertically, and lands under gimballed thrust',async()=>{
-  const {flightPlan,sampleFlight,LANDING_HOME}=await route,plan=flightPlan();
+  const {flightPlan,sampleFlight,LANDING_HOME,LIFT_HEIGHT}=await route,plan=flightPlan();
   const rest=sampleFlight(at(plan,'rest')),ignite=sampleFlight(at(plan,'ignite',.375)),lift=sampleFlight(at(plan,'lift'));
   assert.equal(rest.engine,0);assert.equal(rest.arms,1);
   assert.equal(ignite.y,LANDING_HOME.y);assert.ok(Math.abs(ignite.angle+90)>0&&Math.abs(ignite.angle+90)<3);assert.ok(ignite.engine>0);
   assert.equal(lift.x,LANDING_HOME.x);assert.ok(lift.y<LANDING_HOME.y);assert.ok(lift.engine>0);
+  assert.equal(lift.angle,-90);
+  const clearance=sampleFlight(at(plan,'outbound',0));
+  assert.equal(clearance.y,LANDING_HOME.y-LIFT_HEIGHT);
+  assert.ok(clearance.y+15<=74-(132-74),'rocket tail has not cleared a tower height above the tower');
   const landing=sampleFlight(at(plan,'descend',.3)),touchdown=sampleFlight(at(plan,'smoke',0));
   assert.ok(landing.engine>0);assert.ok(Math.abs(landing.gimbal)>0);
   assert.equal(touchdown.x,LANDING_HOME.x);assert.equal(touchdown.y,LANDING_HOME.y);assert.equal(touchdown.angle,-90);assert.equal(touchdown.engine,0);assert.equal(touchdown.arms,1);
@@ -78,16 +93,16 @@ test('coasts for exactly two through five orbits around the current moon and rel
 });
 
 test('outbound and return follow opposite, non-looping elliptical arcs into and out of orbit',async()=>{
-  const {flightPlan,sampleFlight,LANDING_HOME,ORBIT_RADIUS}=await route,plan=flightPlan();
-  for(const moon of [{x:42.5,y:-88},{x:319,y:33}])for(const stage of ['outbound','return']){
-    const top={x:LANDING_HOME.x,y:LANDING_HOME.y-48},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
-    const start=stage==='outbound'?top:entry,end=stage==='outbound'?entry:top,dx=end.x-start.x,dy=end.y-start.y,length=dx*dx+dy*dy;
+  const {flightPlan,sampleFlight,LANDING_HOME,ORBIT_RADIUS,LIFT_HEIGHT}=await route,plan=flightPlan();
+  for(const moon of [{x:42.5,y:-46},{x:319,y:-51}])for(const stage of ['outbound','return']){
+    const top={x:LANDING_HOME.x,y:LANDING_HOME.y-LIFT_HEIGHT},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
+    const start=stage==='outbound'?top:entry,end=stage==='outbound'?entry:top,dx=end.x-start.x,dy=end.y-start.y;
     let previous=-1;
     for(let i=0;i<=100;i++){
       const point=sampleFlight(at(plan,stage,i===100?.999999:i/100),0,moon);
-      const progress=((point.x-start.x)*dx+(point.y-start.y)*dy)/length;
+      const progress=(point.y-start.y)/dy;
       assert.ok(progress>=previous-1e-8&&progress<=1+1e-8);previous=progress;
-      if(i>0&&i<100)assert.ok(dx*(point.y-start.y)-dy*(point.x-start.x)>0);
+      if(i>0&&i<100)assert.ok((point.x-start.x-dx*progress)*(stage==='outbound'?1:-1)>0);
     }
     assert.ok(previous>.9999);
   }

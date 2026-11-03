@@ -1,5 +1,5 @@
 // A deterministic flight sampler keeps motion testable without real-time waits.
-export const LANDING_HOME={x:46,y:112},DEFAULT_MOON={x:319,y:33},ORBIT_RADIUS=34;
+export const LANDING_HOME={x:46,y:112},DEFAULT_MOON={x:319,y:-51},ORBIT_RADIUS=34,LIFT_HEIGHT=113;
 export const FLEET_LIMIT=2,ROCKET_CLEARANCE=30;
 export const ROCKETS=[
   {id:'dart',name:'Dart',tail:-10,fins:true},
@@ -39,13 +39,15 @@ export function holdingPoint(serial,clock){
   return {x:130+lane*55+perlin1D(drift+serial*.37,serial+7)*12,y:-30+lane*35+perlin1D(drift+.4,serial+13)*9};
 }
 // Choose a bounded step that maintains clearance from every other rocket.
-export function separatedStep(position,target,others,maxDistance,clearance=ROCKET_CLEARANCE){
+export function separatedStep(position,target,others,maxDistance,clearance=ROCKET_CLEARANCE,upwardOnly=false){
   const dx=target.x-position.x,dy=target.y-position.y,distance=Math.hypot(dx,dy);
   if(!distance||maxDistance<=0)return {...position};
   const ux=dx/distance,uy=dy/distance,step=Math.min(distance,maxDistance);
   const directions=[[ux,uy],[-uy,ux],[uy,-ux],[-ux,-uy]];
   for(const [x,y] of directions){
     const next={x:position.x+x*step,y:position.y+y*step};
+    if(upwardOnly&&target.y<=position.y&&next.y<target.y)next.y=target.y;
+    if(upwardOnly&&next.y>position.y+1e-9)continue;
     if(others.every(other=>{
       const before=Math.hypot(position.x-other.x,position.y-other.y),after=Math.hypot(next.x-other.x,next.y-other.y);
       return before<clearance?after>before:after>=clearance;
@@ -55,19 +57,19 @@ export function separatedStep(position,target,others,maxDistance,clearance=ROCKE
 }
 export function flightPlan(cycle=0){
   const orbits=2+(Math.abs(cycle)%4),replacement=true,damaged=cycle%3===2;
-  const stages=[...(cycle===0?[['delivery',2400],['unload',1100],['carrier-exit',1400]]:[]),['rest',1800],['ignite',1000],['lift',1600],['outbound',6800],['orbit',orbits*2700],['return',4000],['descend',2300],['smoke',1400],['pause',1000],
+  const stages=[...(cycle===0?[['delivery',2400],['unload',1100],['carrier-exit',1400]]:[]),['rest',1800],['ignite',1000],['lift',3500],['outbound',6800],['orbit',orbits*2700],['return',4000],['descend',3500],['smoke',1400],['pause',1000],
     ...(damaged?[['fault',1200]]:[['tanker-arrive',1700],['connect',900],['refuel',2400],['disconnect',900],['tanker-back',1000],['tanker-exit',1300]]),
     ['recovery-arrive',1700],['recovery-load',1400],['recovery-exit',1800],['replacement-arrive',2400],['replacement-unload',1100],['replacement-exit',1400]];
   let at=0;return {orbits,replacement,damaged,duration:stages.reduce((sum,stage)=>sum+stage[1],0),stages:stages.map(([name,duration])=>{const stage={name,start:at,duration};at+=duration;return stage;})};
 }
 function routePoint(stage,t,moon,cycle){
-  const home=LANDING_HOME,top={x:home.x,y:home.y-48},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
+  const home=LANDING_HOME,top={x:home.x,y:home.y-LIFT_HEIGHT},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
   const start=stage==='outbound'?top:entry,end=stage==='outbound'?entry:top;
   const dx=end.x-start.x,dy=end.y-start.y,distance=Math.hypot(dx,dy)||1;
   const progress=(1-Math.cos(Math.PI*t))/2,envelope=Math.sin(Math.PI*t);
   const arc=Math.min(45,Math.max(12,distance*.26)),noise=perlin1D(t*3.7+cycle*.371+(stage==='return'?5:0),cycle+19)*4;
   const offset=envelope*(arc+noise);
-  return {x:start.x+dx*progress-dy/distance*offset,y:start.y+dy*progress+dx/distance*offset};
+  return {x:start.x+dx*progress+(stage==='outbound'?offset:-offset),y:start.y+dy*progress};
 }
 function routeAngle(stage,t,moon,cycle){const a=routePoint(stage,Math.max(0,t-.001),moon,cycle),b=routePoint(stage,Math.min(1,t+.001),moon,cycle);return Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;}
 function angleMix(angle,target,t){const delta=((target-angle+540)%360)-180;return angle+delta*t;}
@@ -88,11 +90,11 @@ export function sampleFlight(milliseconds,cycle=0,moon=DEFAULT_MOON){
   switch(stage.name){
     case 'rest':frame.fins=Math.sin(Math.PI*t)**2;break;
     case 'ignite':{const wobble=Math.sin(t*Math.PI*12)*Math.sin(Math.PI*t);frame.x+=wobble*.55;frame.angle+=wobble*2;frame.engine=smooth(t*2);frame.exhaust=smooth(t);frame.arms=1-smooth((t-.45)/.5);break;}
-    case 'lift':frame.y-=48*smooth(t);frame.engine=1;frame.arms=0;frame.exhaust=1-smooth(t);break;
+    case 'lift':frame.y-=LIFT_HEIGHT*smooth(t);frame.engine=1;frame.arms=0;frame.exhaust=1-smooth(t);break;
     case 'outbound':Object.assign(frame,routePoint('outbound',t,moon,cycle));frame.angle=routeAngle('outbound',t,moon,cycle);frame.engine=1;frame.arms=0;break;
     case 'orbit':{const angle=Math.PI+Math.PI*2*plan.orbits*t,radius=ORBIT_RADIUS+perlin1D(plan.orbits*t*1.3+cycle*.37,cycle+83)*2*Math.sin(Math.PI*t)**2;frame.x=moon.x+Math.cos(angle)*radius;frame.y=moon.y+Math.sin(angle)*radius;frame.angle=angle*180/Math.PI+90;frame.engine=1-smooth((time-stage.start)/420);frame.arms=0;frame.orbitTurns=plan.orbits*t;break;}
     case 'return':Object.assign(frame,routePoint('return',t,moon,cycle));frame.angle=angleMix(routeAngle('return',t,moon,cycle),-90,smooth((t-.55)/.4));frame.engine=smooth(t*10);frame.gimbal=Math.sin(t*11)*7*Math.sin(Math.PI*t);frame.arms=smooth((t-.65)/.35)*.2;break;
-    case 'descend':{const settle=1-smooth(t);frame.x+=Math.sin(t*Math.PI*3)*4*settle;frame.y-=48*settle;frame.angle+=Math.sin(t*Math.PI*3)*4*settle;frame.engine=.7+.3*settle;frame.gimbal=-Math.sin(t*Math.PI*4)*10*settle;frame.arms=smooth((t-.25)/.75);break;}
+    case 'descend':{const settle=1-smooth(t);frame.x+=Math.sin(t*Math.PI*3)*4*settle;frame.y-=LIFT_HEIGHT*settle;frame.angle+=Math.sin(t*Math.PI*3)*4*settle;frame.engine=.7+.3*settle;frame.gimbal=-Math.sin(t*Math.PI*4)*10*settle;frame.arms=smooth((t-.25)/.75);break;}
     case 'smoke':frame.smoke=t;break;
     case 'tanker-arrive':frame.vehicle=truck('tanker',mix(-78,2,smooth(t)),0,smooth(t*5));frame.fuel=.12;break;
     case 'connect':frame.vehicle=truck('tanker',2);frame.hose=smooth(t);frame.fuel=.12;frame.steam=smooth((t-.6)/.4)*.35;break;

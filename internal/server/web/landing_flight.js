@@ -42,8 +42,9 @@ async function startLandingFlight(){
         if(t>=4900){craft.carrier.style.opacity='0';if(delivery)craft.ground='';else{craft.finished=true;craft.node.style.display='none';if(padOwner===craft)padOwner=null;}}
         continue;
       }
-      const next=craft.time+dt,orbitAt=stageStart(craft.plan,'orbit'),returnAt=stageStart(craft.plan,'return'),descendAt=stageStart(craft.plan,'descend'),smokeAt=stageStart(craft.plan,'smoke'),entry=route.sampleFlight(orbitAt,craft.trip,craft.target.point()),approach=route.sampleFlight(descendAt,craft.trip,craft.target.point());
-      if(craft.time<orbitAt&&next>=orbitAt&&Math.hypot(craft.position.x-entry.x,craft.position.y-entry.y)>2)craft.time=orbitAt-.01;
+      const next=craft.time+dt,outboundAt=stageStart(craft.plan,'outbound'),orbitAt=stageStart(craft.plan,'orbit'),returnAt=stageStart(craft.plan,'return'),descendAt=stageStart(craft.plan,'descend'),smokeAt=stageStart(craft.plan,'smoke'),entry=route.sampleFlight(orbitAt,craft.trip,craft.target.point()),approach=route.sampleFlight(descendAt,craft.trip,craft.target.point());
+      if(craft.time<outboundAt&&next>=outboundAt&&craft.position.y>route.LANDING_HOME.y-route.LIFT_HEIGHT+1)craft.time=outboundAt-.01;
+      else if(craft.time<orbitAt&&next>=orbitAt&&Math.hypot(craft.position.x-entry.x,craft.position.y-entry.y)>2)craft.time=orbitAt-.01;
       else if(craft.time<descendAt&&next>=descendAt&&Math.hypot(craft.position.x-approach.x,craft.position.y-approach.y)>2)craft.time=descendAt-.01;
       else if(craft.time<returnAt&&next>=returnAt){
         if(primaryBusy||padOwner&&padOwner!==craft){craft.time=returnAt-.01;craft.holding=true;}
@@ -54,9 +55,9 @@ async function startLandingFlight(){
       if(frame.phase==='outbound'&&padOwner===craft)padOwner=null;
       const wanted=craft.holding?route.holdingPoint(craft.serial,fleetClock):frame;
       const others=fleet.filter(other=>other!==craft&&!other.finished).map(other=>other.position);if(smoothed)others.push(smoothed);
-      craft.position=route.separatedStep(craft.position,wanted,others,dt*.09);
+      craft.position=route.separatedStep(craft.position,wanted,others,dt*.09,route.ROCKET_CLEARANCE,frame.phase==='outbound'&&craft.target.point().y<=route.LANDING_HOME.y-route.LIFT_HEIGHT);
       const angle=craft.holding?-90+Math.sin(fleetClock*.006+craft.trip)*4:frame.angle;
-      const noise=frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-craft.position.y)/35)):1;
+      const noise=frame.phase==='lift'?0:frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-craft.position.y)/35)):1;
       craft.angle=frame.phase==='orbit'&&!craft.holding?route.orbitAttitude(craft.angle,craft.position,craft.target.point(),dt):route.turnAttitude(craft.angle,angle,dt,fleetClock,craft.serial,noise);
       craft.node.setAttribute('transform',`translate(${craft.position.x} ${craft.position.y}) rotate(${craft.angle})`);
       const engine=craft.node.querySelector('.rocket-engine'),thrust=craft.holding?.8:frame.engine;
@@ -71,10 +72,10 @@ async function startLandingFlight(){
     const factor=!instant&&['outbound','orbit','return'].includes(frame.phase)?.22:1;
     if(!smoothed)smoothed={x:frame.x,y:frame.y};const dx=frame.x-smoothed.x,dy=frame.y-smoothed.y,distance=Math.hypot(dx,dy),step=instant?1:Math.min(factor,Math.max(.01,dt)*.09/(distance||1));
     const target={x:smoothed.x+dx*step,y:smoothed.y+dy*step};
-    if(!instant&&['outbound','orbit','return','lift','descend'].includes(frame.phase))smoothed=route.separatedStep(smoothed,target,fleet.filter(craft=>!craft.finished).map(craft=>craft.position),Math.max(.01,dt)*.09);
+    if(!instant&&['outbound','orbit','return','lift','descend'].includes(frame.phase))smoothed=route.separatedStep(smoothed,target,fleet.filter(craft=>!craft.finished).map(craft=>craft.position),Math.max(.01,dt)*.09,route.ROCKET_CLEARANCE,frame.phase==='outbound'&&destination.point().y<=route.LANDING_HOME.y-route.LIFT_HEIGHT);
     else smoothed=target;
     const airborne=['outbound','orbit','return','lift','descend'].includes(frame.phase);
-    const noise=frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-smoothed.y)/35)):airborne?1:0;
+    const noise=frame.phase==='lift'?0:frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-smoothed.y)/35)):airborne?1:0;
     attitude=instant||attitude===null?frame.angle:frame.phase==='orbit'&&svg.dataset.holding!=='true'?route.orbitAttitude(attitude,smoothed,destination.point(),dt):route.turnAttitude(attitude,frame.angle,dt,fleetClock,0,noise);
     ship.setAttribute('transform',`translate(${smoothed.x} ${smoothed.y}) rotate(${attitude})`);
     ship.style.opacity=String(frame.opacity);
@@ -112,11 +113,12 @@ async function startLandingFlight(){
   }
   function sample(){return route.sampleFlight(media.matches?route.flightPlan(cycle).stages.find(stage=>stage.name==='rest').start:elapsed,cycle,destination.point());}
   function advance(dt,now){
-    const plan=route.flightPlan(cycle),orbitAt=stageStart(plan,'orbit'),returnAt=stageStart(plan,'return'),descendAt=stageStart(plan,'descend'),next=elapsed+dt,holding=elapsed<returnAt&&next>=returnAt&&!!padOwner,entry=route.sampleFlight(orbitAt,cycle,destination.point()),approach=route.sampleFlight(descendAt,cycle,destination.point());
+    const plan=route.flightPlan(cycle),outboundAt=stageStart(plan,'outbound'),orbitAt=stageStart(plan,'orbit'),returnAt=stageStart(plan,'return'),descendAt=stageStart(plan,'descend'),next=elapsed+dt,holding=elapsed<returnAt&&next>=returnAt&&!!padOwner,entry=route.sampleFlight(orbitAt,cycle,destination.point()),approach=route.sampleFlight(descendAt,cycle,destination.point());
+    const clearingTower=elapsed<outboundAt&&next>=outboundAt&&smoothed&&smoothed.y>route.LANDING_HOME.y-route.LIFT_HEIGHT+1;
     const approachingOrbit=elapsed<orbitAt&&next>=orbitAt&&smoothed&&Math.hypot(smoothed.x-entry.x,smoothed.y-entry.y)>2;
     const approachingHome=elapsed<descendAt&&next>=descendAt&&smoothed&&Math.hypot(smoothed.x-approach.x,smoothed.y-approach.y)>2;
     const touchdown=stageStart(plan,'smoke'),stillApproaching=elapsed<touchdown&&next>=touchdown&&smoothed&&Math.hypot(smoothed.x-route.LANDING_HOME.x,smoothed.y-route.LANDING_HOME.y)>2;
-    if(approachingOrbit)elapsed=orbitAt-.01;else if(holding)elapsed=returnAt-.01;else if(approachingHome)elapsed=descendAt-.01;else if(stillApproaching)elapsed=touchdown-.01;else elapsed=next;
+    if(clearingTower)elapsed=outboundAt-.01;else if(approachingOrbit)elapsed=orbitAt-.01;else if(holding)elapsed=returnAt-.01;else if(approachingHome)elapsed=descendAt-.01;else if(stillApproaching)elapsed=touchdown-.01;else elapsed=next;
     while(elapsed>=route.flightPlan(cycle).duration){elapsed-=route.flightPlan(cycle).duration;cycle++;destination=chooseDestination(fleet.filter(craft=>!craft.finished).map(craft=>craft.target.name));smoothed=null;}
     const frame=sample();if(holding){Object.assign(frame,route.holdingPoint(0,fleetClock));frame.angle=-90+Math.sin(now*.006)*4;frame.gimbal=Math.sin(now*.008)*12;frame.engine=.8;}
     svg.dataset.holding=String(holding);advanceFleet(dt,frame.phase);paint(frame,false,dt);svg.dataset.destination=destination.name;

@@ -184,6 +184,9 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	if operation == "getBoardExecution" {
 		return s.boardExecution(ctx, token, raw)
 	}
+	if operation == "listHostHarnesses" || operation == "stopHostHarness" {
+		return s.hostHarnessCall(ctx, token, operation, raw)
+	}
 	if localOperation(operation) {
 		return s.localCall(ctx, token, operation, raw)
 	}

@@ -25,6 +25,8 @@ getSession account show
 logout account logout
 changePassword account password
 listSessions agent ls
+listHostHarnesses agent processes
+stopHostHarness agent stop-process
 getLocalHarnesses agent harnesses
 openConsoleSession agent start
 startTicketSession agent start-ticket

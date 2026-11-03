@@ -27,6 +27,8 @@ The captured [product roadmap](planning/roadmap.json) separates MVP and later st
 
 Run `tk skill > SKILL.md` to export the bundled agent skill for a harness. No running server or sign-in is required for this export.
 
+The Harness sessions dialog lists Teleport sessions and recognized same-user host harness processes. Administrators in single-user mode can inspect a non-Teleport process and explicitly request a stop or force stop; a requested signal does not by itself confirm exit.
+
 Bare `tk` or `tk help` lists the top-level commands. Use `tk agent` (or `tk help agent`) to list that command's actions, and `tk agent ls -h` for typed flags. `tk commands` prints the full catalogue; add `-json` for machine-readable output. Examples: `tk project ls`, `tk ticket show 35`, `tk agent ls -project 2`, `tk idea ls`, and `tk workflow ls`. Agent listing reads accessible harness sessions; starting one remains explicit. Existing API-style commands such as `tk listTickets -data '{"projectId":2,"limit":50}'` keep working.
 
 New projects record a project root, defaulting to `~/code/teleport`; it can be changed during creation. The root does not itself grant execution access. An administrator can grant the local repository in project settings, and worktree storage is chosen automatically. Existing bindings retain their storage location. In single-user local mode, independent harness consoles run in the selected project root using the harness’s native permissions; ticket work retains its own worktree.

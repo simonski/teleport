@@ -11,6 +11,8 @@ func init() {
 		{"getSessionTurn", "ACT-1007", "Read exact bounded native turn status and final output", app.NativeRequestsInput{}, app.NativeTurnView{}},
 		{"getSessionRequests", "ACT-1015", "Read exact native pending requests and retained replies", app.NativeRequestsInput{}, app.NativeRequestPage{}},
 		{"respondToAgent", "ACT-1015", "Answer an exact native request without human ticket approval", app.NativeResponseInput{}, localruntime.NativeReceipt{}},
+		{"listHostHarnesses", "ACT-1019", "Inspect same-user host harness processes", struct{}{}, app.HostHarnessList{}},
+		{"stopHostHarness", "ACT-1019", "Request stop for a verified external harness process", app.HostHarnessStopInput{}, app.HostHarnessStopResult{}},
 		{"getLocalHarnesses", "ACT-1009", "Discover verified local harness choices without starting execution", struct{}{}, app.LocalHarnesses{}},
 		{"listSessions", "ACT-1002", "Read authorized session identities without launching", app.ListInput{}, app.LocalSessionPage{}},
 		{"openConsoleSession", "ACT-1009", "Explicitly start a private free harness in its project root", app.OpenLocalSessionInput{}, app.LocalSessionInfo{}},

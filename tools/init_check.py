@@ -22,9 +22,10 @@ def main(database_url=None):
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--board-only", action="store_true", help="Run only Board browser checks in the disposable fixture")
     parser.add_argument("--root-only", action="store_true", help="Run only project-root browser checks in the disposable fixture")
+    parser.add_argument("--harness-monitor-only", action="store_true", help="Run isolated external harness monitor browser checks")
     args = parser.parse_args()
-    if (args.board_only or args.root_only) and not args.browser:
-        parser.error("--board-only and --root-only require --browser")
+    if (args.board_only or args.root_only or args.harness_monitor_only) and not args.browser:
+        parser.error("--board-only, --root-only and --harness-monitor-only require --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-init-proof-") as temporary:
         folder = Path(temporary)
         with socket.socket() as sock:
@@ -79,6 +80,56 @@ def main(database_url=None):
                 process = None
 
         try:
+            if args.harness_monitor_only:
+                native = folder / "codex"
+                subprocess.run(["go", "build", "-o", str(native), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=30)
+                fixture_env = dict(environment, TELEPORT_TOOL_HISTORY=str(folder / "fixture-history.csv"))
+                external = subprocess.Popen([str(native), "app-server"], env=fixture_env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                forced = subprocess.Popen([str(native), "app-server"], env=fixture_env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                try:
+                    assert "Initialization complete" in tk("init")
+                    start()
+                    browser("open", endpoint)
+                    browser("fill", 'input[name="username"]', "admin")
+                    browser("fill", 'input[name="password"]', "password")
+                    browser("click", '#login button[type="submit"],#login button')
+                    browser("wait", "#welcome-status")
+                    browser("press", "Escape")
+                    browser("click", "#harness-console")
+                    browser("wait", f'[data-host-inspect="{external.pid}"]')
+                    browser("scrollintoview", f'[data-host-inspect="{external.pid}"]')
+                    browser("screenshot", "/tmp/teleport-harness-monitor.png")
+                    browser("click", f'[data-host-inspect="{external.pid}"]')
+                    browser("wait", "--fn", "document.querySelector('#editor').innerText.includes('Non-Teleport process')")
+                    browser("click", '#editor button[type="submit"]')
+                    browser("click", "#harness-console")
+                    browser("wait", f'[data-host-stop="{external.pid}"]:not([data-force])')
+                    browser("scrollintoview", f'[data-host-stop="{external.pid}"]:not([data-force])')
+                    browser("click", f'[data-host-stop="{external.pid}"]:not([data-force])')
+                    browser("wait", "--fn", "document.querySelector('#editor').innerText.includes('not associated with a Teleport session')")
+                    browser("press", "Escape")
+                    assert external.poll() is None, "Dismissal stopped the external process"
+                    browser("click", "#harness-console")
+                    browser("wait", f'[data-host-stop="{external.pid}"]:not([data-force])')
+                    browser("scrollintoview", f'[data-host-stop="{external.pid}"]:not([data-force])')
+                    browser("click", f'[data-host-stop="{external.pid}"]:not([data-force])')
+                    browser("click", '#editor button[type="submit"]')
+                    external.wait(timeout=5)
+                    assert external.returncode != 0, "The fixture process was not stopped"
+                    browser("wait", f'[data-host-stop="{forced.pid}"][data-force]')
+                    browser("scrollintoview", f'[data-host-stop="{forced.pid}"][data-force]')
+                    browser("click", f'[data-host-stop="{forced.pid}"][data-force]')
+                    browser("wait", "--fn", "document.querySelector('#editor').innerText.includes('not associated with a Teleport session')")
+                    browser("click", '#editor button[type="submit"]')
+                    forced.wait(timeout=5)
+                    assert forced.returncode != 0, "The force-stop fixture process was not stopped"
+                    print("PASS: browser inspects, stops and force-stops owned non-Teleport fixtures; dismissal sends no signal", flush=True)
+                    return
+                finally:
+                    for child in (external, forced):
+                        if child.poll() is None:
+                            child.terminate()
+                            child.wait(timeout=5)
             if args.root_only:
                 assert "Initialization complete" in tk("init")
                 start()

@@ -18,19 +18,20 @@ import (
 )
 
 type LocalSessionInfo struct {
-	Activity  string     `json:"activity,omitempty"`
-	ID        string     `json:"id"`
-	Creator   string     `json:"creator"`
-	ProjectID int64      `json:"projectId"`
-	TicketID  int64      `json:"ticketId"`
-	Harness   string     `json:"harness"`
-	State     string     `json:"state"`
-	Attention string     `json:"attention,omitempty"`
-	ErrorCode string     `json:"errorCode,omitempty"`
-	Directory string     `json:"directory"`
-	CreatedAt time.Time  `json:"createdAt"`
-	ExitedAt  *time.Time `json:"exitedAt,omitempty"`
-	ExitCode  *int       `json:"exitCode,omitempty"`
+	StopRequested bool       `json:"stopRequested,omitempty"`
+	Activity      string     `json:"activity,omitempty"`
+	ID            string     `json:"id"`
+	Creator       string     `json:"creator"`
+	ProjectID     int64      `json:"projectId"`
+	TicketID      int64      `json:"ticketId"`
+	Harness       string     `json:"harness"`
+	State         string     `json:"state"`
+	Attention     string     `json:"attention,omitempty"`
+	ErrorCode     string     `json:"errorCode,omitempty"`
+	Directory     string     `json:"directory"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	ExitedAt      *time.Time `json:"exitedAt,omitempty"`
+	ExitCode      *int       `json:"exitCode,omitempty"`
 }
 type LocalSessionPage struct {
 	Items      []LocalSessionInfo `json:"items"`
@@ -107,7 +108,7 @@ func localOperation(op string) bool {
 	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
 }
 func localInfo(row model.LocalSession) LocalSessionInfo {
-	return LocalSessionInfo{ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
+	return LocalSessionInfo{StopRequested: row.StopRequested, ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
 }
 func localAllowed(st *model.State, a model.Account, row model.LocalSession) error {
 	if row.Creator != a.ID {
@@ -335,6 +336,10 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	if !stop.Confirm {
 		return nil, failure(422, "confirmation_required", "Explicitly confirm stopping this harness")
 	}
+	if !activeLocal(row) {
+		return localInfo(row), nil
+	}
+	ownershipUnknown := false
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
 		a, err := actor(st, token)
 		if err != nil {
@@ -346,6 +351,20 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		}
 		if !activeLocal(row) {
 			return false, nil
+		}
+		if row.State == "unknown" {
+			ownershipUnknown = true
+			if row.StopRequested {
+				return false, nil
+			}
+			row.StopRequested = true
+			st.LocalSessions[id] = row
+			if row.TicketID != 0 {
+				t := st.Tickets[row.TicketID]
+				t.StopRequested, t.ResumeHold = true, true
+				saveTicket(st, &t, a, "localStopRequested")
+			}
+			return true, nil
 		}
 		row.State = "stopping"
 		row.StopRequested = true
@@ -359,6 +378,9 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	})
 	if err != nil {
 		return nil, err
+	}
+	if ownershipUnknown {
+		return nil, failure(409, "session_ownership_unknown", "Stop is recorded, but ownership is unknown and no signal was sent. Reconcile the session before retrying.")
 	}
 	out, err := s.localClient.Call(ctx, daemonRequest(row, "stop"))
 	if err != nil {

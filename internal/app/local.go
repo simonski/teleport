@@ -18,6 +18,7 @@ import (
 )
 
 type LocalSessionInfo struct {
+	Reference     string     `json:"reference,omitempty"`
 	StopRequested bool       `json:"stopRequested,omitempty"`
 	Activity      string     `json:"activity,omitempty"`
 	ID            string     `json:"id"`
@@ -78,6 +79,11 @@ type SessionStop struct {
 	ID      string `json:"id"`
 	Confirm bool   `json:"confirm"`
 }
+type RemoveSessionReferenceInput struct {
+	ID                string `json:"id"`
+	ExpectedReference string `json:"expectedReference"`
+	Confirm           bool   `json:"confirm"`
+}
 type SessionIntervention struct {
 	SessionID string    `json:"sessionId"`
 	RequestID string    `json:"requestId"`
@@ -105,10 +111,17 @@ func (s *Service) ConfigureLocalRuntime(root, executable string, fixture bool, e
 	}
 }
 func localOperation(op string) bool {
-	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
+	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "removeSessionReference", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
+}
+func sessionReference(row model.LocalSession) string {
+	return digest(row.ID + "\x00" + row.LaunchID + "\x00" + row.Generation)
 }
 func localInfo(row model.LocalSession) LocalSessionInfo {
-	return LocalSessionInfo{StopRequested: row.StopRequested, ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
+	info := LocalSessionInfo{StopRequested: row.StopRequested, ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
+	if row.State == "unknown" && row.TicketID == 0 && row.Managed == nil {
+		info.Reference = sessionReference(row)
+	}
+	return info
 }
 func localAllowed(st *model.State, a model.Account, row model.LocalSession) error {
 	if row.Creator != a.ID {
@@ -178,7 +191,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		}
 		rows := []model.LocalSession{}
 		for _, row := range st.LocalSessions {
-			if row.Number > after && (in.ProjectID == 0 || row.ProjectID == in.ProjectID) && localAllowed(st, a, row) == nil {
+			if (row.ReferenceRemovedAt == nil || row.State != "unknown") && row.Number > after && (in.ProjectID == 0 || row.ProjectID == in.ProjectID) && localAllowed(st, a, row) == nil {
 				rows = append(rows, row)
 			}
 		}
@@ -216,7 +229,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		filtered := []LocalSessionInfo{}
 		for _, info := range out.Items {
 			row, exists := current.LocalSessions[info.ID]
-			if exists && row.LaunchID == st.LocalSessions[info.ID].LaunchID && row.Generation == st.LocalSessions[info.ID].Generation && localAllowed(current, currentActor, row) == nil {
+			if exists && (row.ReferenceRemovedAt == nil || row.State != "unknown") && row.LaunchID == st.LocalSessions[info.ID].LaunchID && row.Generation == st.LocalSessions[info.ID].Generation && localAllowed(current, currentActor, row) == nil {
 				fresh := localInfo(row)
 				if row.State == "running" && !row.StopRequested {
 					fresh.Activity = info.Activity
@@ -226,6 +239,51 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		}
 		out.Items = filtered
 		return out, nil
+	}
+	if operation == "removeSessionReference" {
+		var in RemoveSessionReferenceInput
+		if err = parse(raw, &in); err != nil {
+			return nil, err
+		}
+		if a.ServiceSessionID != "" || a.ServiceRunID != "" {
+			return nil, failure(403, "service_scope", "Only the initiating human can remove a console reference")
+		}
+		if !in.Confirm {
+			return nil, failure(422, "confirmation_required", "Confirm removal of this session reference")
+		}
+		err = s.db.Update(ctx, func(st *model.State) (bool, error) {
+			current, err := actor(st, token)
+			if err != nil {
+				return false, err
+			}
+			if current.ServiceSessionID != "" || current.ServiceRunID != "" {
+				return false, failure(403, "service_scope", "Only the initiating human can remove a console reference")
+			}
+			row, ok := st.LocalSessions[in.ID]
+			if !ok {
+				return false, failure(404, "not_found", "Session not found")
+			}
+			if err := localAllowed(st, current, row); err != nil {
+				return false, err
+			}
+			if in.ExpectedReference == "" || in.ExpectedReference != sessionReference(row) {
+				return false, failure(409, "session_changed", "Session identity changed; refresh before retrying")
+			}
+			if row.ReferenceRemovedAt != nil {
+				return false, nil
+			}
+			if row.State != "unknown" || row.TicketID != 0 || row.Managed != nil {
+				return false, failure(409, "session_not_removable", "Only an unresolved free console reference can be removed")
+			}
+			now := time.Now().UTC()
+			row.ReferenceRemovedAt, row.ReferenceRemovedBy = &now, current.ID
+			st.LocalSessions[in.ID] = row
+			return true, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"removed": true}, nil
 	}
 	if s.localClient == nil || !localruntime.Supported() {
 		return nil, failure(409, "local_runtime_unavailable", "Local terminals require configured macOS/Linux runtime support")

@@ -59,3 +59,13 @@ test('non-Teleport stop confirmation closes before an error is shown',async()=>{
   vm.runInContext(source,context);vm.runInContext("confirmHostHarnessStop({pid:12,harness:'codex',identity:'identity'})",context);
   const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);reject(new Error('Process changed; refresh'));await pending;assert.deepEqual(events,['close','Process changed; refresh']);
 });
+
+test('unknown free consoles offer removal, with confirmation closing before the result',async()=>{
+  let html='',resolve;const form={},events=[];
+  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,document:{addEventListener(){}},setInterval(){},openDialog:(title,body)=>{html=body;return {querySelectorAll:()=>[],close(){events.push('close')}}},captureDialogCompletion:()=>({current:()=>true,follow:()=>true}),byId:id=>id==='cancel'?{}:form,on(){},api:(op,input)=>{events.push([op,input.id,input.expectedReference,input.confirm]);return new Promise(done=>resolve=done)},notice:value=>events.push(value)});
+  vm.runInContext(source,context);vm.runInContext("refreshSessionRoster=async()=>{};localSessions=[{id:'H3',harness:'codex',state:'unknown',reference:'identity',stopRequested:true}]",context);
+  await vm.runInContext('sessionSwitcher()',context);assert.match(html,/data-remove-reference="H3"/);
+  vm.runInContext("confirmRemoveSessionReference(localSessions[0])",context);assert.match(html,/No process will be stopped/);assert.match(html,/quarantined/);
+  const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close',['removeSessionReference','H3','identity',true]]);resolve({removed:true});await pending;
+  assert.equal(vm.runInContext('localSessions.length',context),0);assert.equal(events[2],'Session reference removed; no process was stopped.');
+});

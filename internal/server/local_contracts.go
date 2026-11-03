@@ -23,6 +23,9 @@ func init() {
 			Resized bool `json:"resized"`
 		}{}},
 		{"stopSession", "ACT-1008", "Record an explicit owned stop without claiming immediate exit", app.SessionStop{}, app.LocalSessionInfo{}},
+		{"removeSessionReference", "ACT-1020", "Remove an unresolved free console from the visible roster", app.RemoveSessionReferenceInput{}, struct {
+			Removed bool `json:"removed"`
+		}{}},
 		{"shutdownLocalRuntime", "ACT-1008", "Stop an idle owned local runtime without active or unknown sessions", struct {
 			Confirm bool `json:"confirm"`
 		}{}, struct {

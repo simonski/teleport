@@ -34,6 +34,7 @@ attachSession agent attach
 sendSessionInput agent input
 resizeSession agent resize
 stopSession agent stop
+removeSessionReference agent remove-reference
 shutdownLocalRuntime agent shutdown
 listSessionInterventions agent interventions
 getSessionTurn agent turn

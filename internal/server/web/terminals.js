@@ -83,6 +83,7 @@ function confirmHostHarnessStop(row,force=false){
 
 function terminalBytes(data){const bytes=new Uint8Array(data.length);for(let i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i);return bytes;}
 function base64Bytes(bytes){let text='';for(const byte of bytes)text+=String.fromCharCode(byte);return btoa(text);}
+function closeShellAfterExit(initial,current){return initial.harness==='shell'&&initial.state!=='exited'&&current.state==='exited';}
 async function openTerminal(id){
   disconnectTerminal();const epoch=terminalEpoch,actor=session?.account.id,foregroundEpoch=detailEpoch;
   const first=await api('attachSession',{id,cursor:0});
@@ -95,8 +96,8 @@ async function openTerminal(id){
   const viewer={id,terminal,fit,cursor:0,timer:null,resize:null,stopped:false,queue:[],sending:false,epoch,actor};terminalView=viewer;
   const current=()=>terminalView===viewer&&session?.account.id===actor&&epoch===terminalEpoch&&dialog.open;
   const error=message=>{if(current())byId('terminal-error').textContent=message;};
-  function write(out){if(!current())return;if(out.gap&&(!viewer.gapAnnounced||viewer.cursor!==out.cursor)){terminal.reset();terminal.writeln('[Retained output is incomplete]');viewer.gapAnnounced=true;}terminal.options.disableStdin=out.session.state!=='running';viewer.cursor=out.next;if(out.data)terminal.write(terminalBytes(atob(out.data)));byId('terminal-state').textContent=out.session.attention||out.session.state;}
-  async function read(){if(!current())return;try{const out=await api('attachSession',{id,cursor:viewer.cursor});if(!current())return;write(out);viewer.timer=setTimeout(read,out.data&&out.data.length>60000?10:180);}catch(e){if(current()){error(e.message);viewer.timer=setTimeout(read,1500);}}}
+  function write(out){if(!current())return;if(out.gap&&(!viewer.gapAnnounced||viewer.cursor!==out.cursor)){terminal.reset();terminal.writeln('[Retained output is incomplete]');viewer.gapAnnounced=true;}terminal.options.disableStdin=out.session.state!=='running';viewer.cursor=out.next;if(out.data)terminal.write(terminalBytes(atob(out.data)));byId('terminal-state').textContent=out.session.attention||out.session.state;if(closeShellAfterExit(first.session,out.session)){dialog.close();refreshSessionRoster().catch(()=>{});}}
+  async function read(){if(!current())return;try{const out=await api('attachSession',{id,cursor:viewer.cursor});if(!current())return;write(out);if(current())viewer.timer=setTimeout(read,out.data&&out.data.length>60000?10:180);}catch(e){if(current()){error(e.message);viewer.timer=setTimeout(read,1500);}}}
   async function send(){if(viewer.sending||viewer.stopped||!current()||!viewer.queue.length)return;viewer.sending=true;
     try{while(viewer.queue.length&&current()){const item=viewer.queue[0],result=await api('sendSessionInput',{id,requestId:item.id,data:base64Bytes(item.bytes)});if(result.state!=='delivered'){viewer.stopped=true;error('Input delivery '+result.state+'; further input is paused. Operation '+item.id);break;}viewer.queue.shift();}}
     catch(e){viewer.stopped=true;error(e.message+' · Input paused; operation '+(viewer.queue[0]?.id||''));}

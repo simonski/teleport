@@ -21,6 +21,12 @@ test('shell control starts a distinct shell and opens its terminal',async()=>{
   await vm.runInContext('startShell()',context);assert.equal(calls[0][0],'openShellSession');assert.equal(calls[0][1].projectId,4);assert.equal(calls[0][1].requestId,'shell-request');assert.deepEqual(opened,['H4']);
 });
 
+test('only a previously live shell closes its dialog on confirmed exit',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){}});vm.runInContext(source,context);
+  assert.equal(vm.runInContext("closeShellAfterExit({harness:'shell',state:'running'},{state:'exited'})",context),true);
+  for(const test of ["closeShellAfterExit({harness:'shell',state:'running'},{state:'unknown'})","closeShellAfterExit({harness:'shell',state:'running'},{state:'stopping'})","closeShellAfterExit({harness:'codex',state:'running'},{state:'exited'})","closeShellAfterExit({harness:'shell',state:'exited'},{state:'exited'})"])assert.equal(vm.runInContext(test,context),false);
+});
+
 test('all retained live and idle robots expose exact session and ticket identity',()=>{
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String});vm.runInContext(source,context);
   vm.runInContext(`localSessions=Array.from({length:5},(_,i)=>({id:'H'+i,state:i===4?'unknown':'running',ticketId:i?7:0,activity:i?'active':'idle'}))`,context);

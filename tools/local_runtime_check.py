@@ -151,13 +151,17 @@ def main(database_url=None):
                     output = tk("attachSession", {"id": third["id"]})["data"]
                     return "TK_BROWSER_READY" in base64.b64decode(output).decode(errors="replace")
                 wait_for(browser_output)
-                tk("stopSession", {"id": third["id"], "confirm": True})
+                for key in "exit":
+                    browser("press", key)
+                browser("press", "Enter")
+                browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == third["id"] and item["state"] == "exited"), None))
             tk("stopSession", {"id": second["id"], "confirm": True})
             tk("stopSession", {"id": session_id, "confirm": True})
             wait_for(lambda: all(item["state"] in ("exited", "failed") for item in tk("listSessions")["items"]))
             tk("shutdownLocalRuntime", {"confirm": True})
             clean = True
-            print("PASS: independent project-root zsh PTYs, input/output, resize and confirmed stop with zero agent capacity" + ("; browser shell control and input" if args.browser else ""))
+            print("PASS: independent project-root zsh PTYs, input/output, resize and confirmed stop with zero agent capacity" + ("; browser shell control, input and dialog close after exit" if args.browser else ""))
             return
         if args.native_startup_only:
             def native_ready():

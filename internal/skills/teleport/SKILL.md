@@ -11,7 +11,7 @@ Use this skill when the task involves an existing teleport installation. Work wi
 
 ## Discover the installation
 
-`tk skill` prints this standalone skill from the binary, without a server or login. Save it as a harness skill's `SKILL.md` when requested. Bare `tk`, `tk help`, `tk commands -json` and `tk help NOUN` list all shipped public commands offline. Command-specific help (`tk agent ls -h`) lists typed field flags from the bundled request schemas. `tk tools` and `tk spec` describe the running server, which may differ from the local build.
+`tk skill` prints this standalone skill from the binary, without a server or login. Save it as a harness skill's `SKILL.md` when requested. Bare `tk` or `tk help` lists top-level commands; `tk NOUN` or `tk help NOUN` lists its actions. `tk commands` lists the full offline catalogue and `tk commands -json` provides it as JSON. Command-specific help (`tk agent ls -h`) lists typed field flags from the bundled request schemas. `tk tools` and `tk spec` describe the running server, which may differ from the local build.
 
 ```sh
 tk version

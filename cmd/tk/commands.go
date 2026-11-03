@@ -140,11 +140,12 @@ func commandCatalogue() []cliCommand {
 	}
 	commands := []cliCommand{
 		{Command: "api OPERATION", Summary: "Call a server operation with explicit JSON; native/private commands are rejected"},
-		{Command: "help [NOUN [ACTION]]", Summary: "List every shipped public command, or command-specific help (offline)"},
+		{Command: "help [NOUN [ACTION]]", Summary: "Show command groups or command-specific help (offline)"},
 		{Command: "commands [-json]", Summary: "Print the complete offline command catalogue"},
 		{Command: "init", Summary: "Initialize configured PostgreSQL; never starts services"},
 		{Command: "serve", Summary: "Run the web/API server and configured components"},
 		{Command: "login -password-stdin", Operation: "login", Summary: "Sign in without putting a password in process arguments"},
+		{Command: "logout", Summary: "Sign out of the current session"},
 		{Command: "import FILE | -i", Summary: "Capture UTF-8 text as an Idea; classification follows separately"},
 		{Command: "skill", Summary: "Print the bundled harness SKILL.md (offline)"},
 		{Command: "version", Summary: "Print the local build identity (offline)"},
@@ -164,6 +165,29 @@ func commandCatalogue() []cliCommand {
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Command < commands[j].Command })
 	return commands
+}
+
+func printCommandOverview(out io.Writer) {
+	groups := map[string]string{}
+	for _, command := range commandCatalogue() {
+		name := strings.Fields(command.Command)[0]
+		if command.Operation == "" || name == "login" {
+			groups[name] = command.Summary
+		} else if _, exists := groups[name]; !exists {
+			groups[name] = "Show available actions"
+		}
+	}
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	fmt.Fprintln(out, "teleport (tk) — commands")
+	for _, name := range names {
+		fmt.Fprintf(out, "  tk %-18s %s\n", name, groups[name])
+	}
+	fmt.Fprintln(out, "\nUse tk COMMAND to list its actions and tk COMMAND ACTION -h for action flags.")
+	fmt.Fprintln(out, "Use tk commands for the full catalogue, or tk commands -json for machine-readable discovery.")
 }
 
 func printCatalogue(out io.Writer, topic string, machine bool) error {
@@ -215,6 +239,10 @@ func expandCommand(args []string, out io.Writer) ([]string, bool, error) {
 		if len(topic) == 2 && !machine {
 			return expandCommand(append(topic, "-h"), out)
 		}
+		if len(topic) == 0 && !machine && (len(args) == 0 || args[0] != "commands") {
+			printCommandOverview(out)
+			return nil, true, nil
+		}
 		return nil, true, printCatalogue(out, strings.Join(topic, " "), machine)
 	}
 	for _, native := range []string{"init", "serve", "login", "logout", "skill", "version", "tools", "spec", "import"} {
@@ -224,7 +252,7 @@ func expandCommand(args []string, out io.Writer) ([]string, bool, error) {
 	}
 	if args[0] == "api" {
 		if len(args) < 2 || strings.HasPrefix(args[1], "-") {
-			return nil, true, printCatalogue(out, "", false)
+			return nil, true, printCatalogue(out, "api", false)
 		}
 		if args[1] == "" {
 			return nil, false, errors.New("provide an API operation name")

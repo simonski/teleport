@@ -56,6 +56,37 @@ func TestCommandHelpAndMachineCatalogueAreOffline(t *testing.T) {
 	}
 }
 
+func TestDefaultHelpListsCommandsAndNounHelpListsOnlyItsActions(t *testing.T) {
+	for _, arguments := range [][]string{nil, {"help"}, {"-h"}} {
+		var output bytes.Buffer
+		_, done, err := expandCommand(arguments, &output)
+		if err != nil || !done {
+			t.Fatalf("overview for %v: %v", arguments, err)
+		}
+		text := output.String()
+		for _, name := range []string{"tk agent ", "tk ticket ", "tk init ", "tk import ", "tk logout "} {
+			if !strings.Contains(text, name) {
+				t.Errorf("overview missing %s", name)
+			}
+		}
+		if strings.Contains(text, "tk agent ls ") || strings.Contains(text, "tk ticket show ") {
+			t.Fatal("overview expanded action lists")
+		}
+	}
+	for _, arguments := range [][]string{{"agent"}, {"help", "agent"}} {
+		var output bytes.Buffer
+		_, done, err := expandCommand(arguments, &output)
+		if err != nil || !done || !strings.Contains(output.String(), "tk agent ls ") || strings.Contains(output.String(), "tk ticket show ") {
+			t.Fatalf("wrong action list for %v: %v", arguments, err)
+		}
+	}
+	var full bytes.Buffer
+	_, _, err := expandCommand([]string{"commands"}, &full)
+	if err != nil || !strings.Contains(full.String(), "tk agent ls ") || !strings.Contains(full.String(), "tk ticket show ") {
+		t.Fatal("explicit catalogue is incomplete")
+	}
+}
+
 func TestNounActionsUseTypedFieldsAndPreserveExactLargeIDs(t *testing.T) {
 	for _, arguments := range [][]string{
 		{"ticket", "show", "9007199254740993", "-server", "http://fixture", "-config", "private.json"},

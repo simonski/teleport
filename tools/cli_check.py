@@ -75,6 +75,10 @@ def main():
             catalogue = json.loads(tk("commands", "-json").stdout)["commands"]
             assert {"agent ls", "ticket show", "project ls", "import FILE | -i"} <= {item["command"] for item in catalogue}
             assert len(catalogue) > 100 and not calls
+            overview = tk().stdout
+            assert "tk agent " in overview and "tk ticket " in overview and "tk agent ls " not in overview and "tk ticket show " not in overview
+            agent_help = tk("agent").stdout
+            assert "tk agent ls " in agent_help and "tk ticket show " not in agent_help and not calls
             assert "-project" in tk("agent", "ls", "-h").stdout and not calls
             assert json.loads(tk("agent", "ls", "-project", "2").stdout)["items"] == []
             assert json.loads(tk("agent", "ls", "-f", "-", input='{"projectId":2}').stdout)["items"] == []

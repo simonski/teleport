@@ -160,7 +160,7 @@ def main():
                     orbiting.append((state["position"], page.evaluate("landingFlight.snapshot().destination")))
                 orbiting.extend((craft["position"], craft["destination"]) for craft in state["fleet"] if craft.get("phase") == "orbit")
                 for position, destination in orbiting:
-                    centre = page.evaluate("name=>name==='moon'?landingFlight.snapshot().moon:{x:175,y:24}", destination)
+                    centre = page.evaluate("name=>{if(name==='moon')return landingFlight.snapshot().moon;const body=document.querySelector('[data-planet=\"'+name+'\"]');return {x:Number(body.dataset.x),y:Number(body.dataset.y)}}", destination)
                     radius = ((position["x"]-centre["x"])**2+(position["y"]-centre["y"])**2)**.5
                     other_positions = [p for p in [state["position"]] + [craft["position"] for craft in state["fleet"]] if p is not position]
                     if all((position["x"]-p["x"])**2+(position["y"]-p["y"])**2 > 55**2 for p in other_positions):

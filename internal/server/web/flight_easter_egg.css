@@ -1,0 +1,6 @@
+.modal-shade.flight-easter-egg-shade{padding:0;background:var(--paper);backdrop-filter:none;-webkit-backdrop-filter:none;opacity:0;transition:opacity 260ms ease-out}
+.modal-shade.flight-easter-egg-visible{opacity:1;transition-duration:480ms}
+tk-dialog.flight-easter-egg{display:grid;place-items:center;width:100%;height:100dvh;max-height:none;margin:0;padding:32px;border:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;outline:none}
+.flight-easter-egg .login-brand{width:min(720px,100%);margin:0;transform:translateY(6px);transition:transform 480ms cubic-bezier(.2,0,0,1)}
+.flight-easter-egg-visible .login-brand{transform:translateY(0)}
+@media(prefers-reduced-motion:reduce){.modal-shade.flight-easter-egg-shade,.flight-easter-egg .login-brand{transition:none;transform:none}}

@@ -10,6 +10,8 @@ function applyAppearance(p) {
   if(typeof applyNavigation==='function')applyNavigation();
 }
 function clearPresentation() {
+  if(typeof resetFlightEasterEgg==='function')resetFlightEasterEgg();
+  if(typeof resetFlightCode==='function')resetFlightCode();
   if(typeof resetBacklog==='function')resetBacklog();
   if(typeof resetHome==='function')resetHome();
   if(typeof resetTicketList==='function')resetTicketList();

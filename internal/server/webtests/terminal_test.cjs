@@ -31,12 +31,20 @@ test('unknown sessions offer a recorded stop intent and ended sessions are group
   assert.match(html,/Ended sessions \(2\)/);assert.match(html,/Ownership unconfirmed/);assert.match(html,/data-stop-managed="H3" data-unknown="true"/);
 });
 
-test('stop failures are shown inside the confirmation instead of behind it',async()=>{
-  const form={},status={textContent:''};let notices=0;
-  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>({classList:{remove(){}}}),byId:id=>id==='editor-form'?form:status,captureDialogCompletion:()=>({current:()=>true}),api:async()=>{throw new Error('Ownership is unknown')},showError:()=>notices++});
+test('stop failures close the confirmation before displaying the toast',async()=>{
+  const form={},status={textContent:''},events=[];
+  const dialog={classList:{remove(){}},close(){events.push('close')}};
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>dialog,byId:id=>id==='editor-form'?form:status,captureDialogCompletion:()=>({current:()=>true}),api:async()=>{throw new Error('Ownership is unknown')},showError:error=>events.push(error.message)});
   vm.runInContext(source,context);vm.runInContext("confirmTerminalAction('H3','Stop harness','Confirm')",context);
   await form.onsubmit({preventDefault(){}});
-  assert.equal(status.textContent,'Ownership is unknown');assert.equal(notices,0);
+  assert.deepEqual(events,['close','Ownership is unknown']);
+});
+
+test('stop errors from a dismissed confirmation do not close or notify over a newer view',async()=>{
+  const form={},events=[];
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>({classList:{remove(){}},close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({current:()=>false}),api:async()=>{throw new Error('late')},showError:()=>events.push('toast')});
+  vm.runInContext(source,context);vm.runInContext("confirmTerminalAction('H3','Stop harness','Confirm')",context);
+  await form.onsubmit({preventDefault(){}});assert.deepEqual(events,[]);
 });
 
 test('non-Teleport stop failures remain visible in the confirmation',async()=>{

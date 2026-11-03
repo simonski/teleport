@@ -23,9 +23,10 @@ def main(database_url=None):
     parser.add_argument("--board-only", action="store_true", help="Run only Board browser checks in the disposable fixture")
     parser.add_argument("--root-only", action="store_true", help="Run only project-root browser checks in the disposable fixture")
     parser.add_argument("--harness-monitor-only", action="store_true", help="Run isolated external harness monitor browser checks")
+    parser.add_argument("--stop-feedback-only", action="store_true", help="Verify stop confirmation feedback in the browser")
     args = parser.parse_args()
-    if (args.board_only or args.root_only or args.harness_monitor_only) and not args.browser:
-        parser.error("--board-only, --root-only and --harness-monitor-only require --browser")
+    if (args.board_only or args.root_only or args.harness_monitor_only or args.stop_feedback_only) and not args.browser:
+        parser.error("browser-only selections require --browser")
     with tempfile.TemporaryDirectory(prefix="teleport-init-proof-") as temporary:
         folder = Path(temporary)
         with socket.socket() as sock:
@@ -80,6 +81,22 @@ def main(database_url=None):
                 process = None
 
         try:
+            if args.stop_feedback_only:
+                assert "Initialization complete" in tk("init")
+                start()
+                browser("open", endpoint)
+                browser("fill", 'input[name="username"]', "admin")
+                browser("fill", 'input[name="password"]', "password")
+                browser("click", '#login button[type="submit"],#login button')
+                browser("wait", "#welcome-status")
+                browser("press", "Escape")
+                browser("eval", "window.__originalApi=api;api=(op,data)=>op==='stopSession'?Promise.reject(Object.assign(new Error('Stop is recorded, but ownership is unknown and no signal was sent.'),{code:'session_ownership_unknown'})):window.__originalApi(op,data);confirmTerminalAction('H3','Stop harness','Confirm the stop request')")
+                browser("wait", "#terminal-action-status")
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", "--fn", "!document.querySelector('#editor').open&&document.querySelector('#notice').textContent.includes('Stop is recorded')")
+                browser("screenshot", "/tmp/teleport-stop-feedback.png")
+                print("PASS: stop confirmation closes before the ownership message appears", flush=True)
+                return
             if args.harness_monitor_only:
                 native = folder / "codex"
                 subprocess.run(["go", "build", "-o", str(native), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=30)

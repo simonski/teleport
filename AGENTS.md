@@ -64,4 +64,6 @@ Prefer `make check` during everyday development. Deprioritize full local race ru
 
 ## Commit & Pull Request Guidelines
 
+Push validated changes to `main` using the phase workflow below. Do not deploy to the hosted site or migrate hosted data unless the user specifically requests that hosted operation. Requests to implement changes, continue work or push to `main` do not authorize deployment. Do not introduce GitHub Actions; keep routine validation local.
+
 Use concise, imperative commit subjects. Each phase starts on its own branch from clean `main`, passes its checks, then merges with `git merge --ff-only`; preserve linear history. Pull requests describe scope, affected requirement/action IDs, validation results and deferred behavior. Include screenshots for visual changes.

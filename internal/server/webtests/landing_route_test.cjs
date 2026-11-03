@@ -19,6 +19,19 @@ test('attitude turns gradually across angle wrap and uses smooth, seeded variati
   assert.equal(turnAttitude(20,180,0,0),20);
 });
 
+test('orbit attitude catches up smoothly and stays tangent across full revolutions',async()=>{
+  const {orbitAttitude}=await route,centre={x:10,y:20};
+  let angle=-90;
+  for(let time=0;time<8100;time+=50){
+    const orbit=Math.PI+time/2700*2*Math.PI,position={x:centre.x+34*Math.cos(orbit),y:centre.y+34*Math.sin(orbit)};
+    const next=orbitAttitude(angle,position,centre,50),target=orbit*180/Math.PI+90;
+    assert.ok(Math.abs(next-angle)<=13.5+1e-9);
+    if(time>1500)assert.ok(Math.abs(((target-next)%360+540)%360-180)<1e-6);
+    angle=next;
+  }
+  assert.equal(orbitAttitude(20,centre,centre,50),20);
+});
+
 test('outbound travel is slower and holding points drift away from the pad',async()=>{
   const {flightPlan,holdingPoint,LANDING_HOME,FLEET_LIMIT}=await route;
   assert.equal(FLEET_LIMIT,2);

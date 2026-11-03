@@ -54,7 +54,7 @@ async function startLandingFlight(){
       craft.position=route.separatedStep(craft.position,wanted,others,dt*.09);
       const angle=craft.holding?-90+Math.sin(fleetClock*.006+craft.trip)*4:frame.angle;
       const noise=frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-craft.position.y)/35)):1;
-      craft.angle=route.turnAttitude(craft.angle,angle,dt,fleetClock,craft.serial,noise);
+      craft.angle=frame.phase==='orbit'&&!craft.holding?route.orbitAttitude(craft.angle,craft.position,craft.target.point(),dt):route.turnAttitude(craft.angle,angle,dt,fleetClock,craft.serial,noise);
       craft.node.setAttribute('transform',`translate(${craft.position.x} ${craft.position.y}) rotate(${craft.angle})`);
       const engine=craft.node.querySelector('.rocket-engine'),thrust=craft.holding?.8:frame.engine;
       engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${craft.holding?Math.sin(fleetClock*.008+craft.trip)*12:frame.gimbal})`);engine.style.opacity=String(thrust);
@@ -72,7 +72,7 @@ async function startLandingFlight(){
     else smoothed=target;
     const airborne=['outbound','orbit','return','lift','descend'].includes(frame.phase);
     const noise=frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-smoothed.y)/35)):airborne?1:0;
-    attitude=instant||attitude===null?frame.angle:route.turnAttitude(attitude,frame.angle,dt,fleetClock,0,noise);
+    attitude=instant||attitude===null?frame.angle:frame.phase==='orbit'&&svg.dataset.holding!=='true'?route.orbitAttitude(attitude,smoothed,manual?moon:destination.point(),dt):route.turnAttitude(attitude,frame.angle,dt,fleetClock,0,noise);
     ship.setAttribute('transform',`translate(${smoothed.x} ${smoothed.y}) rotate(${attitude})`);
     ship.style.opacity=String(frame.opacity);
     engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${frame.gimbal})`);
@@ -114,7 +114,7 @@ async function startLandingFlight(){
     if(holding)elapsed=returnAt-.01;else if(stillApproaching)elapsed=touchdown-.01;else elapsed=next;
     while(elapsed>=route.flightPlan(cycle).duration){elapsed-=route.flightPlan(cycle).duration;cycle++;destination=destinations[Math.floor(Math.random()*destinations.length)];smoothed=null;}
     const frame=sample();if(holding){Object.assign(frame,route.holdingPoint(0,fleetClock));frame.angle=-90+Math.sin(now*.006)*4;frame.gimbal=Math.sin(now*.008)*12;frame.engine=.8;}
-    advanceFleet(dt,frame.phase);paint(frame,false,dt);svg.dataset.destination=destination.name;svg.dataset.holding=String(holding);
+    svg.dataset.holding=String(holding);advanceFleet(dt,frame.phase);paint(frame,false,dt);svg.dataset.destination=destination.name;
   }
   function tick(now){
     request=0;if(disposed||!svg.isConnected)return;

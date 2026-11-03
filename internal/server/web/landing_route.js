@@ -26,6 +26,14 @@ export function turnAttitude(current,target,dt,clock,seed=0,noise=1){
   const limit=Math.max(0,dt)*.15;
   return current+Math.max(-limit,Math.min(limit,step));
 }
+// Catch up to the actual orbital tangent, then track it without trailing it.
+export function orbitAttitude(current,position,centre,dt){
+  const dx=position.x-centre.x,dy=position.y-centre.y;
+  if(Math.hypot(dx,dy)<.001)return current;
+  const target=Math.atan2(dy,dx)*180/Math.PI+90;
+  const difference=((target-current)%360+540)%360-180,limit=Math.max(0,dt)*.27;
+  return current+Math.max(-limit,Math.min(limit,difference));
+}
 export function holdingPoint(serial,clock){
   const lane=serial%2,drift=clock/9000;
   return {x:130+lane*55+perlin1D(drift+serial*.37,serial+7)*12,y:38+lane*45+perlin1D(drift+.4,serial+13)*9};

@@ -125,8 +125,12 @@ def main():
             page.locator('#nav-views [data-view="Todos"]').wait_for()
             verify_flight_easter_egg(page, args.screenshot)
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
-            assert page.locator('.landing-planet').count() == 4
+            assert page.locator('.landing-planet').count() == 1
+            assert page.locator('.login-moon').count() == 1
+            assert page.locator('.landing-planet > circle:first-child').get_attribute('r') == '21'
             assert page.locator('.landing-star').count() >= 20
+            page.evaluate("landingFlight.seekPhase('orbit',.2,0);landingFlight.simulate(1000)")
+            assert page.evaluate("()=>{const m=document.querySelector('.flight-rocket').transform.baseVal.consolidate().matrix,moon=landingFlight.snapshot().moon;const actual=Math.atan2(m.b,m.a)*180/Math.PI,target=Math.atan2(m.f-moon.y,m.e-moon.x)*180/Math.PI+90;return Math.abs(((target-actual)%360+540)%360-180)<1}")
             page.evaluate("landingFlight.seekPhase('orbit',.5,0);window.flightBeforeMove=landingFlight.snapshot();document.querySelector('.login-moon').focus()")
             page.keyboard.press("ArrowLeft")
             assert page.evaluate("()=>{const current=landingFlight.snapshot();const old=window.flightBeforeMove;return current.moon.x<old.moon.x&&current.x===old.x&&current.y===old.y}")
@@ -149,7 +153,7 @@ def main():
                         if args.screenshot:
                             page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem + "-carrier")))
                 assert state["minimum"] is None or state["minimum"] >= 29, state
-                assert state["maxTurn"] <= 7.500001, state
+                assert state["maxTurn"] <= 13.500001, state
                 assert len(state["fleet"]) <= 1, state
                 positions = [state["position"]] + [craft["position"] for craft in state["fleet"]]
                 for index, first in enumerate(positions):
@@ -166,7 +170,7 @@ def main():
             assert not errors, json.dumps(errors)
         finally:
             browser.close()
-    print("PASS: flight codes, focus and fade, mobile/reduced motion, four planets, stars, rocket carriers and pad coordination")
+    print("PASS: flight codes, focus and fade, mobile/reduced motion, two moons, orbital attitude, stars, rocket carriers and pad coordination")
 
 
 if __name__ == "__main__":

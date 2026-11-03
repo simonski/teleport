@@ -6,9 +6,44 @@ func refinePool(p model.Phase) bool {
 	return p.Role == "Refine" || p.Role == "Decompose"
 }
 
+// Count retained reservations, including uncertain sessions, once per owned process.
+func projectAgentCapacity(st *model.State, projectID int64) error {
+	maximum := st.Projects[projectID].MaxAgents
+	if maximum == nil {
+		return nil
+	}
+	used := 0
+	counted := map[string]bool{}
+	for _, ticket := range st.Tickets {
+		if ticket.ProjectID != projectID || !ticket.Agent || !busy(ticket) {
+			continue
+		}
+		used++
+		if ticket.Execution != "" {
+			counted[ticket.Execution] = true
+		}
+	}
+	for _, row := range st.LocalSessions {
+		if row.ProjectID == projectID && activeLocal(row) && !counted["local:"+row.ID] {
+			used++
+		}
+	}
+	if used >= *maximum {
+		return failure(409, "project_agent_limit", "The project agent limit is fully reserved")
+	}
+	return nil
+}
+
+func projectAllowsHarness(project model.Project, harness string) bool {
+	return project.AllowedHarnesses == nil || contains(*project.AllowedHarnesses, harness)
+}
+
 // phaseCapacity checks reservations, not observed process liveness. Unknown and
 // stopping ownership keeps its place until the canonical cleanup releases it.
 func phaseCapacity(st *model.State, t model.Ticket, phase model.Phase) error {
+	if err := projectAgentCapacity(st, t.ProjectID); err != nil {
+		return err
+	}
 	project := st.Projects[t.ProjectID]
 	limit := 1
 	if project.CapacityConfigured {

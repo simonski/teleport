@@ -91,6 +91,9 @@ func managedAdmission(st *model.State, a model.Account, t model.Ticket, phase mo
 	if err := require(st, a, t.ProjectID, "Contributor"); err != nil {
 		return err
 	}
+	if !projectAllowsHarness(p, "codex") {
+		return failure(403, "harness_not_permitted", "This harness is not permitted for the project")
+	}
 	if st.Settings.ExecutionMode != "local" || len(st.Accounts) != 1 || p.Simulation || p.Repository == nil || !t.Agent || t.Kind != "task" || !phase.Agentic || !contains([]string{"Refine", "Doing", "Review"}, phase.Role) || t.Deleted || t.Archived || busy(t) || t.StopRequested || t.ResumeHold || t.RoutingHold != "" || t.Question != nil && !t.Question.Resolved && !t.Question.Obsolete {
 		return failure(409, "admission_blocked", "Ticket is not eligible for automatic local execution")
 	}

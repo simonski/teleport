@@ -96,6 +96,8 @@ type State struct {
 }
 
 type Project struct {
+	MaxAgents          *int               `json:"maxAgents,omitempty"`
+	AllowedHarnesses   *[]string          `json:"allowedHarnesses,omitempty"`
 	Simulation         bool               `json:"simulation,omitempty"`
 	DemoSeed           string             `json:"demoSeed,omitempty"`
 	Repository         *RepositoryBinding `json:"repository,omitempty"`

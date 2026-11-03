@@ -53,10 +53,14 @@ type BudgetInput struct {
 	Resume          bool  `json:"resume,omitempty"`
 }
 type CapacityInput struct {
-	ProjectID       int64 `json:"projectId"`
-	ExpectedVersion int64 `json:"expectedVersion"`
-	RefineWorkers   int   `json:"refineWorkers"`
-	DoingWorkers    int   `json:"doingWorkers"`
+	ProjectID          int64     `json:"projectId"`
+	ExpectedVersion    int64     `json:"expectedVersion"`
+	RefineWorkers      int       `json:"refineWorkers"`
+	DoingWorkers       int       `json:"doingWorkers"`
+	MaxAgents          *int      `json:"maxAgents,omitempty"`
+	ClearMaxAgents     bool      `json:"clearMaxAgents,omitempty"`
+	AllowedHarnesses   *[]string `json:"allowedHarnesses,omitempty"`
+	ClearHarnessPolicy bool      `json:"clearHarnessPolicy,omitempty"`
 }
 type HandbrakeInput struct {
 	ProjectID       int64  `json:"projectId,omitempty"`
@@ -691,6 +695,32 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		}
 		if in.RefineWorkers < 0 || in.RefineWorkers > 20 || in.DoingWorkers < 0 || in.DoingWorkers > 20 {
 			return nil, false, failure(422, "invalid_capacity", "Worker counts must be 0–20")
+		}
+		if in.MaxAgents != nil && (*in.MaxAgents < 0 || *in.MaxAgents > 40 || in.ClearMaxAgents) {
+			return nil, false, failure(422, "invalid_capacity", "Maximum agents must be 0–40 or cleared")
+		}
+		if in.AllowedHarnesses != nil && in.ClearHarnessPolicy {
+			return nil, false, failure(422, "invalid_harness_policy", "Choose allowed harnesses or clear the policy")
+		}
+		if in.ClearHarnessPolicy {
+			p.AllowedHarnesses = nil
+		}
+		if in.AllowedHarnesses != nil {
+			seen := map[string]bool{}
+			for _, harness := range *in.AllowedHarnesses {
+				if !contains([]string{"codex", "fixture"}, harness) || seen[harness] {
+					return nil, false, failure(422, "invalid_harness_policy", "Choose distinct supported harnesses")
+				}
+				seen[harness] = true
+			}
+			allowed := append([]string{}, (*in.AllowedHarnesses)...)
+			p.AllowedHarnesses = &allowed
+		}
+		if in.ClearMaxAgents {
+			p.MaxAgents = nil
+		} else if in.MaxAgents != nil {
+			maximum := *in.MaxAgents
+			p.MaxAgents = &maximum
 		}
 		p.RefineWorkers, p.DoingWorkers, p.CapacityConfigured = in.RefineWorkers, in.DoingWorkers, true
 		p.Version++

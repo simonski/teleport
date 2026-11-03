@@ -401,6 +401,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "local_mode_required", "Use single-user local mode with demo execution off")
 	}
 	p := st.Projects[in.ProjectID]
+	if !projectAllowsHarness(p, in.Harness) {
+		return nil, failure(403, "harness_not_permitted", "This harness is not permitted for the project")
+	}
 	if p.Simulation {
 		return nil, failure(409, "simulation_only", "Simulation projects cannot run real harnesses")
 	}
@@ -442,6 +445,12 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		}
 		if len(st.Accounts) > 1 || st.Settings.Agents || st.Settings.Handbrake || st.Projects[in.ProjectID].Handbrake {
 			return false, failure(409, "admission_blocked", "Local session admission is paused")
+		}
+		if !projectAllowsHarness(st.Projects[in.ProjectID], in.Harness) {
+			return false, failure(403, "harness_not_permitted", "This harness is not permitted for the project")
+		}
+		if err := projectAgentCapacity(st, in.ProjectID); err != nil {
+			return false, err
 		}
 		for _, other := range st.LocalSessions {
 			if activeLocal(other) && (in.TicketID != 0 && other.TicketID == in.TicketID || in.TicketID == 0 && other.Creator == a.ID && other.TicketID == 0) {

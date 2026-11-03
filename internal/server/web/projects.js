@@ -43,7 +43,8 @@ async function loadProjectDirectory(){
 }
 function projectMetadataForm(id){
   const p=[projectDirectory?.find(row=>row.id===id),projects.find(row=>row.id===id)].filter(Boolean).sort((a,b)=>b.version-a.version)[0];if(!p||!roleAllowsMaintain(id))return;
-  const dialog=openDialog('Edit project',`<label>Name<input name="name" required maxlength="200" value="${escapeHTML(p.name)}"></label><label>Description<textarea name="description" rows="4" maxlength="20000">${escapeHTML(p.description)}</textarea></label>`,'Save project'),guard=captureDialogCompletion(dialog),form=byId('editor-form');let busy=false;
+  const dialog=openDialog('Edit project',`<label>Name<input name="name" required maxlength="200" value="${escapeHTML(p.name)}"></label><label>Description<textarea name="description" rows="4" maxlength="20000">${escapeHTML(p.description)}</textarea></label><button type="button" class="secondary" id="directory-project-settings">Project settings</button>`,'Save project'),guard=captureDialogCompletion(dialog),form=byId('editor-form');let busy=false;
+  on('directory-project-settings','click',async()=>{if(busy)return;const draft=new FormData(form);if(draft.get('name')!==p.name||draft.get('description')!==(p.description||'')){notice('Save project changes before opening settings.');return;}const actor=session?.account.id;dialog.close();projectId=id;try{await workspace();if(session?.account.id===actor&&projectId===id&&!foregroundOpen())openProjectSettings();}catch(error){showError(error);}});
   form.onsubmit=async e=>{
     e.preventDefault();if(busy)return;busy=true;const button=form.querySelector('[type=submit]');button.disabled=true;
     try{const result=await api('saveProject',{id,expectedVersion:p.version,...Object.fromEntries(new FormData(form))});if(!guard.current())return;projects=projects.map(row=>row.id===id?result:row);dialog.close();await workspace();}

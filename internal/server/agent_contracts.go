@@ -22,7 +22,7 @@ func init() {
 		{"setExecutionBudget", "ACT-0714", "Change finite attempts without resetting consumption", app.BudgetInput{}, model.Ticket{}},
 		{"pauseTicket", "ACT-0313", "Pause admission and logical continuation", app.VersionInput{}, model.Ticket{}},
 		{"resumeTicket", "ACT-0313", "Explicitly resume eligible held work", app.VersionInput{}, model.Ticket{}},
-		{"setLaneCapacity", "ACT-0709", "Configure shared Refine and Doing capacity", app.CapacityInput{}, model.Project{}},
+		{"setLaneCapacity", "ACT-0709", "Configure project agent limit, permitted harnesses and shared Refine/Doing capacity", app.CapacityInput{}, model.Project{}},
 		{"getBoardExecution", "ACT-0709", "Read bounded phase capacity and observed activity", app.BoardExecutionInput{}, app.BoardExecution{}},
 		{"setHandbrake", "ACT-0914", "Set system/project/stable-phase handbrake", app.HandbrakeInput{}, oneOf{model.Settings{}, model.Project{}}},
 	}

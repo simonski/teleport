@@ -14,6 +14,8 @@ The browser bundles Three.js 0.187.0 under its [MIT license](internal/server/web
 
 Run `make sbom` to generate `sbom.cdx.json`.
 
+Use `make check` for everyday validation. `make race-check` (also `make check-race`) explicitly runs the full race suite at low scheduling priority with two Go execution threads and one package at a time. `make check-full` runs both in order for CI/release validation. PostgreSQL checks use normal tests unless `--race` is supplied.
+
 Run `tk skill > SKILL.md` to export the bundled agent skill for a harness. No running server or sign-in is required for this export.
 
 Choose **Graph → 2D Map** for the card-and-curve view, or **3D** for the spatial viewer. **Workflows → Map** uses the same visual treatment for phase routes. **Settings → Visual style → Studio** enables the compact menu/table treatment; choose Top or Left under Navigation. The Paper and Instrument styles remain available.

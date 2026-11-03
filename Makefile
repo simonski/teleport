@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install sbom browser-tools deploy check test lint clean
+.PHONY: help build install sbom browser-tools deploy check check-race race-check check-full test lint clean
 DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
@@ -12,7 +12,10 @@ help:
 	@echo "sbom          Generate sbom.cdx.json for Go and bundled browser dependencies"
 	@echo "browser-tools Prepare the pinned persistent browser client"
 	@echo "deploy        Build Linux tk, scp to /home/exedev/teleport and start it"
-	@echo "check         Run documentation, vet, unit, integration and race checks"
+	@echo "check         Run everyday documentation, vet, unit and integration checks"
+	@echo "check-race    Run the full Go race suite at low priority (optional locally)"
+	@echo "race-check    Alias for check-race"
+	@echo "check-full    Run everyday checks, then the race suite (CI/release gate)"
 	@echo "test          Run Go tests"
 	@echo "lint          Verify Go formatting and run vet"
 	@echo "clean         Remove generated binary"
@@ -28,7 +31,7 @@ browser-tools:
 deploy:
 	python3 -B tools/deploy.py
 test:
-	go test ./...
+	python3 -B tools/go_check.py
 lint:
 	@test -z "$$(gofmt -l cmd internal tools)"
 	go vet ./...
@@ -43,9 +46,15 @@ check: lint
 	python3 -B tools/test_browser_driver.py
 	python3 -B tools/test_source_cache.py
 	python3 -B tools/test_deploy.py
+	python3 -B tools/test_go_check.py
 	python3 -B tools/spec_sources.py --verify
 	python3 -B tools/client_scope.py
-	go test -race ./...
+	python3 -B tools/go_check.py
+check-race:
+	python3 -B tools/go_check.py --race
+race-check: check-race
+check-full: check
+	$(MAKE) check-race
 clean:
 	go clean
 	rm -f bin/tk

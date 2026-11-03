@@ -10,28 +10,7 @@ import (
 
 	"teleport/internal/app"
 	"teleport/internal/model"
-	"teleport/internal/store"
-	"teleport/internal/teststore"
 )
-
-func fixture(t *testing.T) (*app.Service, string) {
-	svc, token, _ := fixtureWithStore(t)
-	return svc, token
-}
-
-func fixtureWithStore(t *testing.T) (*app.Service, string, *store.Store) {
-	t.Helper()
-	db := teststore.Open(t)
-	if _, err := app.Initialize(context.Background(), db); err != nil {
-		t.Fatal(err)
-	}
-	svc := app.New(db)
-	result, err := svc.Call(context.Background(), "", "login", json.RawMessage(`{"username":"admin","password":"password"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return svc, result.(app.LoginResult).Token, db
-}
 
 func TestNoOpAndConcurrentExpectedVersionUpdates(t *testing.T) {
 	svc, token := fixture(t)

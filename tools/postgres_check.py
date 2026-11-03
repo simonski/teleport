@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--postgres-bin", type=Path)
     parser.add_argument("--browser", action="store_true")
+    parser.add_argument("--race", action="store_true", help="Opt into low-priority, bounded Go race tests")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--native-only", action="store_true", help="Run only the native fixture against a fresh database")
     selection.add_argument("--workflows-only", action="store_true", help="Run automatic native workflow fixtures against a fresh database")
@@ -63,9 +64,11 @@ def main():
             checked = dict(environment, TELEPORT_TEST_POSTGRES=connection)
             focused = args.native_only or args.workflows_only or args.scripts_only or args.terminal_only or args.smoke_only or args.shell_only or args.studio_only or args.overview_only or args.init_only
             if not focused:
-                test_command = ["go", "test", "-race", "-count=1"]
+                test_command = ["python3", "-B", "tools/go_check.py", "--count", "1"]
+                if args.race:
+                    test_command.append("--race")
                 if args.test_pattern:
-                    test_command += ["-run", args.test_pattern]
+                    test_command += ["--run", args.test_pattern]
                 subprocess.run([*test_command, "./..."], cwd=ROOT, env=checked, check=True)
             if args.tests_only:
                 print("PASS: PostgreSQL Go test selection", flush=True)
@@ -135,7 +138,7 @@ def main():
                 if args.browser:
                     script_command.append("--browser")
                 subprocess.run(script_command, cwd=ROOT, env=environment, check=True)
-            label = "shared shell and modal browser checks" if args.shell_only else "application smoke" if args.smoke_only else "native protocol/runtime fixture" if args.native_only else "isolated script jobs" if args.scripts_only else "plain PTY fixture" if args.terminal_only else "isolated domain/race suite and real binary/browser smoke with native and script runtimes"
+            label = "shared shell and modal browser checks" if args.shell_only else "application smoke" if args.smoke_only else "native protocol/runtime fixture" if args.native_only else "isolated script jobs" if args.scripts_only else "plain PTY fixture" if args.terminal_only else "isolated domain suite and real binary/browser smoke with native and script runtimes"
             print("PASS: PostgreSQL " + label, flush=True)
         finally:
             if started:

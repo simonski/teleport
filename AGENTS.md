@@ -33,12 +33,13 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 - `make browser-tools`: prepare a cached, pinned Python Playwright client and its matching headless Chromium for browser acceptance checks.
 - `make deploy`: detect Linux architecture over SSH, build a static target executable and SCP/start it below `/home/exedev/teleport`; strong first-run credentials are written to protected remote/local config files, never command arguments or tool history. Existing installations are never reset.
 - `go test ./...`: run Go tests.
-- `go test -race ./...`: check Go code for data races.
-- `make check`: verify formatting, vet, documentation and race tests.
+- `make check`: everyday formatting, vet, documentation, tooling and normal Go tests; no race instrumentation.
+- `make check-race` / `make race-check`: explicit full Go race suite, with nice +15, one package at a time and `GOMAXPROCS=2` by default. An explicit `GOMAXPROCS` overrides that default. Windows uses idle process priority.
+- `make check-full`: run everyday checks first, then the race suite; the full CI/release validation entry point.
 - `python3 -B tools/web_check.py`: check browser syntax, asynchronous-state regressions and bundled Three.js hashes.
 - `python3 -B tools/smoke.py --browser`: exercise an isolated real binary/browser installation after building.
 - `python3 -B tools/smoke.py --browser --studio-only`: check the Three.js 2D graph, hover/flow, independent layout persistence, Studio menus/tables and workflow Map.
-- `python3 -B tools/postgres_check.py --browser`: run the same suite and real browser path against a disposable PostgreSQL cluster; requires local server binaries.
+- `python3 -B tools/postgres_check.py --browser`: run the same suite and real browser path against a disposable PostgreSQL cluster; requires local server binaries. Add `--race` to opt into the low-priority race runner.
 
 Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. Use the `tk` binary for server operations.
 
@@ -57,6 +58,8 @@ Use `gofmt`, tab indentation, idiomatic Go package names and `*_test.go` files. 
 ## Testing Guidelines
 
 Cover agreed acceptance scenarios with fresh evidence. No numeric coverage threshold is specified. Planned validation includes Go unit, integration, and race tests, browser checks, and both database modes. Routine fixtures must avoid paid model calls; live model acceptance requires separate authorization.
+
+Prefer `make check` during everyday development. Deprioritize full local race runs: use the explicit race target for concurrency/shared-state changes or CI/release validation, and do not repeat it after unrelated documentation or browser-only edits. Ordinary domain fixtures reuse serialized bootstrap data while retaining independent databases, mutable state, installation identities and authenticated sessions. Initialization/authentication tests still exercise real production password hashing; never reduce production hashing cost for test speed. `tools/go_check.py` records invocation timings/outcomes and accepts `--run`, `--count` and a single-package `--profile PATH` for focused diagnosis. Keep profiles/test binaries in ignored `.cache/` or temporary storage.
 
 ## Commit & Pull Request Guidelines
 

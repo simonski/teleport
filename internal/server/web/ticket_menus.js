@@ -18,17 +18,21 @@ function menuTicketSource(target){
   const entry=target.closest?.('#graph-list [data-node]'),node=graphData?.nodes.find(row=>row.id===entry?.dataset.node);
   return node?.ticketId?{id:node.ticketId,source:entry}:null;
 }
+function deleteBacklogRecord(record,idea=false){
+  const title=idea?'Delete idea':'Delete ticket',dialog=openDialog(title,`<p>${escapeHTML(record.title)}</p><p>This hides the selected record and retains its history.</p>`,title),completion=captureDialogCompletion(dialog);let pending=false;
+  byId('editor-form').onsubmit=async event=>{event.preventDefault();if(pending)return;pending=true;try{await api(idea?'setIdeaVisibility':'setTicketVisibility',{id:record.id,expectedVersion:record.version,deleted:true});if(!completion.current())return;dialog.close();await workspace();if(completion.follow())notice(title+' saved');}catch(error){if(completion.current())showError(error);}finally{pending=false;}};
+}
 function showBacklogIdeaMenu(id,source,point=null){
   if(!session||!source?.isConnected||menuForeground())return;
   const idea=ideas.find(item=>item.id===id);if(!idea)return;
   dismissTicketMenu();const element=document.createElement('div');element.className='ticket-context-menu';element.setAttribute('role','menu');element.setAttribute('aria-label','Idea actions');
   const canDraft=ideaCanWrite(idea)&&!idea.archived&&!idea.deleted;
-  element.innerHTML=`<div class="ticket-context-title">${escapeHTML(idea.id)} · Idea</div><button type="button" role="menuitem" data-idea-menu="open">Open idea</button>${canDraft?'<button type="button" role="menuitem" data-idea-menu="propose">Draft work proposal</button>':''}${idea.origin==='import'?'<button type="button" role="menuitem" disabled>Decompose</button><button type="button" role="menuitem" disabled>Spellcheck</button><p class="ticket-context-note">Agent actions are not available yet.</p>':''}`;
+  element.innerHTML=`<div class="ticket-context-title">${escapeHTML(idea.id)} · Idea</div><button type="button" role="menuitem" data-idea-menu="open">Open idea</button>${canDraft?'<button type="button" role="menuitem" data-idea-menu="propose">Draft work proposal</button>':''}<button type="button" role="menuitem" disabled>Refine</button><button type="button" role="menuitem" disabled>Breakdown</button><button type="button" role="menuitem" disabled>Spellcheck</button><button type="button" role="menuitem" disabled>Assign to epic</button><button type="button" role="menuitem" data-idea-menu="delete" ${ideaCanControl(idea)&&!idea.deleted?'':'disabled'}>Delete</button><p class="ticket-context-note">Agent actions are not available yet. Ideas can link work through a proposal.</p>`;
   document.body.append(element);ticketMenu={element,source,anchor:source.getBoundingClientRect(),width:innerWidth,height:innerHeight};
   const anchor=source.getBoundingClientRect();element.style.left=Math.max(8,Math.min(point?.x??anchor.left,innerWidth-element.offsetWidth-8))+'px';element.style.top=Math.max(8,Math.min(point?.y??anchor.bottom,innerHeight-element.offsetHeight-8))+'px';
   const buttons=[...element.querySelectorAll('button:not(:disabled)')];buttons[0].focus({preventScroll:true});
   element.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const index=buttons.indexOf(document.activeElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}else if(event.key==='Tab')dismissTicketMenu(true);});
-  element.addEventListener('click',event=>{const action=event.target.closest('[data-idea-menu]')?.dataset.ideaMenu;if(!action)return;dismissTicketMenu(true);if(action==='open')openIdea(id);else if(action==='propose')ideaProposalForm(idea);});
+  element.addEventListener('click',event=>{const action=event.target.closest('[data-idea-menu]')?.dataset.ideaMenu;if(!action)return;dismissTicketMenu(true);if(action==='open')openIdea(id);else if(action==='propose')ideaProposalForm(idea);else if(action==='delete')deleteBacklogRecord(idea,true);});
 }
 function attachedRunningSession(ticket,rows){return rows.find(row=>row.ticketId===ticket.id&&row.projectId===ticket.projectId&&row.state==='running'&&ticket.execution==='local:'+row.id);}
 function ticketMenuEntries(ticket,rows,nativePending=false){
@@ -36,8 +40,15 @@ function ticketMenuEntries(ticket,rows,nativePending=false){
   if(ticket.agent&&view!=='Todos')entries.push({id:'prompt',label:'Prompt',sessionId:attached?.id});
   if(typeof roleAllowsWrite==='function'&&roleAllowsWrite(ticket.projectId)){
     if(view==='Todos'&&!ticket.agent)for(const move of humanMoves(ticket))entries.push({id:'move-'+move.target,label:'Move to '+move.role,target:move.target});
-    if(canQueueRefinement(ticket)&&ticket.status==='Todo')entries.push({id:'refine',label:'Send to refine'});
+    const epicRefine=view==='Backlog'&&ticket.kind==='epic'&&ticket.agent&&!ticket.protected&&!ticket.archived&&!ticket.deleted&&!ticket.active&&!ticket.claim&&!ticket.execution&&!ticket.delivery&&!(ticket.question&&!ticket.question.resolved&&!ticket.question.obsolete);
+    if((canQueueRefinement(ticket)||epicRefine)&&ticket.status==='Todo')entries.push({id:'refine',label:view==='Backlog'?'Refine':'Send to refine'});
     if(ticket.agent&&ticket.status==='Refine'&&canQueueRefinement(ticket))entries.push({id:'return-todo',label:'Send back to todo'});
+  }
+  if(view==='Backlog'){
+    if(!entries.some(entry=>entry.id==='refine'))entries.push({id:'refine-unavailable',label:'Refine',disabled:true});
+    entries.push({id:'breakdown',label:'Breakdown',disabled:true},{id:'spellcheck',label:'Spellcheck',disabled:true});
+    entries.push({id:'assign-epic',label:'Assign to epic',submenu:true,disabled:ticket.kind!=='task'||!backlogCanMove(ticket)||!backlogLoaded||backlogPending});
+    entries.push({id:'delete',label:'Delete',disabled:ticket.protected||!roleAllowsMaintain(ticket.projectId)||ticket.archived||ticket.deleted||ticket.active||!!ticket.claim||!!ticket.execution});
   }
   if(ticket.question&&!ticket.question.resolved&&!ticket.question.obsolete||nativePending)entries.push({id:'questions',label:'Questions'});
   if(attached&&view!=='Todos')entries.push({id:'teleport',label:'Teleport · '+attached.id,sessionId:attached.id});
@@ -54,16 +65,22 @@ async function showTicketMenu(id,source,point=null){
     if(!current())return;
     const element=document.createElement('div');element.className='ticket-context-menu';element.setAttribute('role','menu');element.setAttribute('aria-label','Ticket #'+id+' actions');
     const entries=ticketMenuEntries(ticket,rows,requests.some(group=>(group.items||[]).some(request=>request.state==='pending')));
-    element.innerHTML=`<div class="ticket-context-title">#${id} · ${escapeHTML(phaseTitle(ticket))}</div>${entries.map(entry=>`<button type="button" role="menuitem" data-ticket-menu="${entry.id}">${escapeHTML(entry.label)}</button>`).join('')}`;
+    const epics=view==='Backlog'?tickets.filter(epic=>epic.kind==='epic'&&epic.projectId===ticket.projectId&&!epic.archived&&!epic.deleted).sort((a,b)=>a.title.localeCompare(b.title)||a.id-b.id):[];
+    element.innerHTML=`<div class="ticket-context-title">#${id} · ${escapeHTML(phaseTitle(ticket))}</div>${entries.map(entry=>entry.submenu?`<button type="button" role="menuitem" data-ticket-menu="${entry.id}" aria-haspopup="menu" aria-expanded="false" ${entry.disabled||!epics.length?'disabled':''}>${escapeHTML(entry.label)} <span aria-hidden="true">›</span></button><div class="ticket-context-submenu" role="menu" aria-label="Assign to epic" hidden>${epics.map(epic=>`<button type="button" role="menuitem" data-ticket-epic="${epic.id}" ${epic.id===ticket.parentId?'disabled':''}>${escapeHTML(epic.title)}${epic.id===ticket.parentId?' · current':''}</button>`).join('')}</div>`:`<button type="button" role="menuitem" data-ticket-menu="${entry.id}" ${entry.disabled?'disabled':''}>${escapeHTML(entry.label)}</button>`).join('')}${view==='Backlog'?'<p class="ticket-context-note">Breakdown and spellcheck are not available yet.</p>':''}`;
     document.body.append(element);ticketMenu={element,source,anchor:source.getBoundingClientRect(),width:innerWidth,height:innerHeight};ticketMenuPending=false;
     const anchor=source.getBoundingClientRect(),x=point?.x??anchor.left,y=point?.y??anchor.bottom;
     element.style.left=Math.max(8,Math.min(x,innerWidth-element.offsetWidth-8))+'px';element.style.top=Math.max(8,Math.min(y,innerHeight-element.offsetHeight-8))+'px';
-    const buttons=[...element.querySelectorAll('button')];buttons[0].focus({preventScroll:true});
+    const buttons=[...element.querySelectorAll(':scope > button:not(:disabled)')],submenu=element.querySelector('.ticket-context-submenu'),trigger=element.querySelector('[data-ticket-menu="assign-epic"]');buttons[0].focus({preventScroll:true});
+    function openSubmenu(focus=false){if(!submenu||trigger.disabled)return;submenu.hidden=false;trigger.setAttribute('aria-expanded','true');const box=trigger.getBoundingClientRect();submenu.style.left=(box.right+submenu.offsetWidth+8>innerWidth?Math.max(8,box.left-submenu.offsetWidth):box.right)+'px';submenu.style.top=Math.max(8,Math.min(box.top,innerHeight-submenu.offsetHeight-8))+'px';if(focus)submenu.querySelector('button:not(:disabled)')?.focus();}
+    trigger?.addEventListener('pointerenter',()=>openSubmenu());
     element.addEventListener('keydown',e=>{
-      if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const index=buttons.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}
+      const subButtons=submenu&&!submenu.hidden?[...submenu.querySelectorAll('button:not(:disabled)')]:[],inSub=submenu?.contains(document.activeElement),items=inSub?subButtons:buttons;
+      if(e.key==='ArrowRight'&&document.activeElement===trigger){e.preventDefault();openSubmenu(true);}
+      else if(e.key==='ArrowLeft'&&inSub){e.preventDefault();submenu.hidden=true;trigger.setAttribute('aria-expanded','false');trigger.focus();}
+      else if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)&&items.length){e.preventDefault();const index=items.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length;items[next].focus();}
       else if(e.key==='Tab')dismissTicketMenu(true);
     });
-    element.addEventListener('click',e=>{const button=e.target.closest('[data-ticket-menu]'),entry=entries.find(item=>item.id===button?.dataset.ticketMenu);if(!entry)return;dismissTicketMenu(true);if(entry.target)moveHumanTicket(ticket,entry.target);else if(entry.id==='refine'||entry.id==='return-todo')changeRefinementQueue(ticket,entry.id==='refine'?'requestRefinement':'returnRefinementToTodo');else if(entry.id==='teleport')teleportTicketSession(id,entry.sessionId).catch(showError);else if(entry.id==='prompt')showTicketPrompt(id,entry.sessionId).catch(showError);else editTicket(id);});
+    element.addEventListener('click',e=>{const epic=e.target.closest('[data-ticket-epic]');if(epic){const parentId=Number(epic.dataset.ticketEpic);dismissTicketMenu(true);backlogMoveTo(ticket,parentId,backlogRows(tickets,ideas,backlogOrder.keys).map(row=>row.key));return;}const button=e.target.closest('[data-ticket-menu]'),entry=entries.find(item=>item.id===button?.dataset.ticketMenu);if(!entry||entry.disabled)return;if(entry.submenu){openSubmenu(true);return;}dismissTicketMenu(true);if(entry.target)moveHumanTicket(ticket,entry.target);else if(entry.id==='refine'||entry.id==='return-todo')changeRefinementQueue(ticket,entry.id==='refine'?'requestRefinement':'returnRefinementToTodo');else if(entry.id==='delete')deleteBacklogRecord(ticket);else if(entry.id==='teleport')teleportTicketSession(id,entry.sessionId).catch(showError);else if(entry.id==='prompt')showTicketPrompt(id,entry.sessionId).catch(showError);else editTicket(id);});
   }catch(error){if(current())showError(error);}
   finally{if(ticketMenuEpoch===epoch)ticketMenuPending=false;}
 }

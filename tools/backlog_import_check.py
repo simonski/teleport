@@ -17,7 +17,9 @@ def main():
         return
     from playwright.sync_api import sync_playwright
     saved = []
-    ticket = {"id": 7, "projectId": 1, "parentId": 0, "kind": "goal", "title": "Fixture goal", "status": "Todo", "phase": "Todo", "workflow": "fixture@1", "agent": False}
+    base = {"projectId": 1, "status": "Todo", "phase": "Todo", "workflow": "fixture@1", "agent": False, "version": 1}
+    rows = [{**base, "id": 7, "parentId": 0, "kind": "goal", "title": "Fixture goal"}, {**base, "id": 8, "parentId": 7, "kind": "epic", "title": "First epic"}, {**base, "id": 9, "parentId": 7, "kind": "epic", "title": "Second epic"}, {**base, "id": 11, "parentId": 8, "kind": "task", "title": "Locked task", "status": "Doing"}, {**base, "id": 12, "projectId": 2, "parentId": 0, "kind": "epic", "title": "Other project epic"}, {**base, "id": 10, "parentId": 8, "kind": "task", "title": "Fixture task"}]
+    calls = []
     account = {"account": {"id": "import-fixture", "username": "fixture", "administrator": True}, "installationId": "import-fixture", "revision": 1, "contentRevision": 1, "preferences": {"version": 1, "style": "paper", "mode": "light", "defaultView": "Backlog", "defaultProject": 0}, "lastLocation": {"view": "Backlog", "projectId": 0}, "settings": {"executionMode": "off"}}
     errors = []
     with sync_playwright() as playwright:
@@ -32,6 +34,7 @@ def main():
                 path = urlparse(request.url).path
                 if path.startswith("/api/tools/"):
                     operation = path.rsplit("/", 1)[-1]
+                    calls.append((operation, request.post_data_json))
                     if operation == "getSession":
                         result = account
                     elif operation == "saveIdea":
@@ -44,11 +47,33 @@ def main():
                     elif operation == "getBacklogOrder":
                         result = {"version": 0, "keys": []}
                     elif operation == "listIdeas":
-                        result = {"items": saved}
+                        result = {"items": [idea for idea in saved if not idea.get('deleted')]}
                     elif operation == "listTickets":
-                        result = {"items": [ticket]}
+                        result = {"items": [row for row in rows if not row.get('deleted')]}
                     elif operation == "getTicket":
-                        result = ticket
+                        result = next(row for row in rows if row['id'] == request.post_data_json['id'])
+                    elif operation == "saveBacklogOrder":
+                        move = request.post_data_json['move']
+                        target = next(row for row in rows if row['id'] == move['id'])
+                        assert move['expectedVersion'] == target['version'] and move['expectedParentVersion'] == 1
+                        target['parentId'] = move['parentId']
+                        target['version'] += 1
+                        result = {"version": 1, "keys": request.post_data_json['keys']}
+                    elif operation == "requestRefinement":
+                        target = next(row for row in rows if row['id'] == request.post_data_json['id'])
+                        assert request.post_data_json['expectedVersion'] == target['version']
+                        target.update(status='Refine', phase='Refine', agent=True, version=target['version']+1)
+                        result = target
+                    elif operation == "setTicketVisibility":
+                        target = next(row for row in rows if row['id'] == request.post_data_json['id'])
+                        assert request.post_data_json['expectedVersion'] == target['version']
+                        target.update(deleted=True, version=target['version']+1)
+                        result = target
+                    elif operation == "setIdeaVisibility":
+                        target = next(row for row in saved if row['id'] == request.post_data_json['id'])
+                        assert request.post_data_json['expectedVersion'] == target['version']
+                        target.update(deleted=True, version=target['version']+1)
+                        result = target
                     elif operation == "getWorkflow":
                         result = {"id": "fixture", "version": 1, "phases": [{"id": "Todo", "title": "Todo", "role": "Todo"}], "rules": []}
                     elif operation.startswith("list") or operation == "getIdeaHistory":
@@ -97,7 +122,7 @@ def main():
             card.wait_for()
             card.click(button='right')
             menu = page.locator('.ticket-context-menu')
-            assert menu.get_by_role('menuitem', name='Decompose').is_disabled()
+            assert menu.get_by_role('menuitem', name='Breakdown').is_disabled()
             assert menu.get_by_role('menuitem', name='Spellcheck').is_disabled()
             assert 'not available yet' in menu.inner_text()
             page.keyboard.press('Escape')
@@ -109,10 +134,40 @@ def main():
             page.locator('[data-backlog-open="ticket:7"]').click(button='right')
             page.get_by_role('menuitem', name='Open ticket').wait_for()
             page.keyboard.press('Escape')
+            page.locator('[data-backlog-open="ticket:11"]').click(button='right')
+            assert page.get_by_role('menuitem', name='Assign to epic').is_disabled()
+            assert page.get_by_role('menuitem', name='Refine').is_disabled()
+            page.keyboard.press('Escape')
+            page.locator('[data-backlog-open="ticket:10"]').click(button='right')
+            menu = page.locator('.ticket-context-menu')
+            assert menu.get_by_role('menuitem', name='Breakdown').is_disabled()
+            assert menu.get_by_role('menuitem', name='Spellcheck').is_disabled()
+            assign = menu.get_by_role('menuitem', name='Assign to epic')
+            assign.focus()
+            page.keyboard.press('ArrowRight')
+            assert page.get_by_role('menu', name='Assign to epic').get_by_role('menuitem', name='First epic').is_disabled()
+            assert page.get_by_role('menu', name='Assign to epic').get_by_role('menuitem', name='Other project epic').count() == 0
+            page.screenshot(path='/tmp/teleport-backlog-epic-menu.png')
+            page.get_by_role('menu', name='Assign to epic').get_by_role('menuitem', name='Second epic').click()
+            page.wait_for_function("tickets.find(ticket=>ticket.id===10)?.parentId===9&&!backlogPending")
+            assert rows[-1]['parentId'] == 9
+            page.locator('[data-backlog-open="ticket:10"]').click(button='right')
+            page.get_by_role('menuitem', name='Refine').click()
+            page.wait_for_function("document.querySelector('[data-backlog-open=\"ticket:10\"]')?.dataset.status==='Refine'")
+            page.locator('[data-backlog-open="ticket:10"]').click(button='right')
+            page.get_by_role('menuitem', name='Delete').click()
+            page.locator('#editor-form button[type=submit]').click()
+            page.wait_for_function("!document.querySelector('[data-backlog-open=\"ticket:10\"]')")
+            assert any(operation == 'setTicketVisibility' for operation, _ in calls)
+            page.locator('[data-backlog-open="idea:1"]').click(button='right')
+            page.get_by_role('menuitem', name='Delete').click()
+            page.locator('#editor-form button[type=submit]').click()
+            page.wait_for_function("!document.querySelector('[data-backlog-open=\"idea:1\"]')")
+            assert saved[0]['deleted']
             assert not errors, json.dumps(errors)
         finally:
             browser.close()
-    print('PASS: backlog import shortcut, UTF-8 upload, private capture and classifier availability')
+    print('PASS: backlog import, context menus, scoped epic assignment, refinement and deletion')
 
 
 if __name__ == '__main__':

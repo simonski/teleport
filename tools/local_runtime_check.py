@@ -18,6 +18,8 @@ def main(database_url=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--native-fixture", action="store_true", help="Exercise native Codex protocol through a zero-provider fake executable")
+    parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
+    parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
     args = parser.parse_args()
     folder = Path(tempfile.mkdtemp(prefix="teleport-terminal-proof-"))
@@ -31,7 +33,14 @@ def main(database_url=None):
         fixture_bin.mkdir()
         subprocess.run(["go", "build", "-o", str(fixture_bin / "codex"), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=60)
         environment["PATH"] = str(fixture_bin) + os.pathsep + environment["PATH"]
-    harness = "codex" if args.native_fixture else "fixture"
+    if args.native_fixture and args.native_startup_only:
+        parser.error("choose one native fixture")
+    if args.native_startup_only:
+        args.console_only = True
+        environment = {key: value for key, value in environment.items() if not key.startswith("OPENAI_") and key not in ("CODEX_API_KEY", "CODEX_HOME")}
+        environment["CODEX_HOME"] = str(folder / "isolated-codex")
+        (folder / "isolated-codex").mkdir(mode=0o700)
+    harness = "codex" if args.native_fixture or args.native_startup_only else "fixture"
     process = None
     session_id = None
     clean = False
@@ -79,6 +88,8 @@ def main(database_url=None):
         subprocess.run([str(ROOT / "bin/tk"), "login", "--password-stdin"], env=environment, input="password\n", text=True, check=True, capture_output=True, timeout=15)
         repository = folder / "repository"
         repository.mkdir()
+        def git_output(root, *arguments):
+            return subprocess.check_output(["git", "-C", str(root), *arguments], text=True, timeout=15)
         def git(*arguments):
             subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}", "-c", "commit.gpgsign=false", "-c", "user.name=Fixture", "-c", "user.email=fixture@localhost", "-C", str(repository), *arguments], check=True, capture_output=True, timeout=15)
         git("init", "-b", "main")
@@ -87,6 +98,11 @@ def main(database_url=None):
         git("commit", "-m", "Seed terminal fixture")
         project = tk("createProject", {"name": "Terminal proof", "key": "terminal-" + uuid.uuid4().hex[:12], "requestId": "terminal-project"})
         project = tk("configureLocalRepository", {"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})
+        if args.native_startup_only:
+            config = folder / "isolated-codex" / "config.toml"
+            config.write_text("[projects." + json.dumps(str(folder.resolve())) + "]\ntrust_level = \"untrusted\"\n[projects." + json.dumps(str(repository.resolve())) + "]\ntrust_level = \"trusted\"\n")
+        if args.console_only:
+            git("checkout", "-b", "console-feature")
         start = {"projectId": project["id"], "harness": harness, "requestId": "terminal-start"}
         row = tk("openConsoleSession", start)
         session_id = row["id"]
@@ -95,6 +111,25 @@ def main(database_url=None):
         import base64
         def read():
             return base64.b64decode(tk("attachSession", {"id": session_id})["data"]).decode(errors="replace")
+        if args.native_startup_only:
+            def native_ready():
+                screen = read()
+                if "remote project directory is inside an explicitly untrusted project" in screen:
+                    raise AssertionError("Native Codex still rejected the project trust scope")
+                return screen if any(word in screen.lower() for word in ("sign in", "log in", "welcome", "codex")) else None
+            wait_for(native_ready)
+            for _ in range(5):
+                time.sleep(.2)
+                assert "remote project directory is inside an explicitly untrusted project" not in read()
+                assert tk("listSessions")["items"][0]["state"] == "running"
+            assert row["directory"] == str(repository.resolve())
+            assert git_output(repository, "worktree", "list", "--porcelain").count("worktree ") == 1
+            tk("stopSession", {"id": session_id, "confirm": True})
+            wait_for(lambda: tk("listSessions")["items"][0]["state"] in ("exited", "failed"))
+            tk("shutdownLocalRuntime", {"confirm": True})
+            clean = True
+            print("PASS: installed Codex starts in a trusted fixture project without a provider credential or model turn")
+            return
         wait_for(lambda: ("native fixture connected" if args.native_fixture else "terminal fixture") in read())
         summary = next(item for item in tk("listProjectSummaries")["items"] if item["id"] == project["id"])
         assert summary["agents"] == 1 and summary["agentsScope"] == "own-authorized" and summary["tokens"] is None
@@ -165,13 +200,19 @@ def main(database_url=None):
         wait_for(lambda: ("native fixture answer resolved" if args.native_fixture else "received: after restart") in read())
         after = json.loads((folder / "runtime/sessions.json").read_text())[session_id]
         assert before["launchId"] == after["launchId"] and before["generation"] == after["generation"]
-        assert row["directory"] != str(repository.resolve()) and row["directory"].startswith(str((folder / "worktrees").resolve()))
+        assert row["directory"] == str(repository.resolve()), "Independent console did not use its project root"
+        assert git_output(repository, "worktree", "list", "--porcelain").count("worktree ") == 1, "Independent console created a worktree"
         tk("stopSession", {"id": session_id, "confirm": True})
         wait_for(lambda: tk("listSessions")["items"][0]["state"] == "exited")
         assert next(item for item in tk("listProjectSummaries")["items"] if item["id"] == project["id"])["agents"] == 0
         if args.native_fixture:
             expired = subprocess.run([str(ROOT / "bin/tk"), "listProjects"], env=context_env, capture_output=True, timeout=15)
             assert expired.returncode != 0, "Exited native context credential remained usable"
+        if args.console_only:
+            tk("shutdownLocalRuntime", {"confirm": True})
+            clean = True
+            print("PASS: project-root console, native directory argument, reconnect and observed stop; zero model calls")
+            return
         settings = tk("getSession")["settings"]
         limited = tk("copyWorkflow", {"sourceKey": "agent@1", "projectId": project["id"], "title": "One implementation worker", "requestId": "native-quota"})
         for phase in limited["phases"]:

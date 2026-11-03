@@ -26,7 +26,7 @@ func TestRetainedConsolePreventsSilentRepositoryRebinding(t *testing.T) {
 	p = call(t, svc, token, "configureLocalRepository", app.RepositoryInput{ProjectID: p.ID, ExpectedVersion: p.Version, Repository: repo, StorageRoot: filepath.Join(folder, "worktrees")}).(model.Project)
 	for _, state := range []string{"running", "unknown", "exited"} {
 		if err := db.Update(context.Background(), func(st *model.State) (bool, error) {
-			st.LocalSessions = map[string]model.LocalSession{"H1": {ID: "H1", Creator: "admin", ProjectID: p.ID, State: state, Worktree: model.Worktree{Path: filepath.Join(folder, "retained-console")}, BindingVersion: p.Repository.Version}}
+			st.LocalSessions = map[string]model.LocalSession{"H1": {ID: "H1", Creator: "admin", ProjectID: p.ID, State: state, Worktree: model.Worktree{Owner: "retained-owner", Path: filepath.Join(folder, "retained-console")}, BindingVersion: p.Repository.Version}}
 			return true, nil
 		}); err != nil {
 			t.Fatal(err)
@@ -36,4 +36,15 @@ func TestRetainedConsolePreventsSilentRepositoryRebinding(t *testing.T) {
 			t.Fatal("console artifacts were silently rebound", state, err)
 		}
 	}
+	if err := db.Update(context.Background(), func(st *model.State) (bool, error) {
+		st.LocalSessions = map[string]model.LocalSession{"H2": {ID: "H2", Creator: "admin", ProjectID: p.ID, State: "exited", Worktree: model.Worktree{Path: p.Repository.Repository}, BindingVersion: p.Repository.Version}}
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := call(t, svc, token, "configureLocalRepository", app.RepositoryInput{ProjectID: p.ID, ExpectedVersion: p.Version, Repository: repo, StorageRoot: filepath.Join(folder, "replacement-worktrees")}).(model.Project)
+	if result.Repository.Version != p.Repository.Version+1 {
+		t.Fatal("completed root console blocked rebinding")
+	}
+
 }

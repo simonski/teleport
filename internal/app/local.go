@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -408,7 +409,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "simulation_only", "Simulation projects cannot run real harnesses")
 	}
 	if p.Repository == nil {
-		return nil, failure(409, "binding_required", "Grant this project's local repository and worktree storage in Settings")
+		return nil, failure(409, "binding_required", "Grant this project's local repository in Settings")
 	}
 	if err = s.localClient.Ensure(ctx); err != nil {
 		return nil, failure(503, "runtime_unavailable", "The owned local daemon could not be reached or started")
@@ -566,7 +567,17 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "launch_basis_changed", "Repository authorization changed")
 	}
 	binding := gitwork.Binding{Repository: p.Repository.Repository, StorageRoot: p.Repository.StorageRoot}
-	if row.TicketID == 0 || row.Managed != nil && row.Managed.Role == "Refine" {
+	if row.TicketID == 0 && (row.Worktree.Path == "" || row.Worktree.Owner == "") {
+		// A free console belongs in the exact granted checkout. A previously
+		// prepared console worktree retains its original identity on retries.
+		err = gitwork.VerifyCheckout(ctx, binding.Repository)
+		if err == nil && row.Worktree.Path != "" && row.Worktree.Path != binding.Repository {
+			err = errors.New("console directory changed")
+		}
+		if err == nil {
+			row.Worktree.Path = binding.Repository
+		}
+	} else if row.Managed != nil && row.Managed.Role == "Refine" {
 		var work gitwork.Worktree
 		work, err = gitwork.PrepareConsole(ctx, binding, row.LaunchID[:24], row.ID)
 		row.Worktree = modelWorktree(work)
@@ -575,9 +586,12 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	}
 	s.gitMu.Unlock()
 	if err != nil {
+		if row.TicketID == 0 && row.Worktree.Owner == "" {
+			return nil, failure(409, "project_root_unavailable", "The granted project root is unavailable or changed; reconcile it before retrying")
+		}
 		return nil, failure(409, "worktree_preparation_pending", "Retain this launch intent and reconcile its owned worktree before retrying")
 	}
-	// Persist the owned directory before dispatch so an API crash cannot lose it.
+	// Persist the launch directory before dispatch so a retry cannot retarget it.
 	if in.Harness == "codex" {
 		hash, err := s.writeContextCredential(row)
 		if err != nil {
@@ -640,6 +654,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		launch := &localruntime.Launch{ID: row.ID, LaunchID: row.LaunchID, Generation: row.Generation, Program: s.localClient.Executable, Args: []string{"_terminal-fixture"}, Cwd: row.Worktree.Path, Cols: 100, Rows: 28}
 		if in.Harness == "codex" {
 			role := "Console"
+			if row.TicketID == 0 && row.Worktree.Owner != "" {
+				role = "ConsoleWorktree"
+			}
 			if row.TicketID != 0 {
 				role = "Doing"
 			}

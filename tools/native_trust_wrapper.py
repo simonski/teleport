@@ -22,8 +22,8 @@ def main():
         record_handoff()
         os.execv(str(native), [str(native), *arguments])
     working = Path.cwd().resolve()
-    if not working.is_relative_to((fixture / "worktrees").resolve()):
-        raise SystemExit("Native acceptance launch must stay in its owned worktree")
+    if working != (fixture / "repository").resolve() and not working.is_relative_to((fixture / "worktrees").resolve()):
+        raise SystemExit("Native acceptance launch must stay in its fixture repository or owned worktree")
     trusted = {str(working), str(fixture / "repository"), str((fixture / "repository").resolve())}
     # The native CLI's dotted-key override grammar does not parse quoted path
     # segments as TOML keys. Supply the owned map as one TOML inline table.

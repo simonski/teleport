@@ -39,6 +39,20 @@ func main() {
 		return
 	}
 	if len(os.Args) > 2 && os.Args[1] == "--remote" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			history.Exit(2)
+		}
+		valid := false
+		for i, arg := range os.Args {
+			if (arg == "-C" || arg == "--cd") && i+1 < len(os.Args) && os.Args[i+1] == cwd {
+				valid = true
+			}
+		}
+		if !valid {
+			fmt.Fprintln(os.Stderr, "native fixture requires the exact session directory")
+			history.Exit(2)
+		}
 		tui(strings.TrimPrefix(os.Args[2], "unix://"))
 		return
 	}

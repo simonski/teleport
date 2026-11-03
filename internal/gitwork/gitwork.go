@@ -115,6 +115,25 @@ func contained(root, path string) bool {
 	relative, err := filepath.Rel(root, path)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
+
+// VerifyCheckout confirms the granted checkout has not moved or been replaced.
+// Free consoles may use the branch currently checked out by the operator.
+func VerifyCheckout(ctx context.Context, repository string) error {
+	root, err := potentialPath(repository)
+	if err != nil || root != repository {
+		return errors.New("the granted project root changed")
+	}
+	top, err := git(ctx, root, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return err
+	}
+	actual, err := potentialPath(strings.TrimSpace(top))
+	if err != nil || actual != root {
+		return errors.New("the granted project root no longer names the exact repository")
+	}
+	return nil
+}
+
 func Inspect(ctx context.Context, repository, storage string) (Binding, error) {
 	repo, err := potentialPath(repository)
 	if err != nil {

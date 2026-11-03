@@ -199,3 +199,39 @@ func TestWorktreeSpecificFiltersNeverExecuteDuringInspection(t *testing.T) {
 		t.Fatal("worktree-specific clean filter executed during inspection")
 	}
 }
+
+func TestVerifyCheckoutAcceptsCurrentBranchAndRejectsOtherPaths(t *testing.T) {
+	folder := t.TempDir()
+	repo := filepath.Join(folder, "repo")
+	if err := os.Mkdir(repo, 0700); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(repo, "file"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-m", "fixture")
+	git(t, repo, "checkout", "-b", "feature")
+	canonical, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = gitwork.VerifyCheckout(context.Background(), canonical); err != nil {
+		t.Fatal("feature branch checkout refused", err)
+	}
+	sub := filepath.Join(canonical, "sub")
+	if err = os.Mkdir(sub, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = gitwork.VerifyCheckout(context.Background(), sub); err == nil {
+		t.Fatal("repository subdirectory accepted as root")
+	}
+	other := filepath.Join(folder, "alias")
+	if err = os.Symlink(canonical, other); err != nil {
+		t.Fatal(err)
+	}
+	if err = gitwork.VerifyCheckout(context.Background(), other); err == nil {
+		t.Fatal("changed symlink target accepted as exact grant")
+	}
+}

@@ -372,7 +372,7 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 			}
 		}
 		for _, session := range st.LocalSessions {
-			if session.ProjectID == p.ID && (activeLocal(session) || session.Worktree.Path != "") {
+			if session.ProjectID == p.ID && (activeLocal(session) || session.Worktree.Owner != "" && session.Worktree.Path != "") {
 				return false, failure(409, "migration_required", "Retained harness worktrees and unresolved sessions require explicit host migration")
 			}
 		}

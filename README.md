@@ -29,7 +29,7 @@ Run `tk skill > SKILL.md` to export the bundled agent skill for a harness. No ru
 
 Bare `tk` or `tk help` lists the top-level commands. Use `tk agent` (or `tk help agent`) to list that command's actions, and `tk agent ls -h` for typed flags. `tk commands` prints the full catalogue; add `-json` for machine-readable output. Examples: `tk project ls`, `tk ticket show 35`, `tk agent ls -project 2`, `tk idea ls`, and `tk workflow ls`. Agent listing reads accessible harness sessions; starting one remains explicit. Existing API-style commands such as `tk listTickets -data '{"projectId":2,"limit":50}'` keep working.
 
-New projects record a project root, defaulting to `~/code/teleport`; it can be changed during creation. The root does not itself grant execution access. An administrator can grant the local repository in project settings, and worktree storage is chosen automatically. Existing bindings retain their storage location.
+New projects record a project root, defaulting to `~/code/teleport`; it can be changed during creation. The root does not itself grant execution access. An administrator can grant the local repository in project settings, and worktree storage is chosen automatically. Existing bindings retain their storage location. In single-user local mode, independent harness consoles run in the selected project root using the harness’s native permissions; ticket work retains its own worktree.
 
 `tk project ls` lists accessible projects. A signed-in administrator can run `tk project rm NAME`; the command previews affected records and retained artifacts, then requires the exact project name as confirmation. Active execution and cross-project references must be resolved first.
 

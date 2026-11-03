@@ -6,11 +6,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 )
 
 type nativeInput struct{ bytes.Buffer }
+
+func TestNativeSessionInstructionsMatchExecutionDirectory(t *testing.T) {
+	if !strings.Contains(nativeSessionInstructions("Console"), "project root") || strings.Contains(nativeSessionInstructions("Console"), "worktree") {
+		t.Fatal("console instructions do not match the project root")
+	}
+	if !strings.Contains(nativeSessionInstructions("Doing"), "worktree") {
+		t.Fatal("ticket instructions do not retain worktree context")
+	}
+}
 
 func TestReadOnlyPhaseCannotOverrideTurnPermissions(t *testing.T) {
 	for _, role := range []string{"Refine", "Review"} {

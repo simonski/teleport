@@ -63,6 +63,14 @@ type nativeProxy struct {
 	role            string
 }
 
+func nativeSessionInstructions(role string) string {
+	location := "Work only in the provided worktree."
+	if role == "Console" {
+		location = "Work in the provided project root."
+	}
+	return "\nThis is an owned teleport local harness. Read tk skill for supported context APIs. " + location + " Teleport human scope/code approval is never supplied by native OS permission or an agent. Direct terminal input is outside normal ticket supervision."
+}
+
 func constrainNativePhase(role, method, cwd string, params map[string]any) {
 	if role != "Refine" && role != "Review" {
 		return
@@ -227,7 +235,7 @@ func (p *nativeProxy) accept(w http.ResponseWriter, r *http.Request) {
 					}
 					params["cwd"] = p.cwd
 					instructions, _ := params["developerInstructions"].(string)
-					params["developerInstructions"] = instructions + "\nThis is an owned teleport local harness. Read tk skill for supported context APIs. Work only in the provided worktree. Teleport human scope/code approval is never supplied by native OS permission or an agent. Direct terminal input is outside normal ticket supervision."
+					params["developerInstructions"] = instructions + nativeSessionInstructions(p.role)
 					if p.role == "Refine" || p.role == "Review" {
 						constrainNativePhase(p.role, message.Method, p.cwd, params)
 					}

@@ -2,7 +2,7 @@ package server
 
 import (
 	"crypto/rand"
-	"embed"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -21,8 +21,8 @@ import (
 	teleportskill "teleport/internal/skills/teleport"
 )
 
-//go:embed web/*
-var assets embed.FS
+//go:embed web_assets.zip
+var packedWeb []byte
 
 type Operation struct {
 	Name    string `json:"name"`
@@ -112,7 +112,7 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 		}
 		write(w, 200, result)
 	})
-	web, _ := fs.Sub(assets, "web")
+	web := newWebFS(packedWeb)
 	index := func(w http.ResponseWriter, r *http.Request) {
 		var entropy [24]byte
 		if _, err := rand.Read(entropy[:]); err != nil {
@@ -120,7 +120,7 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 			return
 		}
 		nonce := base64.RawURLEncoding.EncodeToString(entropy[:])
-		content, err := assets.ReadFile("web/index.html")
+		content, err := fs.ReadFile(web, "index.html")
 		if err != nil {
 			http.Error(w, "Page unavailable", 500)
 			return

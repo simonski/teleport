@@ -9,6 +9,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -34,9 +35,11 @@ def linux_build(arch,builder="auto"):
     output.parent.mkdir(parents=True,exist_ok=True)
     version=os.environ.get("TELEPORT_BUILD_VERSION") or local_version(ROOT,0).replace("dev.0","deploy")
     environment=dict(os.environ,GOOS="linux",GOARCH=arch,CGO_ENABLED="1")
+    environment.setdefault("CGO_CFLAGS","-Os -g0")
     native=platform.system()=="Linux" and ARCHES.get(platform.machine())==arch
     chosen=("native" if native else "zig" if shutil.which("zig") else "docker") if builder=="auto" else builder
-    flags=["-trimpath","-tags","netgo,osusergo","-ldflags",f"-X main.version={version} -linkmode external -extldflags -static"]
+    subprocess.run([sys.executable,"-B",str(ROOT/"tools/pack_web.py")],cwd=ROOT,check=True)
+    flags=["-trimpath","-tags","netgo,osusergo","-ldflags",f"-s -w -X main.version={version} -linkmode external -extldflags -static"]
     if chosen=="zig":
         zig=shutil.which("zig")
         if not zig:
@@ -52,7 +55,7 @@ def linux_build(arch,builder="auto"):
         cache=ROOT/".cache/tools/deploy";cache.mkdir(parents=True,exist_ok=True)
         command=["docker","run","--rm","--platform","linux/"+arch,"--user",f"{os.getuid()}:{os.getgid()}",
                  "-v",str(ROOT)+":/src:ro","-v",str(output.parent)+":/out","-v",str(cache)+":/cache","-w","/src",
-                 "-e","CGO_ENABLED=1","-e","GOCACHE=/cache/build","-e","GOMODCACHE=/cache/mod","-e","GOPATH=/cache/gopath",
+                 "-e","CGO_ENABLED=1","-e","CGO_CFLAGS","-e","GOCACHE=/cache/build","-e","GOMODCACHE=/cache/mod","-e","GOPATH=/cache/gopath",
                  "golang:1.27.3-bookworm","go","build",*flags,"-o","/out/tk","./cmd/tk"]
     else:
         raise RuntimeError("Native builds require Linux with the target architecture")
@@ -116,7 +119,7 @@ def main():
     uploads=[(binary,"tk"),(ROOT/"tools/deploy_remote.py","deploy_remote.py"),(ROOT/"tools/tool_history.py","tool_history.py"),(ROOT/"tools/postgres.py","postgres.py"),(ROOT/"tools/migrate_storage.py","migrate_storage.py")]
     if args.migration_bridge:uploads.append((args.migration_bridge,"migration-tk"))
     for source,destination in uploads:
-        subprocess.run(["scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=10",str(source),args.host+":"+shlex.quote(remote+"/"+destination)],check=True,timeout=120)
+        subprocess.run(["scp","-C","-q","-o","BatchMode=yes","-o","ConnectTimeout=10",str(source),args.host+":"+shlex.quote(remote+"/"+destination)],check=True,timeout=120)
     manifest={"root":directory,"release":release,"version":version,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"addr":args.addr,"publicHost":primary,"publicHosts":public_hosts}
     if args.reset:manifest["reset"]="reset"
     if args.migration_bridge:manifest["migrationBridgeSHA256"]=hashlib.sha256(args.migration_bridge.read_bytes()).hexdigest()

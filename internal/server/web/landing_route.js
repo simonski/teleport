@@ -38,11 +38,11 @@ export function separatedStep(position,target,others,maxDistance,clearance=ROCKE
   return {...position};
 }
 export function flightPlan(cycle=0){
-  const orbits=2+(Math.abs(cycle)%4),replacement=cycle%3===2;
+  const orbits=2+(Math.abs(cycle)%4),replacement=true,damaged=cycle%3===2;
   const stages=[...(cycle===0?[['delivery',2400],['unload',1100],['carrier-exit',1400]]:[]),['rest',1800],['ignite',1000],['lift',1600],['outbound',6800],['orbit',orbits*2700],['return',4000],['descend',2300],['smoke',1400],['pause',1000],
-    ...(replacement?[['fault',1200],['recovery-arrive',1700],['recovery-load',1400],['recovery-exit',1800],['replacement-arrive',2400],['replacement-unload',1100],['replacement-exit',1400]]:
-      [['tanker-arrive',1700],['connect',900],['refuel',2400],['disconnect',900],['tanker-back',1000],['tanker-exit',1300]])];
-  let at=0;return {orbits,replacement,duration:stages.reduce((sum,stage)=>sum+stage[1],0),stages:stages.map(([name,duration])=>{const stage={name,start:at,duration};at+=duration;return stage;})};
+    ...(damaged?[['fault',1200]]:[['tanker-arrive',1700],['connect',900],['refuel',2400],['disconnect',900],['tanker-back',1000],['tanker-exit',1300]]),
+    ['recovery-arrive',1700],['recovery-load',1400],['recovery-exit',1800],['replacement-arrive',2400],['replacement-unload',1100],['replacement-exit',1400]];
+  let at=0;return {orbits,replacement,damaged,duration:stages.reduce((sum,stage)=>sum+stage[1],0),stages:stages.map(([name,duration])=>{const stage={name,start:at,duration};at+=duration;return stage;})};
 }
 function cubic(a,b,c,d,t){const u=1-t;return {x:u*u*u*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t*t*t*d.x,y:u*u*u*a.y+3*u*u*t*b.y+3*u*t*t*c.y+t*t*t*d.y};}
 function routePoint(stage,t,moon,cycle){
@@ -56,7 +56,7 @@ function routeAngle(stage,t,moon,cycle){const a=routePoint(stage,Math.max(0,t-.0
 function angleMix(angle,target,t){const delta=((target-angle+540)%360)-180;return angle+delta*t;}
 export function sampleFlight(milliseconds,cycle=0,moon=DEFAULT_MOON){
   const plan=flightPlan(cycle),time=Math.max(0,Math.min(plan.duration-.0001,milliseconds)),stage=plan.stages.find(stage=>time<stage.start+stage.duration)||plan.stages.at(-1),t=clamp((time-stage.start)/stage.duration);
-  const variant=Math.floor(cycle/3)%ROCKETS.length;
+  const variant=cycle%ROCKETS.length;
   const frame={...LANDING_HOME,angle:-90,engine:0,gimbal:0,arms:1,smoke:0,exhaust:0,steam:0,fins:0,fuel:1,hose:0,vehicle:null,debris:null,broken:false,opacity:1,variant,phase:stage.name,orbits:plan.orbits,orbitTurns:0};
   const truck=(kind,x,load=0,opacity=1)=>({kind,x,y:137,load,opacity});
   const delivered=stage.name.startsWith('replacement-');
@@ -84,9 +84,9 @@ export function sampleFlight(milliseconds,cycle=0,moon=DEFAULT_MOON){
     case 'tanker-back':frame.vehicle=truck('tanker',mix(2,-18,smooth(t)));break;
     case 'tanker-exit':frame.vehicle=truck('tanker',mix(-18,-78,smooth(t)),0,1-smooth((t-.7)/.3));break;
     case 'fault':frame.broken=t>.12;frame.debris={x:LANDING_HOME.x+7+10*smooth(t),y:LANDING_HOME.y+3+17*smooth(t),angle:110*smooth(t),opacity:smooth(t*8)};break;
-    case 'recovery-arrive':frame.broken=true;frame.debris={x:63,y:132,angle:110,opacity:1};frame.vehicle=truck('recovery',mix(-78,LANDING_HOME.x,smooth(t)),0,smooth(t*5));break;
-    case 'recovery-load':frame.broken=true;frame.vehicle=truck('recovery',LANDING_HOME.x,smooth(t));frame.angle=mix(-90,-25,smooth(t));frame.y=mix(LANDING_HOME.y,123,smooth(t));frame.arms=1-smooth(t);frame.debris={x:mix(63,34,smooth(t)),y:mix(132,129,smooth(t)),angle:110,opacity:1};break;
-    case 'recovery-exit':frame.broken=true;frame.vehicle=truck('recovery',mix(LANDING_HOME.x,-78,smooth(t)),1,1-smooth((t-.7)/.3));frame.x=frame.vehicle.x;frame.y=123;frame.angle=-25;frame.arms=0;frame.opacity=frame.vehicle.opacity;frame.debris={x:frame.x-12,y:129,angle:110,opacity:frame.opacity};break;
+    case 'recovery-arrive':frame.broken=plan.damaged;if(plan.damaged)frame.debris={x:63,y:132,angle:110,opacity:1};frame.vehicle=truck('recovery',mix(-78,LANDING_HOME.x,smooth(t)),0,smooth(t*5));break;
+    case 'recovery-load':frame.broken=plan.damaged;frame.vehicle=truck('recovery',LANDING_HOME.x,smooth(t));frame.angle=mix(-90,-25,smooth(t));frame.y=mix(LANDING_HOME.y,123,smooth(t));frame.arms=1-smooth(t);if(plan.damaged)frame.debris={x:mix(63,34,smooth(t)),y:mix(132,129,smooth(t)),angle:110,opacity:1};break;
+    case 'recovery-exit':frame.broken=plan.damaged;frame.vehicle=truck('recovery',mix(LANDING_HOME.x,-78,smooth(t)),1,1-smooth((t-.7)/.3));frame.x=frame.vehicle.x;frame.y=123;frame.angle=-25;frame.arms=0;frame.opacity=frame.vehicle.opacity;if(plan.damaged)frame.debris={x:frame.x-12,y:129,angle:110,opacity:frame.opacity};break;
   }
   return frame;
 }

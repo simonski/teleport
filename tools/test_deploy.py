@@ -11,6 +11,19 @@ from deploy_remote import deploy,read_credentials,reset_installation,secure_json
 
 
 class DeployTest(unittest.TestCase):
+    def test_upload_compresses_transport_and_hashes_original_binary(self):
+        import contextlib, io, sys
+        import deploy as deploy_tool
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);binary=root/"tk";binary.write_bytes(b"fixture binary")
+            with patch.object(deploy_tool,"ROOT",root),patch.object(deploy_tool,"linux_build",return_value=(binary,"fixture")),patch.object(sys,"argv",["deploy.py"]),patch("deploy.subprocess.check_output",return_value="Linux x86_64"),patch("deploy.subprocess.run") as run,contextlib.redirect_stdout(io.StringIO()):
+                deploy_tool.main()
+            uploads=[call.args[0] for call in run.call_args_list if call.args[0][0]=="scp" and str(binary) in call.args[0]]
+            self.assertEqual(len(uploads),1)
+            self.assertIn("-C",uploads[0])
+            manifests=[json.loads(call.kwargs["input"]) for call in run.call_args_list if "input" in call.kwargs]
+            self.assertEqual(manifests[0]["sha256"],hashlib.sha256(binary.read_bytes()).hexdigest())
+
     def test_reset_guard_precedes_build_and_network(self):
         import os, subprocess, sys
         environment=dict(os.environ,CONFIRM="")

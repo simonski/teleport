@@ -17,6 +17,8 @@ The browser bundles Three.js 0.187.0 under its [MIT license](internal/server/web
 
 Run `make sbom` to generate `sbom.cdx.json`.
 
+Release builds use size-optimized C code, stripped native debugging information and a compressed embedded web bundle. `make build-debug` retains native debug information when needed. `python3 -B tools/pack_web.py` refreshes the committed bundle after editing browser assets; normal builds refresh it automatically, and `--verify` detects a stale bundle. Deployments use compressed SCP while retaining binary hash verification.
+
 `make check` is the lightweight source/unit gate: formatting, Python/browser syntax, serial browser unit tests, documentation and tooling tests. It starts no application Go suite, database, real browser or deliberate timeout fixture. Preview its exact scope with `python3 -B tools/check.py --plan`. Broad checks are currently paused; use focused tests until explicitly resumed.
 
 Use `make check-go` (or `make test`) for normal Go tests with disposable PostgreSQL, `make check-integration` for full vet plus Go/database, cross-language history, browser-driver and timeout/cleanup checks, and `make race-check` (also `make check-race`) for explicit race instrumentation. Go checks use low scheduling priority, two execution threads by default and one package at a time; an explicit `GOMAXPROCS` is preserved. `make check-full` runs lightweight, integration and race checks in sequence for a deliberate local/release gate. No GitHub Actions are configured.

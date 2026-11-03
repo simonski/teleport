@@ -125,7 +125,7 @@ def main():
             page.locator('#nav-views [data-view="Todos"]').wait_for()
             verify_flight_easter_egg(page, args.screenshot)
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
-            assert page.locator('.landing-planet').count() == 8
+            assert page.locator('.landing-planet').count() == 4
             assert page.locator('.landing-star').count() >= 20
             page.evaluate("landingFlight.seekPhase('orbit',.5,0);window.flightBeforeMove=landingFlight.snapshot();document.querySelector('.login-moon').focus()")
             page.keyboard.press("ArrowLeft")
@@ -133,12 +133,21 @@ def main():
             page.evaluate("landingFlight.simulate(50)")
             assert page.evaluate("()=>{const current=landingFlight.snapshot();const old=window.flightBeforeMove;const distance=Math.hypot(current.x-old.x,current.y-old.y);return distance>0&&distance<=4.5}")
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
-            maximum, held, launches = 0, False, set()
+            maximum, held, launches, delivered, collected = 0, False, set(), False, False
             for _ in range(80):
                 state = page.evaluate("landingFlight.simulate(1000)")
                 maximum = max(maximum, len(state["fleet"]))
                 launches.update(craft["serial"] for craft in state["fleet"])
                 held = held or state["holding"] or any(craft.get("phase") == "holding" for craft in state["fleet"])
+                delivered = delivered or any(craft.get("phase") == "delivery" for craft in state["fleet"])
+                collected = collected or any(craft.get("phase") == "pickup" for craft in state["fleet"])
+                for craft in state["fleet"]:
+                    if craft.get("phase") == "delivery" and craft["groundTime"] < 2400 or craft.get("phase") == "pickup" and craft["groundTime"] > 3500:
+                        serial = str(craft["serial"])
+                        aligned = page.evaluate("serial=>{const rocket=document.querySelector('.fleet-rocket[data-rocket=\"'+serial+'\"]');const carrier=document.querySelector('.fleet-carrier[data-rocket=\"'+serial+'\"]');return Math.abs(rocket.getCTM().e-carrier.getCTM().e)<.01}", serial)
+                        assert aligned, "A transported rocket detached from its carrier"
+                        if args.screenshot:
+                            page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem + "-carrier")))
                 assert state["minimum"] is None or state["minimum"] >= 29, state
                 assert len(state["fleet"]) <= 2, state
                 positions = [state["position"]] + [craft["position"] for craft in state["fleet"]]
@@ -151,11 +160,12 @@ def main():
                     assert not pad_craft, state
             assert maximum >= 2, maximum
             assert held, "A returning rocket never entered the holding pattern"
+            assert delivered and collected, "A rocket skipped its carrier delivery or pickup"
             assert len(launches) >= 3, "Rockets did not land and release the pad for later launches"
             assert not errors, json.dumps(errors)
         finally:
             browser.close()
-    print("PASS: flight codes, focus and fade, mobile/reduced motion, eight planets, stars, multiple rockets and pad coordination")
+    print("PASS: flight codes, focus and fade, mobile/reduced motion, four planets, stars, rocket carriers and pad coordination")
 
 
 if __name__ == "__main__":

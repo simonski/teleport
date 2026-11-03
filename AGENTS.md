@@ -28,6 +28,7 @@ Preserve the Goal → Epic → Task hierarchy. PostgreSQL is the only applicatio
 Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required for browser-source development checks. Supported commands:
 
 - `make build`: produce `bin/tk` with build version metadata.
+- `make build-debug`: retain native debug information in `bin/tk`.
 - `make install`: install the executable.
 - `make sbom`: generate `sbom.cdx.json` with Go and bundled browser dependencies, licenses and hashes.
 - `make browser-tools`: prepare a cached, pinned Python Playwright client and its matching headless Chromium for browser acceptance checks.
@@ -54,6 +55,8 @@ Every `tools/smoke.py` invocation has a 30-second wall-clock budget, including t
 The default PostgreSQL browser suite provisions a disposable socket-only cluster and runs isolated `core`, `shell` and `views` databases concurrently inside that single budget and owned process group. The shell slice retains profile, navigation, keyboard and project checks; core retains ticket delivery, workflows, supervised demonstration and Git; views retains Ideas, Graph, Goals and Calendar. `--browser-slice core|shell|views` selects one slice. `--browser-driver cli` retains the previous command driver for comparisons; `python3 -B tools/browser_benchmark.py` compares identical, successful fill/click/read actions with both drivers. `TELEPORT_POSTGRES_BIN` selects server binaries; Postgres.app and standard Linux installations are discovered automatically.
 
 `make build` always creates a new build identity. `python3 -B tools/build.py --reuse` reuses an artifact only when source and embedded bytes, module files/replacements, toolchain, target, flags, Git identity and binary hash match. PostgreSQL checks use this mode. Workspace/overlay builds disable reuse. `make sbom` caches the Go inventory with a content fingerprint, verifies browser assets and runtime licenses again, and refreshes source identity, timestamp and serial number. `python3 -B tools/sbom.py --refresh` forces inventory regeneration. Remove `.cache/tools` to clear these caches.
+
+Normal native/Linux builds use size-optimized C flags, stripped native debug data and the committed compressed web bundle; `make build-debug` preserves debugging data. Builds refresh the bundle from `internal/server/web/`; `python3 -B tools/pack_web.py --verify` detects stale assets. Deployment SCP uses transport compression, and verifies the uncompressed executable hash on the target.
 
 ## Coding Style & Naming Conventions
 

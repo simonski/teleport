@@ -11,12 +11,13 @@ async function startLandingFlight(){
   const fleet=[],colors=['#c96951','#698fa3','#a884b0','#b99865','#6e9f8b','#c27e91','#929b63','#8390be','#bd8b70'];
   let padOwner=null,fleetClock=0,nextLaunch=0,fleetSerial=0;
   function stageStart(plan,name){return plan.stages.find(stage=>stage.name===name).start;}
-  function clearFleet(){for(const craft of fleet)craft.node.remove();fleet.length=0;padOwner=null;fleetClock=0;nextLaunch=0;fleetSerial=0;}
+  function clearFleet(){for(const craft of fleet){craft.node.remove();craft.carrier.remove();}fleet.length=0;padOwner=null;fleetClock=0;nextLaunch=0;fleetSerial=0;}
   function launchFleet(){
     const number=++fleetSerial,node=ship.cloneNode(true);node.classList.remove('flight-rocket','login-ship');node.classList.add('fleet-rocket');node.style.color=colors[(number-1)%colors.length];node.style.opacity='1';
-    svg.insertBefore(node,moonElement);const trip=number*3,plan=route.flightPlan(trip),target=destinations[Math.floor(Math.random()*destinations.length)];
-    const craft={node,trip,plan,target,time:stageStart(plan,'lift'),position:{...route.LANDING_HOME},holding:false,finished:false,serial:number};
-    node.querySelectorAll('.rocket-variant').forEach((variant,index)=>{variant.style.display=index===Math.floor(trip/3)%route.ROCKETS.length?'':'none';});
+    const carrier=vehicle.cloneNode(true);carrier.classList.add('fleet-carrier');carrier.dataset.rocket=String(number);node.dataset.rocket=String(number);node.setAttribute('transform','translate(-78 108) rotate(-90)');carrier.setAttribute('transform','translate(-78 137)');carrier.style.opacity='0';carrier.querySelectorAll('[data-vehicle]').forEach(item=>{item.style.display=item.dataset.vehicle==='carrier'?'':'none';});
+    svg.insertBefore(carrier,moonElement);svg.insertBefore(node,moonElement);const trip=number,plan=route.flightPlan(trip),target=destinations[Math.floor(Math.random()*destinations.length)];
+    const craft={node,carrier,trip,plan,target,time:stageStart(plan,'lift'),position:{x:-78,y:108},holding:false,finished:false,serial:number,ground:'delivery',groundTime:0};
+    node.querySelectorAll('.rocket-variant').forEach((variant,index)=>{variant.style.display=index===trip%route.ROCKETS.length?'':'none';});
     fleet.push(craft);padOwner=craft;nextLaunch=fleetClock+6500;
   }
   function advanceFleet(dt,primaryPhase){
@@ -24,12 +25,28 @@ async function startLandingFlight(){
     const primaryBusy=!['outbound','orbit'].includes(primaryPhase);
     for(const craft of fleet){
       if(craft.finished)continue;
+      if(craft.ground){
+        const previousGroundTime=craft.groundTime;craft.groundTime+=dt;const t=craft.groundTime,delivery=craft.ground==='delivery';let truck,load,rocketX=route.LANDING_HOME.x,rocketY=route.LANDING_HOME.y;
+        const ease=value=>{value=Math.max(0,Math.min(1,value));return value*value*(3-2*value);};
+        if(t<2400){truck=-78+124*ease(t/2400);load=delivery?1:0;if(delivery){rocketX=truck;rocketY-=4;}}
+        else if(t<3500){truck=46;load=delivery?1-ease((t-2400)/1100):ease((t-2400)/1100);rocketY-=4*load;}
+        else{truck=46-124*ease((t-3500)/1400);load=delivery?0:1;if(!delivery){rocketX=truck;rocketY-=4;}}
+        const candidate={x:rocketX,y:rocketY},others=fleet.filter(other=>other!==craft&&!other.finished).map(other=>other.position);if(smoothed)others.push(smoothed);
+        if(others.some(other=>{const before=Math.hypot(craft.position.x-other.x,craft.position.y-other.y),after=Math.hypot(candidate.x-other.x,candidate.y-other.y);return before<route.ROCKET_CLEARANCE?after<before:after<route.ROCKET_CLEARANCE;})){craft.groundTime=previousGroundTime;continue;}
+        craft.position=candidate;craft.node.setAttribute('transform',`translate(${rocketX} ${rocketY}) rotate(-90)`);craft.node.querySelector('.rocket-engine').style.opacity='0';
+        craft.node.querySelectorAll('.rocket-fins').forEach(fin=>fin.setAttribute('transform',`scale(1 ${.28+.72*Math.sin(Math.PI*Math.min(1,t/4900))**2})`));
+        craft.carrier.style.opacity=String(t<3500?Math.min(1,t/400):Math.max(0,Math.min(1,(4900-t)/420)));craft.carrier.setAttribute('transform',`translate(${truck} 137)`);
+        craft.carrier.querySelectorAll('.ground-wheel').forEach(wheel=>wheel.setAttribute('transform',`rotate(${truck*12} ${wheel.dataset.wheelX} 3)`));craft.carrier.querySelector('.carrier-support').setAttribute('transform',`rotate(${(1-load)*65} -10 -7)`);
+        craft.node.dataset.phase=delivery?'delivery':'pickup';
+        if(t>=4900){craft.carrier.style.opacity='0';if(delivery)craft.ground='';else{craft.finished=true;craft.node.style.display='none';if(padOwner===craft)padOwner=null;}}
+        continue;
+      }
       const next=craft.time+dt,returnAt=stageStart(craft.plan,'return'),smokeAt=stageStart(craft.plan,'smoke');
       if(craft.time<returnAt&&next>=returnAt){
         if(primaryBusy||padOwner&&padOwner!==craft){craft.time=returnAt-.01;craft.holding=true;}
         else{padOwner=craft;craft.holding=false;craft.time=next;}
       }else craft.time=next;
-      if(craft.time>=smokeAt){if(Math.hypot(craft.position.x-route.LANDING_HOME.x,craft.position.y-route.LANDING_HOME.y)>2)craft.time=smokeAt-.01;else{craft.finished=true;craft.node.style.display='none';if(padOwner===craft)padOwner=null;continue;}}
+      if(craft.time>=smokeAt){if(Math.hypot(craft.position.x-route.LANDING_HOME.x,craft.position.y-route.LANDING_HOME.y)>2)craft.time=smokeAt-.01;else{craft.ground='pickup';craft.groundTime=0;craft.position={...route.LANDING_HOME};continue;}}
       const frame=route.sampleFlight(craft.time,craft.trip,craft.target.point());
       if(frame.phase==='outbound'&&padOwner===craft)padOwner=null;
       const wanted=craft.holding?route.holdingPoint(craft.serial,fleetClock):frame;
@@ -42,7 +59,7 @@ async function startLandingFlight(){
       craft.node.querySelector('.rocket-flame').setAttribute('transform',`scale(${Math.max(.01,thrust)} ${.65+thrust*.35})`);
       craft.node.dataset.phase=craft.holding?'holding':frame.phase;craft.node.dataset.destination=craft.target.name;
     }
-    for(let index=fleet.length-1;index>=0;index--)if(fleet[index].finished){fleet[index].node.remove();fleet.splice(index,1);}
+    for(let index=fleet.length-1;index>=0;index--)if(fleet[index].finished){fleet[index].node.remove();fleet[index].carrier.remove();fleet.splice(index,1);}
     if(!primaryBusy&&!padOwner&&fleet.length<route.FLEET_LIMIT-1&&fleetClock>=nextLaunch&&smoothed&&Math.hypot(smoothed.x-route.LANDING_HOME.x,smoothed.y-route.LANDING_HOME.y)>=route.ROCKET_CLEARANCE)launchFleet();
   }
   function paint(frame,instant=false,dt=1000/60){
@@ -118,7 +135,7 @@ async function startLandingFlight(){
   landingFlight={
     seek(milliseconds,nextCycle=cycle){manual=true;clearFleet();elapsed=milliseconds;cycle=nextCycle;smoothed=null;paint(sample(),true);resume();return {...sample(),moon:{...moon}};},
     seekPhase(name,fraction=.5,nextCycle=cycle){const stage=route.flightPlan(nextCycle).stages.find(stage=>stage.name===name);if(!stage)throw new Error('Unknown landing phase');return this.seek(stage.start+stage.duration*Math.max(0,Math.min(.999999,fraction)),nextCycle);},
-    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;let minimum=Infinity;for(let time=0;time<milliseconds;time+=50){advance(Math.min(50,milliseconds-time),time);const positions=[smoothed,...fleet.filter(craft=>!craft.finished).map(craft=>craft.position)];for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++)minimum=Math.min(minimum,Math.hypot(positions[a].x-positions[b].x,positions[a].y-positions[b].y));}return {phase:sample().phase,holding:svg.dataset.holding==='true',position:{...smoothed},minimum:Number.isFinite(minimum)?minimum:null,fleet:fleet.map(craft=>({serial:craft.serial,phase:craft.node.dataset.phase,destination:craft.target.name,position:{...craft.position}})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
+    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;let minimum=Infinity;for(let time=0;time<milliseconds;time+=50){advance(Math.min(50,milliseconds-time),time);const positions=[smoothed,...fleet.filter(craft=>!craft.finished).map(craft=>craft.position)];for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++)minimum=Math.min(minimum,Math.hypot(positions[a].x-positions[b].x,positions[a].y-positions[b].y));}return {phase:sample().phase,holding:svg.dataset.holding==='true',position:{...smoothed},minimum:Number.isFinite(minimum)?minimum:null,fleet:fleet.map(craft=>({serial:craft.serial,phase:craft.node.dataset.phase,destination:craft.target.name,position:{...craft.position},groundTime:craft.groundTime})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
     play(){manual=false;resume();},snapshot:()=>({...sample(),x:smoothed?.x??sample().x,y:smoothed?.y??sample().y,moon:{...moon},elapsed,cycle,destination:destination.name}),
     dispose(){disposed=true;clearFleet();if(request)cancelAnimationFrame(request);moonElement.removeEventListener('pointerdown',down);moonElement.removeEventListener('pointermove',move);moonElement.removeEventListener('pointerup',up);moonElement.removeEventListener('pointercancel',up);moonElement.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',resume);media.removeEventListener('change',resume);window.removeEventListener('resize',resize);},
   };

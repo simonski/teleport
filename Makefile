@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install sbom browser-tools deploy deploy-reset db-up db-down check check-go check-integration check-race race-check check-full test lint clean
+.PHONY: help build build-debug install sbom browser-tools deploy deploy-reset db-up db-down check check-go check-integration check-race race-check check-full test lint clean
 DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
@@ -9,6 +9,7 @@ export CONFIRM
 help:
 	@echo ""
 	@echo "build         Build bin/tk with a local build identity"
+	@echo "build-debug   Build bin/tk with native debugging information"
 	@echo "install       Build and install tk into GOBIN or GOPATH/bin"
 	@echo "sbom          Generate sbom.cdx.json for Go and bundled browser dependencies"
 	@echo "browser-tools Prepare the pinned persistent browser client"
@@ -28,6 +29,8 @@ help:
 	@echo ""
 build:
 	python3 tools/build.py
+build-debug:
+	python3 tools/build.py --debug
 install: build
 	python3 tools/build.py --install-only
 sbom:

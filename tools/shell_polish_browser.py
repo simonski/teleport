@@ -19,7 +19,7 @@ def verify_landing(browser):
     browser("screenshot", "/tmp/teleport-landing-repair.png")
     browser("eval", "{const frame=landingFlight.seekPhase('recovery-exit',.25,2);if(frame.vehicle.kind!=='recovery'||!frame.broken)throw new Error('Recovery truck did not collect damaged rocket');}")
     browser("screenshot", "/tmp/teleport-landing-recovery.png")
-    fleet = json.loads(browser("eval", "(()=>{return Array.from({length:6},(_,index)=>{const frame=landingFlight.seekPhase('rest',.5,index*3);const body=[...document.querySelectorAll('.rocket-variant')].filter(node=>getComputedStyle(node).display!=='none');if(body.length!==1||body[0].getBoundingClientRect().height<10)throw new Error('Invalid visible rocket');return {id:document.querySelector('.login-scene').dataset.rocket,hull:body[0].querySelector('.rocket-hull').getAttribute('d')};});})()"))
+    fleet = json.loads(browser("eval", "(()=>{return Array.from({length:6},(_,index)=>{const frame=landingFlight.seekPhase('rest',.5,index);const body=[...document.querySelectorAll('.rocket-variant')].filter(node=>getComputedStyle(node).display!=='none');if(body.length!==1||body[0].getBoundingClientRect().height<10)throw new Error('Invalid visible rocket');return {id:document.querySelector('.login-scene').dataset.rocket,hull:body[0].querySelector('.rocket-hull').getAttribute('d')};});})()"))
     assert len({item["id"] for item in fleet}) == 6 and len({item["hull"] for item in fleet}) == 6
     browser("screenshot", "/tmp/teleport-landing-starship.png")
     for name, phase, fraction in [("ignition", "ignite", .65), ("orbit", "orbit", .5), ("catch", "descend", .9), ("smoke", "smoke", .5)]:

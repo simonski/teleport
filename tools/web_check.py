@@ -16,6 +16,7 @@ def main():
     subprocess.run([node, "--test", "--test-concurrency=1", *map(str, tests)], check=True)
     subprocess.run(["python3", "-B", str(ROOT / "tools/vendor_web.py"), "--verify"], check=True)
     subprocess.run(["python3", "-B", str(ROOT / "tools/vendor_terminal.py"), "--verify"], check=True)
+    subprocess.run(["python3", "-B", str(ROOT / "tools/pack_web.py"), "--verify"], check=True)
     print(f"PASS: {len(sources)} browser source syntax checks")
 
 

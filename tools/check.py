@@ -13,7 +13,7 @@ from check_resources import check_environment, process_options, scheduled
 ROOT = Path(__file__).resolve().parents[1]
 FAST_TESTS = (
     "test_build", "test_sbom", "test_timing", "test_smoke_profile", "test_source_cache",
-    "test_deploy", "test_go_check", "test_postgres", "test_check", "test_capture_backlog",
+    "test_deploy", "test_go_check", "test_postgres", "test_check", "test_capture_backlog", "test_pack_web",
 )
 
 

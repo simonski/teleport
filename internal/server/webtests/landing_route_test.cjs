@@ -68,7 +68,7 @@ test('carrier delivers and releases a supported rocket before leaving the pad',a
 
 test('refuelling connects, fills and vents steam, disconnects, then backs away before relaunch',async()=>{
   const {flightPlan,sampleFlight}=await route,plan=flightPlan(1),frame=(name,t=.5)=>sampleFlight(at(plan,name,t),1);
-  assert.equal(plan.replacement,false);
+  assert.equal(plan.damaged,false);assert.equal(plan.replacement,true);
   assert.equal(frame('tanker-arrive').vehicle.kind,'tanker');
   assert.ok(frame('connect').hose>0&&frame('connect').hose<1);
   assert.equal(frame('refuel').hose,1);assert.ok(frame('refuel').steam>0);assert.equal(frame('refuel').engine,0);
@@ -84,10 +84,10 @@ test('occasional broken panels leave on a recovery truck and replacements cycle 
   for(let cycle=0;cycle<18;cycle++){
     const plan=flightPlan(cycle),frame=(name,t=.5)=>sampleFlight(at(plan,name,t),cycle);
     seen.add(frame('rest').variant);
-    if(!plan.replacement)continue;
-    const old=frame('fault'),taken=frame('recovery-exit'),fresh=frame('replacement-unload',.999999),next=sampleFlight(0,cycle+1);
-    assert.ok(old.broken&&old.debris.y>LANDING_HOME.y);assert.equal(taken.vehicle.kind,'recovery');assert.equal(taken.x,taken.vehicle.x);assert.ok(taken.broken);
-    assert.notEqual(old.variant,fresh.variant);assert.equal(next.variant,fresh.variant);assert.equal(fresh.engine,0);assert.ok(!fresh.broken);assert.equal(fresh.x,next.x);assert.ok(Math.abs(fresh.y-next.y)<.0001);
+    const taken=frame('recovery-exit'),fresh=frame('replacement-unload',.999999),next=sampleFlight(0,cycle+1);
+    if(plan.damaged){const old=frame('fault');assert.ok(old.broken&&old.debris.y>LANDING_HOME.y);}
+    assert.equal(taken.vehicle.kind,'recovery');assert.equal(taken.x,taken.vehicle.x);assert.equal(taken.broken,plan.damaged);
+    assert.notEqual(taken.variant,fresh.variant);assert.equal(next.variant,fresh.variant);assert.equal(fresh.engine,0);assert.ok(!fresh.broken);assert.equal(fresh.x,next.x);assert.ok(Math.abs(fresh.y-next.y)<.0001);
   }
   assert.equal(seen.size,6);
 });

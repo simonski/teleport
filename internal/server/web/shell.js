@@ -127,11 +127,14 @@ function bindShell() {
     sessions.before(consoles);
     const shell=document.createElement('button');shell.type='button';shell.className='secondary console-trigger';shell.id='shell-console';shell.setAttribute('aria-label','New shell terminal');shell.title='New shell terminal';shell.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 10 3 3-3 3M12 16h5"/></svg>';consoles.append(shell);
     const codex=document.createElement('button');codex.type='button';codex.className='secondary console-trigger';codex.id='codex-pty-console';codex.setAttribute('aria-label','New Codex terminal');codex.title='New Codex terminal';codex.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="m7 10 3 3-3 3M13 10h4M13 14h4"/></svg>';consoles.append(codex);
+    for(const [kind,label] of [['claude','Claude'],['copilot','Copilot']]){const button=document.createElement('button');button.type='button';button.className='secondary console-trigger';button.id=kind+'-pty-console';button.setAttribute('aria-label','New '+label+' terminal');button.title='New '+label+' terminal';button.textContent=kind==='claude'?'Cl':'Co';consoles.append(button);}
     const recovery=document.createElement('button');recovery.type='button';recovery.className='secondary console-trigger';recovery.id='session-recovery';recovery.setAttribute('aria-label','Session recovery');recovery.title='Session recovery';recovery.textContent='⋯';consoles.append(recovery);
     on('javascript-console','click',()=>openScriptConsole().catch(showError));
     on('harness-console','click',()=>chooseHarness().catch(showError));
     on('shell-console','click',()=>startShell().catch(showError));
     on('codex-pty-console','click',()=>startDirectCodex().catch(showError));
+    on('claude-pty-console','click',()=>startDirectHarness('claude').catch(showError));
+    on('copilot-pty-console','click',()=>startDirectHarness('copilot').catch(showError));
     on('session-recovery','click',()=>sessionSwitcher().catch(showError));
     syncConsoleAttention();
   }

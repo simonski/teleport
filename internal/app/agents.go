@@ -708,7 +708,7 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		if in.AllowedHarnesses != nil {
 			seen := map[string]bool{}
 			for _, harness := range *in.AllowedHarnesses {
-				if !contains([]string{"codex", "fixture"}, harness) || seen[harness] {
+				if !contains([]string{"codex", "claude", "copilot", "fixture"}, harness) || seen[harness] {
 					return nil, false, failure(422, "invalid_harness_policy", "Choose distinct supported harnesses")
 				}
 				seen[harness] = true

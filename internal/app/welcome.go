@@ -9,9 +9,10 @@ import (
 )
 
 type HarnessChoice struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Available bool   `json:"available"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Available  bool   `json:"available"`
+	DirectOnly bool   `json:"directOnly,omitempty"`
 }
 type WelcomeSetupResult struct {
 	Setup             model.WelcomeSetup `json:"setup"`

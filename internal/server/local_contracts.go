@@ -18,6 +18,8 @@ func init() {
 		{"openConsoleSession", "ACT-1009", "Explicitly start a private free harness in its project root", app.OpenLocalSessionInput{}, app.LocalSessionInfo{}},
 		{"openShellSession", "ACT-1021", "Explicitly start a private project-root shell terminal", app.OpenShellSessionInput{}, app.LocalSessionInfo{}},
 		{"openCodexTerminal", "ACT-1022", "Explicitly start Codex in a private project-root terminal", app.OpenShellSessionInput{}, app.LocalSessionInfo{}},
+		{"openClaudeTerminal", "ACT-1023", "Explicitly start Claude in a private project-root terminal", app.OpenShellSessionInput{}, app.LocalSessionInfo{}},
+		{"openCopilotTerminal", "ACT-1024", "Explicitly start Copilot in a private project-root terminal", app.OpenShellSessionInput{}, app.LocalSessionInfo{}},
 		{"startTicketSession", "ACT-1001", "Explicitly attach a local harness to an eligible prepared task", app.OpenLocalSessionInput{}, app.LocalSessionInfo{}},
 		{"attachSession", "ACT-1003", "Reconnect bounded replay from the existing owned PTY", app.AttachSessionInput{}, app.SessionView{}},
 		{"sendSessionInput", "ACT-1005", "Send authorized terminal input with at-most-once receipt", app.SessionInput{}, app.SessionIntervention{}},

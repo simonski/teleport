@@ -27,9 +27,21 @@ test('direct Codex control starts its own terminal',async()=>{
   await vm.runInContext('startDirectCodex()',context);assert.equal(calls[0][0],'openCodexTerminal');assert.equal(calls[0][1].projectId,4);assert.equal(calls[0][1].requestId,'codex-request');assert.deepEqual(opened,['H5']);
 });
 
+test('structured Codex start rejects a direct-only discovery result',async()=>{
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'}},detailEpoch:1,pages:async()=>[],api:async()=>({available:[{id:'codex',directOnly:true}]})});
+  vm.runInContext(source,context);
+  await assert.rejects(vm.runInContext('chooseHarness()',context),/direct Codex terminal/);
+});
+
+for(const [kind,operation] of [['claude','openClaudeTerminal'],['copilot','openCopilotTerminal']])test(`${kind} control starts its own terminal`,async()=>{
+  const calls=[],opened=[];const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'}},detailEpoch:1,projectId:4,projects:[{id:4}],roleAllowsWrite:()=>true,crypto:{randomUUID:()=> 'request'},api:async(op,input)=>{calls.push([op,input]);return {id:'H5'}}});
+  context.opened=opened;vm.runInContext(source,context);vm.runInContext('openTerminal=async id=>opened.push(id);refreshSessionRoster=async()=>{}',context);
+  await vm.runInContext(`startDirectHarness('${kind}')`,context);assert.equal(calls[0][0],operation);assert.equal(calls[0][1].projectId,4);assert.deepEqual(opened,['H5']);
+});
+
 test('only previously live direct terminals close their dialog on confirmed exit',()=>{
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){}});vm.runInContext(source,context);
-  for(const harness of ['shell','codex-pty'])assert.equal(vm.runInContext(`closeDirectTerminalAfterExit({harness:'${harness}',state:'running'},{state:'exited'})`,context),true);
+  for(const harness of ['shell','codex-pty','claude-pty','copilot-pty'])assert.equal(vm.runInContext(`closeDirectTerminalAfterExit({harness:'${harness}',state:'running'},{state:'exited'})`,context),true);
   for(const test of ["closeDirectTerminalAfterExit({harness:'shell',state:'running'},{state:'unknown'})","closeDirectTerminalAfterExit({harness:'shell',state:'running'},{state:'stopping'})","closeDirectTerminalAfterExit({harness:'codex',state:'running'},{state:'exited'})","closeDirectTerminalAfterExit({harness:'shell',state:'exited'},{state:'exited'})"])assert.equal(vm.runInContext(test,context),false);
 });
 

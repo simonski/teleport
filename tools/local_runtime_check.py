@@ -21,6 +21,7 @@ def main(database_url=None):
     parser.add_argument("--native-large-frame", action="store_true", help="Exercise a large native protocol frame with the fixture")
     parser.add_argument("--shell-pty", action="store_true", help="Exercise a real local zsh PTY without an agent")
     parser.add_argument("--codex-pty", action="store_true", help="Exercise direct Codex PTY with a zero-model fixture")
+    parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY with a zero-model fixture")
     parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
     parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
@@ -31,14 +32,19 @@ def main(database_url=None):
         port = sock.getsockname()[1]
     endpoint = f"http://127.0.0.1:{port}"
     environment = dict(os.environ, TELEPORT_DB=args.database or database_url, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+    if args.codex_pty:
+        isolated_home = folder / "home"
+        isolated_home.mkdir(mode=0o700)
+        environment["HOME"] = str(isolated_home)
     if args.shell_pty:
         shell_home = folder / "shell-config"
         shell_home.mkdir(mode=0o700)
         environment["ZDOTDIR"] = str(shell_home)
-    if args.native_fixture or args.codex_pty:
+    if args.native_fixture or args.codex_pty or args.harness_pty:
         fixture_bin = folder / "fixture-bin"
         fixture_bin.mkdir()
-        subprocess.run(["go", "build", "-o", str(fixture_bin / "codex"), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=60)
+        fixture_name = args.harness_pty or "codex"
+        subprocess.run(["go", "build", "-o", str(fixture_bin / fixture_name), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=60)
         environment["PATH"] = str(fixture_bin) + os.pathsep + environment["PATH"]
         if args.native_large_frame:
             environment["TK_NATIVE_FIXTURE_LARGE"] = "1"
@@ -107,19 +113,19 @@ def main(database_url=None):
         git("commit", "-m", "Seed terminal fixture")
         project = tk("createProject", {"name": "Terminal proof", "key": "terminal-" + uuid.uuid4().hex[:12], "requestId": "terminal-project"})
         project = tk("configureLocalRepository", {"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})
-        if args.shell_pty or args.codex_pty:
+        if args.shell_pty or args.codex_pty or args.harness_pty:
             capacity = {"projectId": project["id"], "expectedVersion": project["version"], "refineWorkers": 1, "doingWorkers": 1, "maxAgents": 0 if args.shell_pty else 2}
-            if args.codex_pty:
-                capacity["allowedHarnesses"] = ["codex"]
+            if args.codex_pty or args.harness_pty:
+                capacity["allowedHarnesses"] = [args.harness_pty or "codex"]
             project = tk("setLaneCapacity", capacity)
         if args.native_startup_only:
             config = folder / "isolated-codex" / "config.toml"
             config.write_text("[projects." + json.dumps(str(folder.resolve())) + "]\ntrust_level = \"untrusted\"\n[projects." + json.dumps(str(repository.resolve())) + "]\ntrust_level = \"trusted\"\n")
         if args.console_only:
             git("checkout", "-b", "console-feature")
-        operation = "openShellSession" if args.shell_pty else "openCodexTerminal" if args.codex_pty else "openConsoleSession"
+        operation = "openShellSession" if args.shell_pty else "openCodexTerminal" if args.codex_pty else "open" + args.harness_pty.title() + "Terminal" if args.harness_pty else "openConsoleSession"
         start = {"projectId": project["id"], "requestId": "terminal-start"}
-        if not args.shell_pty and not args.codex_pty:
+        if not args.shell_pty and not args.codex_pty and not args.harness_pty:
             start["harness"] = harness
         row = tk(operation, start)
         session_id = row["id"]
@@ -128,8 +134,12 @@ def main(database_url=None):
         import base64
         def read():
             return base64.b64decode(tk("attachSession", {"id": session_id}).get("data", "")).decode(errors="replace")
-        if args.codex_pty:
-            assert row["harness"] == "codex-pty" and row["directory"] == str(repository.resolve())
+        if args.codex_pty or args.harness_pty:
+            direct_name = args.harness_pty or "codex"
+            assert row["harness"] == direct_name + "-pty" and row["directory"] == str(repository.resolve())
+            if args.codex_pty:
+                skill_path = isolated_home / ".agents/skills/teleport/SKILL.md"
+                assert skill_path.read_text() == subprocess.check_output([str(ROOT / "bin/tk"), "skill"], env=environment, text=True, timeout=10)
             manifest = json.loads((folder / "runtime/sessions.json").read_text())[session_id]
             assert not manifest.get("native") and not (folder / "runtime" / (session_id + ".client.json")).exists()
             wait_for(lambda: "direct Codex fixture ready" in read())
@@ -145,11 +155,11 @@ def main(database_url=None):
                 browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
                 browser("wait", "#welcome-status")
                 browser("press", "Escape")
-                browser("click", "#codex-pty-console")
+                browser("click", f"#{direct_name}-pty-console")
                 browser("wait", ".xterm-screen")
-                second = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] != session_id and item["harness"] == "codex-pty"), None))
+                second = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] != session_id and item["harness"] == direct_name + "-pty"), None))
                 wait_for(lambda: "direct Codex fixture ready" in base64.b64decode(tk("attachSession", {"id": second["id"]}).get("data", "")).decode(errors="replace"))
-                blocked = subprocess.run([str(ROOT / "bin/tk"), "openCodexTerminal", "--data", json.dumps({"projectId": project["id"], "requestId": "over-limit"})], env=environment, text=True, capture_output=True, timeout=15)
+                blocked = subprocess.run([str(ROOT / "bin/tk"), operation, "--data", json.dumps({"projectId": project["id"], "requestId": "over-limit"})], env=environment, text=True, capture_output=True, timeout=15)
                 assert blocked.returncode != 0 and "limit" in blocked.stderr.lower(), blocked.stderr
                 for key in "quit":
                     browser("press", key)
@@ -160,7 +170,7 @@ def main(database_url=None):
             wait_for(lambda: all(item["state"] in ("exited", "failed") for item in tk("listSessions")["items"]))
             tk("shutdownLocalRuntime", {"confirm": True})
             clean = True
-            print("PASS: direct Codex fixture PTY, input/output, resize and owned exit; no model calls" + ("; browser start and quit close dialog" if args.browser else ""))
+            print(f"PASS: direct {direct_name} fixture PTY, input/output, resize and owned exit; no model calls" + ("; browser start and quit close dialog" if args.browser else ""))
             return
         if args.shell_pty:
             assert row["harness"] == "shell" and row["directory"] == str(repository.resolve())

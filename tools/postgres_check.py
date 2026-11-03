@@ -36,6 +36,7 @@ def main():
     parser.add_argument("--native-large-frame", action="store_true", help="Exercise a large frame in the native fixture (requires --native-only)")
     parser.add_argument("--shell-pty", action="store_true", help="Exercise zsh PTYs (requires --terminal-only)")
     parser.add_argument("--codex-pty", action="store_true", help="Exercise direct Codex PTY fixture (requires --terminal-only)")
+    parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY fixture (requires --terminal-only)")
     args = parser.parse_args()
     if args.native_large_frame and not args.native_only:
         parser.error("--native-large-frame requires --native-only")
@@ -43,6 +44,8 @@ def main():
         parser.error("--shell-pty requires --terminal-only")
     if args.codex_pty and (not args.terminal_only or args.shell_pty):
         parser.error("--codex-pty requires --terminal-only and excludes --shell-pty")
+    if args.harness_pty and (not args.terminal_only or args.shell_pty or args.codex_pty):
+        parser.error("--harness-pty requires --terminal-only and excludes other PTY selections")
     if (args.shell_only or args.studio_only) and not args.browser:
         parser.error("--shell-only/--studio-only requires --browser")
     from postgres import binaries
@@ -131,6 +134,8 @@ def main():
                     terminal_command.append("--shell-pty")
                 if args.codex_pty:
                     terminal_command.append("--codex-pty")
+                if args.harness_pty:
+                    terminal_command.extend(["--harness-pty", args.harness_pty])
                 if args.browser:
                     terminal_command.append("--browser")
                 subprocess.run(terminal_command, cwd=ROOT, env=environment, check=True)

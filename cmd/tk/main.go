@@ -110,10 +110,29 @@ func run(args []string) error {
 		if len(args) != 2 || !filepath.IsAbs(args[1]) {
 			return errors.New("codex wrapper requires an absolute executable path")
 		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		if err = teleportskill.EnsureInstalled(home); err != nil {
+			return fmt.Errorf("Teleport skill unavailable: %w", err)
+		}
 		codex := exec.Command(args[1])
 		codex.Stdin, codex.Stdout, codex.Stderr = os.Stdin, os.Stdout, os.Stderr
 		codex.Env = append(os.Environ(), "TERM=xterm-256color")
+		if executable, err := os.Executable(); err == nil && filepath.Base(executable) == "tk" {
+			codex.Env = append(codex.Env, "PATH="+filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+		}
 		return codex.Run()
+	}
+	if command == "_harness-pty-session" {
+		if len(args) != 2 || !filepath.IsAbs(args[1]) {
+			return errors.New("harness wrapper requires an absolute executable path")
+		}
+		harness := exec.Command(args[1])
+		harness.Stdin, harness.Stdout, harness.Stderr = os.Stdin, os.Stdout, os.Stderr
+		harness.Env = append(os.Environ(), "TERM=xterm-256color")
+		return harness.Run()
 	}
 	if command == "_terminal-fixture" {
 		fmt.Println("teleport terminal fixture · no model")

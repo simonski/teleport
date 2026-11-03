@@ -29,27 +29,27 @@ def verify_navigation(browser, tk, project_id):
     def point(kind, value):
         browser("mouse", kind, str(round(value["x"])), str(round(value["y"])))
 
-    expected = ["Home", "Ideas", "Goals", "Epics", "Board", "Tickets", "Todos", "Calendar", "Graph", "Workflows", "Cost", "Projects"]
+    expected = ["Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Cost"]
     appearance_before = prefs()
     assert visible() == expected
-    browser("eval", "document.querySelector('#nav-views [data-view=Ideas]').focus()")
+    browser("eval", "document.querySelector('#nav-views [data-view=Backlog]').focus()")
     browser("press", "Alt+Shift+ArrowLeft")
     saved()
-    assert visible()[0] == "Ideas" and prefs()["navigationOrder"][0] == "Ideas"
+    assert visible()[0] == "Backlog" and prefs()["navigationOrder"][0] == "Backlog"
     revision = json.loads(tk("getSession"))["revision"]
     observed(revision)
-    browser("eval", "if(document.activeElement?.dataset.view!=='Ideas')throw new Error('Preference refresh lost keyboard tab focus')")
+    browser("eval", "if(document.activeElement?.dataset.view!=='Backlog')throw new Error('Preference refresh lost keyboard tab focus')")
     browser("eval", "if(document.querySelector('[aria-current=page]')?.dataset.view!=='Home')throw new Error('Reorder navigated away')")
 
-    origin, destination = rect("Ideas"), rect("Graph", 0.8)
+    origin, destination = rect("Backlog"), rect("Graph", 0.8)
     point("move", origin); browser("mouse", "down", "left"); point("move", destination); browser("mouse", "up", "left")
     saved()
     order = prefs()["navigationOrder"]
-    assert order.index("Ideas") == order.index("Graph") + 1, order
+    assert order.index("Backlog") == order.index("Graph") + 1, order
     browser("eval", "if(document.querySelector('[aria-current=page]')?.dataset.view!=='Home'||document.querySelector('.nav-drag-ghost'))throw new Error('Drop clicked a view or retained a ghost')")
 
     before_cancel = prefs()
-    origin, destination = rect("Ideas"), rect("Home", 0.1)
+    origin, destination = rect("Backlog"), rect("Home", 0.1)
     point("move", origin); browser("mouse", "down", "left"); point("move", destination)
     browser("press", "Escape"); browser("mouse", "up", "left")
     saved()
@@ -76,7 +76,7 @@ def verify_navigation(browser, tk, project_id):
     browser("screenshot", "/tmp/teleport-navigation-right.png")
     browser("find", "role", "button", "click", "--name", "Settings", "--exact")
     browser("select", "#appearance-style", "instrument"); browser("select", "#appearance-mode", "dark"); saved(); browser("press", "Escape")
-    browser("eval", "if(Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-59)>1||Math.abs(document.querySelector('#workspace-nav').getBoundingClientRect().top-59)>1)throw new Error('Theme changed compact header/sidebar geometry')")
+    browser("eval", "if(document.querySelector('.topbar').getBoundingClientRect().top!==0||document.querySelector('#workspace-nav').getBoundingClientRect().top<document.querySelector('.topbar').getBoundingClientRect().bottom-2)throw new Error('Theme changed compact header/sidebar geometry')")
     browser("screenshot", "/tmp/teleport-navigation-dark.png")
     browser("click", "#nav-collapse"); saved()
     browser("reload")
@@ -86,7 +86,7 @@ def verify_navigation(browser, tk, project_id):
     browser("set", "viewport", "390", "844")
     browser("click", "#nav-collapse"); saved()
     browser("eval", "if(document.documentElement.scrollWidth>innerWidth)throw new Error('Side navigation overflows mobile width')")
-    browser("eval", "if(Math.abs(document.querySelector('.topbar').getBoundingClientRect().height-48)>1||Math.abs(document.querySelector('#workspace-nav').getBoundingClientRect().top-48)>1)throw new Error('Mobile theme header overlaps sidebar')")
+    browser("eval", "if(document.querySelector('.topbar').getBoundingClientRect().top!==0||document.querySelector('#workspace-nav').getBoundingClientRect().top<document.querySelector('.topbar').getBoundingClientRect().bottom-2)throw new Error('Mobile theme header overlaps sidebar')")
     browser("screenshot", "/tmp/teleport-navigation-mobile.png")
     browser("click", "#nav-collapse"); saved()
     browser("set", "viewport", "1280", "800")
@@ -101,7 +101,7 @@ def verify_navigation(browser, tk, project_id):
 
     projects_before = json.loads(tk("listProjects"))["items"]
     browser("click", "#project + .choice-button")
-    browser("eval", "if(document.querySelector('.choice-group-title')?.textContent!=='New project')throw new Error('Missing creation section')")
+    browser("eval", "if(!document.querySelector('.choice-group[aria-label=\"New project\"]')||!document.querySelector('.choice-list [data-value=\"manage-projects\"]'))throw new Error('Missing project creation/directory section')")
     browser("click", '.choice-list [data-value="new-project"]')
     browser("wait", '#editor [name="name"]')
     browser("eval", "if(document.activeElement!==document.querySelector('#editor [name=name]'))throw new Error('New project text entry not focused')")

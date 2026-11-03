@@ -49,13 +49,17 @@ func TestConfiguredHTTPSProxyOriginAndSecureCookies(t *testing.T) {
 	if _, err := app.Initialize(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
-	h := server.New(app.New(db), "test", "teleport.engineering")
+	h := server.New(app.New(db), "test", "teleport.engineering", "teleport.exe.xyz")
 	for _, test := range []struct {
 		name, host, origin, forwarded string
 		status                        int
 		secure                        bool
 	}{
 		{"public HTTPS", "teleport.engineering", "https://teleport.engineering", "", 200, true},
+		{"alternate HTTPS", "teleport.exe.xyz", "https://teleport.exe.xyz", "", 200, true},
+		{"alternate HTTP rejected", "teleport.exe.xyz", "http://teleport.exe.xyz", "https", 403, false},
+		{"cross-alias origin rejected", "teleport.engineering", "https://teleport.exe.xyz", "https", 403, false},
+		{"unknown alias rejected", "other.exe.xyz", "https://other.exe.xyz", "https", 421, false},
 		{"public HTTP rejected", "teleport.engineering", "http://teleport.engineering", "http", 403, false},
 		{"other host rejected", "teleport.engineering", "https://evil.test", "https", 403, false},
 		{"other port rejected", "teleport.engineering", "https://teleport.engineering:8443", "https", 403, false},

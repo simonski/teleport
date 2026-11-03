@@ -4,17 +4,19 @@ DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
 DEPLOY_ADDR ?= 0.0.0.0:8000
-export DEPLOY_HOST DEPLOY_DIR DEPLOY_BUILDER DEPLOY_ADDR
+export DEPLOY_HOST DEPLOY_DIR DEPLOY_BUILDER DEPLOY_ADDR DEPLOY_PUBLIC_HOSTS
 help:
-	@echo "build    Build bin/tk with a local build identity"
-	@echo "install  Build and install tk into GOBIN or GOPATH/bin"
-	@echo "sbom     Generate sbom.cdx.json for Go and bundled browser dependencies"
+	@echo ""
+	@echo "build         Build bin/tk with a local build identity"
+	@echo "install       Build and install tk into GOBIN or GOPATH/bin"
+	@echo "sbom          Generate sbom.cdx.json for Go and bundled browser dependencies"
 	@echo "browser-tools Prepare the pinned persistent browser client"
-	@echo "deploy   Build Linux tk, scp to /home/exedev/teleport and start it"
-	@echo "check    Run documentation, vet, unit, integration and race checks"
-	@echo "test     Run Go tests"
-	@echo "lint     Verify Go formatting and run vet"
-	@echo "clean    Remove generated binary"
+	@echo "deploy        Build Linux tk, scp to /home/exedev/teleport and start it"
+	@echo "check         Run documentation, vet, unit, integration and race checks"
+	@echo "test          Run Go tests"
+	@echo "lint          Verify Go formatting and run vet"
+	@echo "clean         Remove generated binary"
+	@echo ""
 build:
 	python3 tools/build.py
 install: build

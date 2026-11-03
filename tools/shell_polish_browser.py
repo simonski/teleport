@@ -82,7 +82,7 @@ def verify_profile_dialogs(browser):
     browser("press", "Escape")
     browser("eval", "['keydown','keyup','keypress'].forEach(type=>document.removeEventListener(type,window.modalLeakedKey))")
     # Check content directly at every usable view, including Graph's own header.
-    for name in ("Home", "Ideas", "Goals", "Epics", "Board", "Todos", "Calendar", "Graph", "Cost", "Projects", "Workflows"):
+    for name in ("Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Cost", "Workflows"):
         selector = '#nav-views [data-view=' + json.dumps(name) + ']'
         browser("eval", "document.querySelector(" + json.dumps(selector) + ").click();if(document.querySelector('main h1,.page-heading .eyebrow,.board-heading .eyebrow,.graph-heading .eyebrow')||/WORKSPACE \\/|RELATIONSHIPS \\/|PLANNING \\/|DELIVERY \\/|USAGE \\//.test(document.querySelector('main').innerText))throw new Error('Redundant view breadcrumb remains');{const main=document.querySelector('main');document.querySelector('#account').click();document.querySelector('#account-settings').click();if(!document.querySelector('tk-dialog[open]')?.closest('.modal-shade')||document.querySelector('main')!==main)throw new Error('Settings became a page on this view');}")
         browser("press", "Escape")

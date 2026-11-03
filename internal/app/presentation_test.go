@@ -106,7 +106,7 @@ func TestPersonalAppearanceOptimisticUpdatesPreserveNavigation(t *testing.T) {
 	p := call(t, svc, token, "getViewPreferences", struct{}{}).(model.Preferences)
 	p = call(t, svc, token, "saveViewPreferences", app.ViewPreferencesInput{ExpectedVersion: p.Version, DefaultView: "Ideas", Recent: []model.RecentContext{{View: "Ideas"}}}).(model.Preferences)
 	p = call(t, svc, token, "setAppearance", app.AppearanceInput{ExpectedVersion: p.Version, Style: "instrument", Mode: "dark"}).(model.Preferences)
-	if p.DefaultView != "Ideas" || len(p.Recent) != 1 || p.Style != "instrument" || p.Mode != "dark" {
+	if p.DefaultView != "Backlog" || len(p.Recent) != 1 || p.Recent[0].View != "Backlog" || p.Style != "instrument" || p.Mode != "dark" {
 		t.Fatal("appearance replaced navigation")
 	}
 	body, _ := json.Marshal(app.AppearanceInput{ExpectedVersion: p.Version - 1, Style: "paper", Mode: "light"})

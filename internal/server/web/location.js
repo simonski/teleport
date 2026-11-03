@@ -7,7 +7,7 @@ function writeLocationCache(account,value){try{localStorage.setItem(locationCach
 function validLocation(context,available){return context&&supportedNavigation.includes(context.view)&&Number.isSafeInteger(context.projectId)&&context.projectId>=0&&(context.projectId===0||available.some(project=>project.id===context.projectId));}
 function chooseInitialLocation(account,available){
   const cache=readLocationCache(account),fallback={view:account.preferences.defaultView,projectId:account.preferences.defaultProject};
-  return [cache?.pending?cache:null,account.lastLocation,cache,fallback,{view:'Home',projectId:0}].find(context=>validLocation(context,available));
+  return [cache?.pending?cache:null,account.lastLocation,cache,fallback,{view:'Home',projectId:0}].map(context=>context?{...context,view:typeof canonicalView==='function'?canonicalView(context.view):context.view}:context).find(context=>validLocation(context,available));
 }
 function rememberCurrentLocation(force=false){
   if(!session||!validLocation({view,projectId},projects))return;

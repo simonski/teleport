@@ -1,6 +1,7 @@
 """Real-browser acceptance for project summaries, relationship lists and assembly."""
 import json
 import time
+from backlog_browser import verify_backlog
 
 
 def verify_overview(browser, tk, project, stage=lambda name: None):
@@ -26,19 +27,8 @@ def verify_overview(browser, tk, project, stage=lambda name: None):
     browser("wait", "--fn", "homeSummary?.days===30")
     browser("eval", "document.activeElement?.blur()")
     browser("press", "n"); browser("wait", '#editor [name="title"]'); browser("press", "Escape")
-    stage("overview-tickets")
-    browser("click", '#nav-views [data-view="Tickets"]')
-    browser("select", "#tickets-workflow", stories[0]["workflow"])
-    browser("wait", "--fn", "document.querySelectorAll('.ticket-list-links path').length>0")
-    browser("eval", "document.activeElement?.blur()"); browser("press", "n")
-    browser("eval", "if(document.querySelector('#editor [name=intent]').value!=='human')throw new Error('Tickets N ignored workflow intent')")
-    browser("press", "Escape")
-    browser("eval", "if(document.querySelectorAll('.ticket-list-card[data-kind=task]').length<4)throw new Error('Stories missing from workflow list')")
-    browser("hover", '[data-list-ticket="' + str(stories[1]["id"]) + '"]')
-    browser("wait", "--fn", "document.querySelectorAll('.ticket-list-card.graph2d-muted').length>0")
-    browser("screenshot", "/tmp/teleport-tickets-workflow-list.png")
-    browser("click", '[data-list-ticket="' + str(stories[1]["id"]) + '"]')
-    browser("wait", '#editor [name="title"]'); browser("press", "Escape")
+    stage("overview-backlog")
+    verify_backlog(browser,tk,project,goal,epic,stories,stage)
     assert call("getTicket", {"id": stories[1]["id"]})["version"] == stories[1]["version"]
     stage("overview-attention")
     browser("click", "#account"); browser("eval", "document.querySelector('#account-attention').focus()")

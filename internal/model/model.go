@@ -72,6 +72,7 @@ type State struct {
 	WelcomeSetups      map[string]WelcomeSetup   `json:"welcomeSetups"`
 	GoalReviews        map[int64][]GoalReview    `json:"goalReviews"`
 	GraphLayouts       map[string]GraphLayout    `json:"graphLayouts"`
+	BacklogOrders      map[string]BacklogOrder   `json:"backlogOrders,omitempty"`
 	Preferences        map[string]Preferences    `json:"preferences"`
 	NextIdeaID         int64                     `json:"nextIdeaId"`
 	Ideas              map[string]Idea           `json:"ideas"`

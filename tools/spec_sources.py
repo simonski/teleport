@@ -70,7 +70,7 @@ def verify(root, document=None):
         failures.append("Expected exactly one document title")
     if re.search(r"\btp\b|\bHuman board\b|\bAgent Costs\b|\bOverview\b", specification):
         failures.append("Obsolete CLI or view naming remains")
-    for name in ("Home", "Board", "Todos", "Graph", "Ideas", "Cost", "Settings", "System", "Workflows", "Evolution", "Projects"):
+    for name in ("Home", "Backlog", "Board", "Todos", "Graph", "Cost", "Settings", "System", "Workflows", "Evolution"):
         if not re.search(rf"^\| {name} \|", specification, re.M):
             failures.append(f"Missing canonical view definition: {name}")
     workflow_requirements = (

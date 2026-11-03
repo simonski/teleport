@@ -29,7 +29,7 @@ func TestManagedContextIsProjectScopedReadOnlyAndWithdrawn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, operation := range []string{"getSession", "logout", "getLocalHarnesses", "listSessions", "getSessionTurn", "approveTicket", "configureLocalRepository", "createProject", "saveProject", "listProjectSummaries", "getHome", "login"} {
+	for _, operation := range []string{"getSession", "logout", "getLocalHarnesses", "listSessions", "getSessionTurn", "approveTicket", "configureLocalRepository", "createProject", "saveProject", "listProjectSummaries", "getHome", "getBacklogOrder", "saveBacklogOrder", "login"} {
 		if _, err := svc.Call(context.Background(), token, operation, json.RawMessage(`{}`)); err == nil {
 			t.Fatal("context escaped to", operation)
 		}

@@ -215,6 +215,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	if p.DefaultView == "Settings" {
 		p.DefaultView = "Home"
 	}
+	p.DefaultView = canonicalView(p.DefaultView)
 	p.NavigationOrder = normalizeNavigationOrder(p.NavigationOrder)
 	if !contains([]string{"top", "left", "right"}, p.NavigationPosition) {
 		p.NavigationPosition = "top"
@@ -224,6 +225,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	}
 	recent := []model.RecentContext{}
 	for _, c := range p.Recent {
+		c.View = canonicalView(c.View)
 		if validRecent(st, a, c) == nil {
 			recent = append(recent, c)
 		}
@@ -232,7 +234,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	return p
 }
 func validRecent(st *model.State, a model.Account, c model.RecentContext) error {
-	if !contains([]string{"Home", "Board", "Tickets", "Todos", "Goals", "Epics", "Calendar", "Graph", "Workflows", "Ideas", "Cost", "Projects"}, c.View) {
+	if !contains([]string{"Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Cost"}, canonicalView(c.View)) {
 		return failure(422, "invalid_view", "Choose a shipped workspace view")
 	}
 	if c.ProjectID != 0 {
@@ -259,6 +261,8 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 		st.Preferences = map[string]model.Preferences{}
 	}
 	switch operation {
+	case "getBacklogOrder", "saveBacklogOrder":
+		return backlogOperations(st, a, operation, raw)
 	case "getGraph":
 		var in GraphInput
 		if err := parse(raw, &in); err != nil {
@@ -362,6 +366,10 @@ func presentationOperations(st *model.State, a model.Account, operation string, 
 			}
 			if len(in.Recent) > 20 {
 				return nil, false, failure(422, "too_many_contexts", "Retain at most 20 recent contexts")
+			}
+			in.DefaultView = canonicalView(in.DefaultView)
+			for index := range in.Recent {
+				in.Recent[index].View = canonicalView(in.Recent[index].View)
 			}
 			if err := validRecent(st, a, model.RecentContext{View: in.DefaultView, ProjectID: in.DefaultProject}); err != nil {
 				return nil, false, err

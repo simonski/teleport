@@ -37,6 +37,7 @@ export function graphCurvePoints(source,target){
 }
 
 export const graphNodeIcons={
+  idea:'M9 18h6M10 21h4M8 14a7 7 0 1 1 8 0l-1 4H9Z',
   project:'M3 7h7l2 3h9v10H3ZM3 7V4h7l2 3',
   goal:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10M12 11v2',
   epic:'m3 7 9-4 9 4-9 4ZM3 12l9 4 9-4M3 17l9 4 9-4',

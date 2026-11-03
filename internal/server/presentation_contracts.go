@@ -10,6 +10,8 @@ func init() {
 		name, action, summary string
 		input, output         any
 	}{
+		{"getBacklogOrder", "ACT-0204", "Read private authorized Backlog presentation order", app.BacklogOrderInput{}, model.BacklogOrder{}},
+		{"saveBacklogOrder", "ACT-0204", "Save private Backlog order and optional unlocked same-project parent move atomically", app.SaveBacklogInput{}, model.BacklogOrder{}},
 		{"getGraph", "ACT-1201", "Read a bounded authorized ticket graph", app.GraphInput{}, app.Graph{}},
 		{"saveGraphLayout", "ACT-1202", "Save separate shared-project or private All projects coordinates", app.GraphLayoutInput{}, model.GraphLayout{}},
 		{"getAppearanceStyles", "ACT-0713", "Discover bundled browser styles and modes", struct{}{}, app.AppearanceStyles{}},

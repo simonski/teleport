@@ -12,6 +12,7 @@ type CurrentLocationInput struct {
 
 func currentLocation(st *model.State, a model.Account) *model.RecentContext {
 	location, ok := st.LastLocations[a.ID]
+	location.View = canonicalView(location.View)
 	if !ok || validRecent(st, a, location) != nil {
 		return nil
 	}
@@ -27,6 +28,7 @@ func saveCurrentLocation(st *model.State, a model.Account, raw json.RawMessage) 
 		return nil, false, err
 	}
 	location := model.RecentContext{View: in.View, ProjectID: in.ProjectID}
+	location.View = canonicalView(location.View)
 	if err := validRecent(st, a, location); err != nil {
 		return nil, false, err
 	}

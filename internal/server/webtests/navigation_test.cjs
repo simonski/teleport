@@ -13,10 +13,10 @@ function fixture(){
 
 test('reordering stable view IDs preserves hidden target views and the input order',()=>{
   const f=fixture();
-  const value=f.run(`(()=>{const before=[...canonicalNavigation],after=moveNavigation(before,'Ideas','Graph',true);return {before,after};})()`);
-  assert.equal(value.before[1],'Ideas');
-  assert.equal(value.after[value.after.indexOf('Graph')+1],'Ideas');
-  assert.equal(new Set(value.after).size,13);
+  const value=f.run(`(()=>{const before=[...canonicalNavigation],after=moveNavigation(before,'Backlog','Graph',true);return {before,after};})()`);
+  assert.equal(value.before[1],'Backlog');
+  assert.equal(value.after[value.after.indexOf('Graph')+1],'Backlog');
+  assert.equal(new Set(value.after).size,9);
   assert.ok(value.after.includes('Workflows')&&value.after.includes('Evolution'));
 });
 

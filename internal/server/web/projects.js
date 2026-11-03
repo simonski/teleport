@@ -1,7 +1,8 @@
 "use strict";
-let projectDirectory=null,projectPresentation='cards',projectDirectoryEpoch=0;
+let projectDirectory=null,projectPresentation='cards',projectDirectoryEpoch=0,projectDirectoryPopup=false;
+function openProjectDirectory(){const dialog=openDialog('Projects',projectDirectoryHTML(),'Close');projectDirectoryPopup=true;dialog.addEventListener('close',()=>{projectDirectoryPopup=false;projectDirectoryEpoch++;},{once:true});byId('editor-form').onsubmit=event=>{event.preventDefault();dialog.close();};on('new-project','click',projectForm);bindProjectDirectory();}
 
-function resetProjectDirectory(){projectDirectory=null;projectPresentation='cards';projectDirectoryEpoch++;}
+function resetProjectDirectory(){projectDirectory=null;projectPresentation='cards';projectDirectoryEpoch++;projectDirectoryPopup=false;}
 function projectDirectoryHTML(){
   return `<div class="project-directory-actions"><div class="project-presentation" role="group" aria-label="Project presentation"><button type="button" class="secondary" data-project-presentation="cards" aria-pressed="${projectPresentation==='cards'}">Card view</button><button type="button" class="secondary" data-project-presentation="list" aria-pressed="${projectPresentation==='list'}">List view</button></div><span class="header-space"></span><button type="button" class="secondary" id="project-directory-refresh">Refresh</button><button type="button" id="new-project">＋ New project</button></div><p id="project-directory-status" class="save-status" role="status"></p><div id="project-directory-content">${projectDirectoryContent()}</div>`;
 }
@@ -18,14 +19,14 @@ function drawProjectDirectory(){
   const focused=document.activeElement,project=focused?.dataset.project,edit=focused?.dataset.projectEdit;
   content.innerHTML=projectDirectoryContent();
   if(document.activeElement===document.body){if(project)content.querySelector(`[data-project="${CSS.escape(project)}"]`)?.focus({preventScroll:true});else if(edit)content.querySelector(`[data-project-edit="${CSS.escape(edit)}"]`)?.focus({preventScroll:true});}
-  root.querySelectorAll('[data-project-presentation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.projectPresentation===projectPresentation)));
+  document.querySelectorAll('[data-project-presentation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.projectPresentation===projectPresentation)));
 }
 function bindProjectDirectory(){
-  if(view!=='Projects')return;
-  root.querySelectorAll('[data-project-presentation]').forEach(button=>button.onclick=()=>{projectPresentation=button.dataset.projectPresentation;drawProjectDirectory();});
+  if(view!=='Projects'&&!projectDirectoryPopup)return;
+  document.querySelectorAll('[data-project-presentation]').forEach(button=>button.onclick=()=>{projectPresentation=button.dataset.projectPresentation;drawProjectDirectory();});
   byId('project-directory-content').onclick=e=>{
     const open=e.target.closest('[data-project]'),edit=e.target.closest('[data-project-edit]');
-    if(open){projectId=Number(open.dataset.project);view='Board';workspace().catch(showError);}
+    if(open){if(projectDirectoryPopup)byId('editor').close();projectId=Number(open.dataset.project);view='Board';workspace().catch(showError);}
     else if(edit)projectMetadataForm(Number(edit.dataset.projectEdit));
   };
   on('project-directory-refresh','click',()=>loadProjectDirectory());
@@ -36,7 +37,7 @@ async function loadProjectDirectory(){
   if(status){status.textContent='Loading…';status.classList.remove('error');}
   try{
     const result=await pages('listProjectSummaries');
-    if(session?.account.id!==actor||loadGeneration!==generation||epoch!==projectDirectoryEpoch||view!=='Projects')return;
+    if(session?.account.id!==actor||loadGeneration!==generation||epoch!==projectDirectoryEpoch||view!=='Projects'&&!projectDirectoryPopup)return;
     projectDirectory=result;drawProjectDirectory();if(status?.isConnected)status.textContent='';
   }catch(error){if(session?.account.id===actor&&loadGeneration===generation&&epoch===projectDirectoryEpoch&&status?.isConnected){status.textContent=error.message||'Project totals unavailable. Refresh to retry.';status.classList.add('error');}}
 }

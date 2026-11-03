@@ -13,7 +13,7 @@ import (
 func TestNavigationLayoutPreservesOldClientsAndVersionFences(t *testing.T) {
 	svc, token := fixture(t)
 	p := call(t, svc, token, "getViewPreferences", struct{}{}).(model.Preferences)
-	if len(p.NavigationOrder) != 13 || p.NavigationOrder[4] != "Board" || p.NavigationPosition != "top" || p.NavigationCollapsed {
+	if len(p.NavigationOrder) != 9 || p.NavigationOrder[2] != "Board" || p.NavigationPosition != "top" || p.NavigationCollapsed {
 		t.Fatal("invalid new-account layout", p)
 	}
 	order := append([]string{}, p.NavigationOrder...)
@@ -56,18 +56,13 @@ func TestNavigationLayoutPreservesOldClientsAndVersionFences(t *testing.T) {
 func TestNavigationAcceptsPreviousViewSetAndPersistsTicketsLocation(t *testing.T) {
 	svc, token := fixture(t)
 	p := call(t, svc, token, "getViewPreferences", struct{}{}).(model.Preferences)
-	legacy := []string{}
-	for _, name := range p.NavigationOrder {
-		if name != "Tickets" {
-			legacy = append(legacy, name)
-		}
-	}
+	legacy := []string{"Home", "Ideas", "Goals", "Epics", "Board", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost", "Projects"}
 	saved := call(t, svc, token, "saveViewPreferences", app.ViewPreferencesInput{ExpectedVersion: p.Version, DefaultView: "Tickets", NavigationOrder: &legacy}).(model.Preferences)
-	if len(saved.NavigationOrder) != 13 || saved.NavigationOrder[12] != "Tickets" || saved.DefaultView != "Tickets" {
+	if len(saved.NavigationOrder) != 9 || saved.NavigationOrder[1] != "Backlog" || saved.DefaultView != "Backlog" {
 		t.Fatal("legacy view set did not migrate", saved)
 	}
 	call(t, svc, token, "saveCurrentLocation", map[string]any{"view": "Tickets", "projectId": 0})
-	if current := call(t, svc, token, "getSession", struct{}{}).(map[string]any)["lastLocation"].(*model.RecentContext); current.View != "Tickets" {
+	if current := call(t, svc, token, "getSession", struct{}{}).(map[string]any)["lastLocation"].(*model.RecentContext); current.View != "Backlog" {
 		t.Fatal("Tickets location not retained")
 	}
 }

@@ -11,7 +11,9 @@ def verify_ticket_keyboard(browser, tk, project_id):
 
     before = call("listTickets", {"projectId": project_id})["items"]
     for view, kind, intent in [("Goals", "goal", "agent"), ("Epics", "epic", "agent"), ("Todos", "task", "human")]:
-        browser("click", f'#nav-views [data-view="{view}"]')
+        browser("click", f'#nav-views [data-view="{"Backlog" if view in ("Goals","Epics") else view}"]')
+        if view in ("Goals","Epics"):
+            browser("select", "#backlog-kind", kind)
         for trigger in ["button", "key"]:
             if trigger == "button":
                 browser("eval", "document.activeElement?.blur()"); browser("press", "n")
@@ -33,6 +35,7 @@ def verify_ticket_keyboard(browser, tk, project_id):
     browser("press", "Escape")
     browser("wait", f'.ticket-open[data-ticket="{created[0]["id"]}"]')
     browser("wait", "--fn", json.dumps([str(ticket["id"]) for ticket in created]) + ".every(id=>document.querySelector('.ticket-open[data-ticket=\"'+id+'\"]'))")
+    browser("wait", "--fn", "document.querySelector('.ticket-open[data-ticket=\"" + str(created[2]["id"]) + "\"]')?.closest('.lane')?.querySelector('h2')?.textContent==='Doing'")
     browser("eval", f'document.querySelector(\'.ticket-open[data-ticket="{created[0]["id"]}"]\').focus()')
     browser("press", "ArrowDown"); focused(created[1])
     browser("press", "ArrowDown"); focused(created[1])

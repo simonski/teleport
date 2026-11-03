@@ -72,14 +72,21 @@ def main():
     parser.add_argument("--arch",choices=("amd64","arm64"))
     parser.add_argument("--builder",choices=("auto","native","zig","docker"),default=os.environ.get("DEPLOY_BUILDER","auto"))
     parser.add_argument("--addr",default=os.environ.get("DEPLOY_ADDR","0.0.0.0:8000"))
+    parser.add_argument("--public-hosts",default=os.environ.get("DEPLOY_PUBLIC_HOSTS",""),help="Additional comma-separated HTTPS hostnames")
     parser.add_argument("--build-only",action="store_true")
     parser.add_argument("--dry-run",action="store_true")
     args=parser.parse_args()
     directory=validate_target(args.host,args.directory)
+    primary=args.host.split("@",1)[1].lower()
+    aliases=["teleport.engineering","teleport.exe.xyz"] if primary in ("teleport.engineering","teleport.exe.xyz") else []
+    if args.public_hosts:aliases.extend(args.public_hosts.split(","))
+    public_hosts=list(dict.fromkeys([primary,*[host.strip().lower() for host in aliases]]))
+    if len(public_hosts)>10 or any(not re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?",host) or ".." in host or any(len(label)>63 or label.startswith("-") or label.endswith("-") for label in host.split(".")) for host in public_hosts):
+        parser.error("Use up to ten bare public HTTPS hostnames")
     if not re.fullmatch(r"(?:127\.0\.0\.1|0\.0\.0\.0):[1-9][0-9]{0,4}",args.addr) or int(args.addr.rsplit(":",1)[1])>65535:
         parser.error("Use a Linux listen address such as 127.0.0.1:9999")
     if args.dry_run:
-        print(f"Build Linux {args.arch or 'architecture detected over SSH'}; scp to {args.host}:{directory}/releases; initialize only if needed; start {args.addr}; retrieve protected credentials to .deploy/")
+        print(f"Build Linux {args.arch or 'architecture detected over SSH'}; scp to {args.host}:{directory}/releases; initialize only if needed; start {args.addr}; HTTPS hosts: {', '.join(public_hosts)}; retrieve protected credentials to .deploy/")
         return
     ssh=["ssh","-o","BatchMode=yes","-o","ConnectTimeout=10",args.host]
     arch=args.arch
@@ -101,7 +108,7 @@ def main():
     subprocess.run([*ssh,shlex.join(["mkdir","-p","--",remote])],check=True,timeout=15)
     for source,destination in ((binary,"tk"),(ROOT/"tools/deploy_remote.py","deploy_remote.py"),(ROOT/"tools/tool_history.py","tool_history.py")):
         subprocess.run(["scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=10",str(source),args.host+":"+shlex.quote(remote+"/"+destination)],check=True,timeout=120)
-    manifest={"root":directory,"release":release,"version":version,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"addr":args.addr,"publicHost":args.host.split("@",1)[1]}
+    manifest={"root":directory,"release":release,"version":version,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"addr":args.addr,"publicHost":primary,"publicHosts":public_hosts}
     subprocess.run([*ssh,shlex.join(["env","TELEPORT_TOOL_HISTORY="+directory+"/tool_calls_history.csv","python3",remote+"/deploy_remote.py"])],input=json.dumps(manifest),text=True,check=True,timeout=45)
     credentials=ROOT/".deploy";credentials.mkdir(mode=0o700,exist_ok=True)
     if credentials.is_symlink():

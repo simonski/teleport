@@ -24,6 +24,9 @@ def validate_manifest(manifest):
         raise ValueError("Invalid release identity")
     if not re.fullmatch(r"[A-Za-z0-9.+_-]{1,150}",manifest["version"]) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*",manifest["publicHost"]):
         raise ValueError("Invalid version or public hostname")
+    hosts=manifest.get("publicHosts",[manifest["publicHost"]])
+    if not isinstance(hosts,list) or not 1<=len(hosts)<=10 or manifest["publicHost"] not in hosts or any(not isinstance(host,str) or not re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?",host) or ".." in host or any(len(label)>63 or label.startswith("-") or label.endswith("-") for label in host.split(".")) for host in hosts):
+        raise ValueError("Invalid public HTTPS hostname aliases")
     if not re.fullmatch(r"(?:127\.0\.0\.1|0\.0\.0\.0):[1-9][0-9]{0,4}",manifest["addr"]) or int(manifest["addr"].rsplit(":",1)[1])>65535:
         raise ValueError("Invalid listen address")
     return root
@@ -120,7 +123,7 @@ def deploy(manifest):
     staged.unlink(missing_ok=True);staged.symlink_to(release);staged.replace(current)
     with log.open("ab") as output:
         os.chmod(log,0o600)
-        process=subprocess.Popen([str(binary),"serve","--db",str(database),"--addr",manifest["addr"],"--public-host",manifest["publicHost"],"--runtime-dir",str(root/"runtime")],cwd=root,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+        process=subprocess.Popen([str(binary),"serve","--db",str(database),"--addr",manifest["addr"],"--public-host",",".join(manifest.get("publicHosts",[manifest["publicHost"]])),"--runtime-dir",str(root/"runtime")],cwd=root,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
     secure_json(pid_file,{"pid":process.pid,"version":version,"release":str(release)})
     port=int(manifest["addr"].rsplit(":",1)[1]);deadline=time.monotonic()+10
     while time.monotonic()<deadline:

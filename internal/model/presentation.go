@@ -9,6 +9,10 @@ type GraphLayout struct {
 	Version   int64             `json:"version"`
 	Positions map[string]Point3 `json:"positions"`
 }
+type BacklogOrder struct {
+	Version int64    `json:"version"`
+	Keys    []string `json:"keys"`
+}
 type RecentContext struct {
 	View      string `json:"view"`
 	ProjectID int64  `json:"projectId"`

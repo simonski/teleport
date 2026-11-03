@@ -9,7 +9,7 @@ def verify_project_directory(browser, tk, selected_project):
     projects = call("listProjects")["items"]
     other = next(project for project in projects if project["id"] != selected_project)
     call("createTicket", {"projectId": other["id"], "title": "Directory outside selected scope", "agent": False, "requestId": "directory-other"})
-    browser("click", '#nav-views [data-view="Projects"]')
+    browser("select", "#project", "manage-projects")
     browser("click", '[data-project-presentation="list"]')
     browser("wait", "--fn", "!!projectDirectory&&!document.querySelector('#project-directory-status').textContent")
     rows = call("listProjectSummaries")["items"]
@@ -26,6 +26,8 @@ def verify_project_directory(browser, tk, selected_project):
     browser("fill", '#editor [name="description"]', description)
     browser("click", '#editor [type="submit"]')
     browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')&&!document.querySelector('#project-directory-status')?.textContent&&!!projectDirectory")
+    browser("select", "#project", "manage-projects")
+    browser("wait", "--fn", "!document.querySelector('#project-directory-status').textContent")
     prefix = f'[data-project-row="{selected_project}"]'
     browser("wait", "--fn", "document.querySelector(" + json.dumps(prefix + ' .project-description') + ")?.textContent===" + json.dumps(description))
     browser("eval", "if(document.querySelector('.project-description b'))throw new Error('Project description was interpreted as HTML')")

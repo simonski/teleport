@@ -24,7 +24,7 @@ function profileMenuHTML(){
 function bindAccountMenu(){
   const menu=byId('account-menu');if(!menu)return;
   const trigger=byId('account'),close=closeAccountMenu;
-  on('account','click',()=>{menu.hidden=!menu.hidden;trigger.setAttribute('aria-expanded',String(!menu.hidden));if(!menu.hidden)menu.querySelector('[role=menuitem]')?.focus();});
+  on('account','click',()=>{menu.hidden=!menu.hidden;trigger.setAttribute('aria-expanded',String(!menu.hidden));if(!menu.hidden){positionAccountMenu();menu.querySelector('[role=menuitem]')?.focus();}});
   const outside=e=>{if(!menu.isConnected){document.removeEventListener('pointerdown',outside);return;}if(!menu.contains(e.target)&&!trigger.contains(e.target))close();};
   document.addEventListener('pointerdown',outside);
   on('account-welcome','click',()=>{close();openWelcome().catch(showError);});

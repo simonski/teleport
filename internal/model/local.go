@@ -6,6 +6,8 @@ type LocalSession struct {
 	ProcessID          int            `json:"processId,omitempty"`
 	ReferenceRemovedBy string         `json:"referenceRemovedBy,omitempty"`
 	ReferenceRemovedAt *time.Time     `json:"referenceRemovedAt,omitempty"`
+	CapacityReleasedAt *time.Time     `json:"capacityReleasedAt,omitempty"`
+	CapacityReleasedBy string         `json:"capacityReleasedBy,omitempty"`
 	Managed            *ManagedLaunch `json:"managed,omitempty"`
 	CredentialHash     string         `json:"credentialHash,omitempty"`
 	CredentialExpires  time.Time      `json:"credentialExpires,omitempty"`

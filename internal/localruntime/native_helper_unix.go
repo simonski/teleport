@@ -22,6 +22,62 @@ import (
 	"github.com/coder/websocket"
 )
 
+// Keep transport messages bounded independently of the much smaller retained
+// telemetry. Large valid protocol messages must reach the native terminal intact.
+const nativeFrameLimit = 64 << 20
+
+var errNativeFrameTooLarge = errors.New("native frame exceeds transport limit")
+
+func nativeCleanupVerified(engineExited, protocolFailed bool, openCommands int, everCommand, cleanupAck bool) bool {
+	return engineExited && !protocolFailed && openCommands == 0 && (!everCommand || cleanupAck)
+}
+
+func readNativeFrame(reader *bufio.Reader, limit int) ([]byte, error) {
+	var frame []byte
+	for {
+		part, err := reader.ReadSlice('\n')
+		if len(frame)+len(part) > limit+1 || len(frame)+len(part) > limit && (len(part) == 0 || part[len(part)-1] != '\n') {
+			return nil, errNativeFrameTooLarge
+		}
+		frame = append(frame, part...)
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		if err != nil {
+			if err == io.EOF && len(frame) != 0 {
+				return nil, io.ErrUnexpectedEOF
+			}
+			return nil, err
+		}
+		frame = frame[:len(frame)-1]
+		if len(frame) > limit {
+			return nil, errNativeFrameTooLarge
+		}
+		return frame, nil
+	}
+}
+
+// Log only known protocol method names; untrusted method strings may contain
+// private content and must not enter diagnostics.
+func (p *nativeProxy) nativeDiagnosticMethod(data []byte) string {
+	var m struct {
+		Method string          `json:"method"`
+		ID     json.RawMessage `json:"id"`
+	}
+	if json.Unmarshal(data, &m) == nil {
+		if m.Method == "" && len(m.ID) != 0 {
+			p.mu.Lock()
+			m.Method = p.queries[string(m.ID)]
+			p.mu.Unlock()
+		}
+		switch m.Method {
+		case "thread/list", "thread/loaded/list", "thread/start", "thread/started", "thread/status/changed", "turn/start", "turn/started", "turn/completed", "item/started", "item/completed", "serverRequest/resolved":
+			return m.Method
+		}
+	}
+	return "other_or_response"
+}
+
 type nativeDispatch struct {
 	RequestID   string          `json:"requestId"`
 	OperationID string          `json:"operationId"`
@@ -194,7 +250,7 @@ func (p *nativeProxy) accept(w http.ResponseWriter, r *http.Request) {
 	close(p.connected)
 	p.mu.Unlock()
 	defer connection.CloseNow()
-	connection.SetReadLimit(8 << 20)
+	connection.SetReadLimit(nativeFrameLimit)
 	for {
 		typ, data, err := connection.Read(context.Background())
 		if err != nil {
@@ -506,10 +562,18 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 	// Drain the pipe before Wait closes it. Keep collecting exit evidence even
 	// after the TUI disconnects; a disconnected viewer is not a command exit.
 	go func() {
-		scanner := bufio.NewScanner(output)
-		scanner.Buffer(make([]byte, 65536), 8<<20)
-		for scanner.Scan() {
-			data, parseErr := proxy.fromEngine(append([]byte(nil), scanner.Bytes()...))
+		reader := bufio.NewReaderSize(output, 65536)
+		var readErr error
+		for {
+			frame, err := readNativeFrame(reader, nativeFrameLimit)
+			if err != nil {
+				readErr = err
+				break
+			}
+			if len(frame) > 8<<20 {
+				slog.Info("large native protocol frame", "session", id, "direction", "engine_to_terminal", "bytes", len(frame), "method", proxy.nativeDiagnosticMethod(frame))
+			}
+			data, parseErr := proxy.fromEngine(frame)
 			if parseErr != nil {
 				proxy.retainFailure(nativeParseFailure(parseErr), true)
 				stop()
@@ -533,9 +597,10 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 			}
 		}
 		code := "native_protocol_eof"
-		if errors.Is(scanner.Err(), bufio.ErrTooLong) {
+		if errors.Is(readErr, errNativeFrameTooLarge) {
 			code = "native_protocol_frame_too_large"
-		} else if scanner.Err() != nil {
+			slog.Warn("native protocol frame exceeds limit", "session", id, "direction", "engine_to_terminal", "bytes_at_least", nativeFrameLimit+1)
+		} else if readErr != nil && readErr != io.EOF {
 			code = "native_protocol_read_failed"
 		}
 		proxy.retainFailure(code, true)
@@ -575,17 +640,17 @@ func RunNative(ctx context.Context, root, id, launch, generation, codex, role st
 		}
 		_ = input.Close()
 		engineExited := false
-		var engineResult error
 		select {
-		case engineResult = <-engineDone:
+		case <-engineDone:
 			engineExited = true
 		case <-time.After(2 * time.Second):
 			_ = engine.Process.Kill()
 			_ = output.Close()
-			engineResult = <-engineDone
+			<-engineDone
+			engineExited = true
 		}
 		proxy.mu.Lock()
-		confirmed := engineExited && engineResult == nil && !proxy.protocolFailed && len(proxy.openCommands) == 0 && (!proxy.everCommand || proxy.cleanupAck)
+		confirmed := nativeCleanupVerified(engineExited, proxy.protocolFailed, len(proxy.openCommands), proxy.everCommand, proxy.cleanupAck)
 		connection := proxy.connection
 		failed := proxy.failureCode != ""
 		proxy.mu.Unlock()

@@ -5,6 +5,22 @@ const path=require('node:path');
 const vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../web/terminals.js'),'utf8');
 
+test('harness action attaches an existing session or starts Codex in the selected project',async()=>{
+  let rows=[{id:'H1',state:'running',ticketId:0}],calls=[],opened=[];
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'}},detailEpoch:1,projectId:4,projects:[{id:4}],roleAllowsWrite:()=>true,crypto:{randomUUID:()=> 'request'},pages:async()=>rows,api:async(op,input)=>{calls.push([op,input]);return op==='getLocalHarnesses'?{available:[{id:'codex'}]}:{id:'H2'};}});
+  vm.runInContext(source,context);vm.runInContext('openTerminal=async id=>opened.push(id);refreshSessionRoster=async()=>{}',context);
+  context.opened=opened;
+  await vm.runInContext('chooseHarness()',context);assert.deepEqual(opened,['H1']);assert.equal(calls.length,1);
+  rows=[];await vm.runInContext('chooseHarness()',context);assert.deepEqual(opened,['H1','H2']);
+  assert.equal(calls[2][0],'openConsoleSession');assert.equal(calls[2][1].projectId,4);assert.equal(calls[2][1].harness,'codex');
+});
+
+test('shell control starts a distinct shell and opens its terminal',async()=>{
+  const calls=[],opened=[];const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'}},detailEpoch:1,projectId:4,projects:[{id:4}],roleAllowsWrite:()=>true,crypto:{randomUUID:()=> 'shell-request'},api:async(op,input)=>{calls.push([op,input]);return {id:'H4'}}});
+  context.opened=opened;vm.runInContext(source,context);vm.runInContext('openTerminal=async id=>opened.push(id);refreshSessionRoster=async()=>{}',context);
+  await vm.runInContext('startShell()',context);assert.equal(calls[0][0],'openShellSession');assert.equal(calls[0][1].projectId,4);assert.equal(calls[0][1].requestId,'shell-request');assert.deepEqual(opened,['H4']);
+});
+
 test('all retained live and idle robots expose exact session and ticket identity',()=>{
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String});vm.runInContext(source,context);
   vm.runInContext(`localSessions=Array.from({length:5},(_,i)=>({id:'H'+i,state:i===4?'unknown':'running',ticketId:i?7:0,activity:i?'active':'idle'}))`,context);
@@ -24,11 +40,25 @@ for(const change of ['new foreground form','sign out'])test(`delayed session swi
 test('unknown sessions offer a recorded stop intent and ended sessions are grouped',async()=>{
   let html='';const form={},cancel={};
   const dialog={querySelectorAll:()=>[]};
-  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,document:{addEventListener(){}},setInterval(){},openDialog:(title,body)=>{html=body;return dialog},captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?cancel:form,on(){}});
+  form.append=()=>{};const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async()=>[],document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:(title,body)=>{html=body;return dialog},captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?cancel:form,on(){}});
   vm.runInContext(source,context);
   vm.runInContext(`refreshSessionRoster=async()=>{};localSessions=[{id:'H1',harness:'codex',state:'exited',processId:42},{id:'H2',harness:'codex',state:'exited'},{id:'H3',harness:'codex',state:'unknown',processId:43}]`,context);
   await vm.runInContext('sessionSwitcher()',context);
   assert.match(html,/Ended sessions \(2\)/);assert.match(html,/Ownership unconfirmed/);assert.match(html,/data-stop-managed="H3" data-unknown="true"/);assert.match(html,/session PID 42/);assert.match(html,/session PID 43/);
+});
+
+test('recovery displays removed unresolved sessions without claiming exit',async()=>{
+  let recoveryHTML='',requested;const form={append(section){recoveryHTML=section.innerHTML}};
+  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async(op,input)=>{requested=[op,input.includeHidden];return [{id:'H3',harness:'codex',projectId:4,state:'unknown',referenceRemoved:true,reference:'ref',errorCode:'native_exit_unverified'}]},document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:()=>({querySelectorAll:()=>[]}),captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?{}:form,on(){}});
+  vm.runInContext(source,context);vm.runInContext('refreshSessionRoster=async()=>{}',context);await vm.runInContext('sessionSwitcher()',context);
+  assert.deepEqual(requested,['listSessions',true]);assert.match(recoveryHTML,/H3/);assert.match(recoveryHTML,/native_exit_unverified/);assert.match(recoveryHTML,/Release reservation/);assert.match(recoveryHTML,/does not confirm/);
+});
+
+test('release confirmation submits the exact unresolved reference',async()=>{
+  let html='',input;const form={},dialog={open:true,close(){this.open=false}};
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String,openDialog:(title,body)=>{html=body;return dialog},byId:()=>form,api:async(op,value)=>{assert.equal(op,'removeSessionReference');input=value},notice(){}});
+  vm.runInContext(source,context);vm.runInContext('refreshSessionRoster=async()=>{};confirmReleaseSession({id:"H3",reference:"ref"})',context);
+  assert.match(html,/cannot confirm/);await form.onsubmit({preventDefault(){}});assert.equal(input.id,'H3');assert.equal(input.expectedReference,'ref');assert.equal(input.releaseCapacity,true);assert.equal(input.confirm,true);
 });
 
 test('stop confirmation closes immediately and reports the eventual error',async()=>{
@@ -62,7 +92,7 @@ test('non-Teleport stop confirmation closes before an error is shown',async()=>{
 
 test('unknown free consoles offer removal, with confirmation closing before the result',async()=>{
   let html='',resolve;const form={},events=[];
-  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,document:{addEventListener(){}},setInterval(){},openDialog:(title,body)=>{html=body;return {querySelectorAll:()=>[],close(){events.push('close')}}},captureDialogCompletion:()=>({current:()=>true,follow:()=>true}),byId:id=>id==='cancel'?{}:form,on(){},api:(op,input)=>{events.push([op,input.id,input.expectedReference,input.confirm]);return new Promise(done=>resolve=done)},notice:value=>events.push(value)});
+  form.append=()=>{};const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async()=>[],document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:(title,body)=>{html=body;return {querySelectorAll:()=>[],close(){events.push('close')}}},captureDialogCompletion:()=>({current:()=>true,follow:()=>true}),byId:id=>id==='cancel'?{}:form,on(){},api:(op,input)=>{events.push([op,input.id,input.expectedReference,input.confirm]);return new Promise(done=>resolve=done)},notice:value=>events.push(value)});
   vm.runInContext(source,context);vm.runInContext("refreshSessionRoster=async()=>{};localSessions=[{id:'H3',harness:'codex',state:'unknown',reference:'identity',stopRequested:true}]",context);
   await vm.runInContext('sessionSwitcher()',context);assert.match(html,/data-remove-reference="H3"/);
   vm.runInContext("confirmRemoveSessionReference(localSessions[0])",context);assert.match(html,/No process will be stopped/);assert.match(html,/quarantined/);

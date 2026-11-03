@@ -18,6 +18,8 @@ def main(database_url=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--native-fixture", action="store_true", help="Exercise native Codex protocol through a zero-provider fake executable")
+    parser.add_argument("--native-large-frame", action="store_true", help="Exercise a large native protocol frame with the fixture")
+    parser.add_argument("--shell-pty", action="store_true", help="Exercise a real local zsh PTY without an agent")
     parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
     parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
@@ -28,11 +30,17 @@ def main(database_url=None):
         port = sock.getsockname()[1]
     endpoint = f"http://127.0.0.1:{port}"
     environment = dict(os.environ, TELEPORT_DB=args.database or database_url, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+    if args.shell_pty:
+        shell_home = folder / "shell-config"
+        shell_home.mkdir(mode=0o700)
+        environment["ZDOTDIR"] = str(shell_home)
     if args.native_fixture:
         fixture_bin = folder / "fixture-bin"
         fixture_bin.mkdir()
         subprocess.run(["go", "build", "-o", str(fixture_bin / "codex"), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=60)
         environment["PATH"] = str(fixture_bin) + os.pathsep + environment["PATH"]
+        if args.native_large_frame:
+            environment["TK_NATIVE_FIXTURE_LARGE"] = "1"
     if args.native_fixture and args.native_startup_only:
         parser.error("choose one native fixture")
     if args.native_startup_only:
@@ -98,19 +106,59 @@ def main(database_url=None):
         git("commit", "-m", "Seed terminal fixture")
         project = tk("createProject", {"name": "Terminal proof", "key": "terminal-" + uuid.uuid4().hex[:12], "requestId": "terminal-project"})
         project = tk("configureLocalRepository", {"projectId": project["id"], "expectedVersion": project["version"], "repository": str(repository), "storageRoot": str(folder / "worktrees")})
+        if args.shell_pty:
+            project = tk("setLaneCapacity", {"projectId": project["id"], "expectedVersion": project["version"], "refineWorkers": 1, "doingWorkers": 1, "maxAgents": 0})
         if args.native_startup_only:
             config = folder / "isolated-codex" / "config.toml"
             config.write_text("[projects." + json.dumps(str(folder.resolve())) + "]\ntrust_level = \"untrusted\"\n[projects." + json.dumps(str(repository.resolve())) + "]\ntrust_level = \"trusted\"\n")
         if args.console_only:
             git("checkout", "-b", "console-feature")
-        start = {"projectId": project["id"], "harness": harness, "requestId": "terminal-start"}
-        row = tk("openConsoleSession", start)
+        operation = "openShellSession" if args.shell_pty else "openConsoleSession"
+        start = {"projectId": project["id"], "requestId": "terminal-start"}
+        if not args.shell_pty:
+            start["harness"] = harness
+        row = tk(operation, start)
         session_id = row["id"]
         assert row["state"] == "running" and row["ticketId"] == 0
-        assert tk("openConsoleSession", start)["id"] == session_id
+        assert tk(operation, start)["id"] == session_id
         import base64
         def read():
             return base64.b64decode(tk("attachSession", {"id": session_id})["data"]).decode(errors="replace")
+        if args.shell_pty:
+            assert row["harness"] == "shell" and row["directory"] == str(repository.resolve())
+            command = b"printf 'TK_%s\\n' SHELL_READY\n"
+            receipt = tk("sendSessionInput", {"id": session_id, "requestId": "shell-command", "data": base64.b64encode(command).decode()})
+            assert receipt["state"] == "delivered"
+            wait_for(lambda: "TK_SHELL_READY" in read())
+            tk("resizeSession", {"id": session_id, "cols": 120, "rows": 35})
+            second = tk("openShellSession", {"projectId": project["id"], "requestId": "second-shell"})
+            assert second["id"] != session_id and second["state"] == "running"
+            assert next(item for item in tk("listProjectSummaries")["items"] if item["id"] == project["id"])["agents"] == 0
+            if args.browser:
+                browser("open", endpoint)
+                browser_open = True
+                browser("find", "label", "Username", "fill", "admin")
+                browser("find", "label", "Password", "fill", "password")
+                browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                browser("wait", "#welcome-status")
+                browser("press", "Escape")
+                browser("click", "#shell-console")
+                browser("wait", ".xterm-screen")
+                third = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] not in (session_id, second["id"]) and item["harness"] == "shell"), None))
+                browser("eval", "terminalView.terminal.paste(\"printf 'TK_%s\\\\n' BROWSER_READY\");true")
+                browser("press", "Enter")
+                def browser_output():
+                    output = tk("attachSession", {"id": third["id"]})["data"]
+                    return "TK_BROWSER_READY" in base64.b64decode(output).decode(errors="replace")
+                wait_for(browser_output)
+                tk("stopSession", {"id": third["id"], "confirm": True})
+            tk("stopSession", {"id": second["id"], "confirm": True})
+            tk("stopSession", {"id": session_id, "confirm": True})
+            wait_for(lambda: all(item["state"] in ("exited", "failed") for item in tk("listSessions")["items"]))
+            tk("shutdownLocalRuntime", {"confirm": True})
+            clean = True
+            print("PASS: independent project-root zsh PTYs, input/output, resize and confirmed stop with zero agent capacity" + ("; browser shell control and input" if args.browser else ""))
+            return
         if args.native_startup_only:
             def native_ready():
                 screen = read()
@@ -131,6 +179,8 @@ def main(database_url=None):
             print("PASS: installed Codex starts in a trusted fixture project without a provider credential or model turn")
             return
         wait_for(lambda: ("native fixture connected" if args.native_fixture else "terminal fixture") in read())
+        if args.native_large_frame:
+            wait_for(lambda: "native fixture large frame received" in read())
         summary = next(item for item in tk("listProjectSummaries")["items"] if item["id"] == project["id"])
         assert summary["agents"] == 1 and summary["agentsScope"] == "own-authorized" and summary["tokens"] is None
         if args.native_fixture:
@@ -322,7 +372,9 @@ def main(database_url=None):
         if not clean and process is not None and process.poll() is None:
             try:
                 if session_id:
-                    tk("stopSession", {"id": session_id, "confirm": True})
+                    for item in tk("listSessions")["items"]:
+                        if item["state"] not in ("exited", "failed"):
+                            tk("stopSession", {"id": item["id"], "confirm": True})
                     wait_for(lambda: all(r["state"] in ("exited", "failed") for r in tk("listSessions")["items"]))
                 tk("shutdownLocalRuntime", {"confirm": True})
                 clean = True

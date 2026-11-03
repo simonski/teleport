@@ -118,6 +118,9 @@ func engine() {
 		switch m.Method {
 		case "thread/start":
 			event("thread/started", map[string]any{"thread": map[string]any{"id": "fixture-thread"}})
+			if os.Getenv("TK_NATIVE_FIXTURE_LARGE") == "1" {
+				event("fixture/large", map[string]any{"data": strings.Repeat("x", 9<<20)})
+			}
 		case "turn/start":
 			event("turn/started", map[string]any{"threadId": "fixture-thread", "turn": map[string]any{"id": fmt.Sprint(turn)}})
 			if managedRole == "Doing" || managedRole == "Review" {
@@ -153,6 +156,7 @@ func tui(path string) {
 		history.Exit(1)
 	}
 	defer connection.CloseNow()
+	connection.SetReadLimit(64 << 20)
 	var mu sync.Mutex
 	send := func(value any) {
 		data, _ := json.Marshal(value)
@@ -197,6 +201,9 @@ func tui(path string) {
 		if string(m.ID) == `"thread"` {
 			fmt.Println("native fixture connected")
 			request("turn", "turn/start")
+		}
+		if m.Method == "fixture/large" && len(data) > 9<<20 {
+			fmt.Println("native fixture large frame received")
 		}
 		if m.Method == "item/tool/requestUserInput" {
 			mu.Lock()

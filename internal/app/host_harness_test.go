@@ -121,12 +121,28 @@ func TestRemoveStaleConsoleReference(t *testing.T) {
 			t.Fatal("removed reference remains visible")
 		}
 	}
+	page = call(t, svc, token, "listSessions", app.ListInput{IncludeHidden: true}).(app.LocalSessionPage)
+	visibleInRecovery := false
+	for _, row := range page.Items {
+		if row.ID == "H3" && row.ReferenceRemoved && row.State == "unknown" {
+			visibleInRecovery = true
+		}
+	}
+	if !visibleInRecovery {
+		t.Fatal("removed unresolved session missing from recovery listing")
+	}
+	if err := invoke(app.RemoveSessionReferenceInput{ID: "H3", ExpectedReference: "stale", Confirm: true, ReleaseCapacity: true}); err == nil {
+		t.Fatal("stale release accepted")
+	}
+	if err := invoke(app.RemoveSessionReferenceInput{ID: "H3", ExpectedReference: ref, Confirm: true, ReleaseCapacity: true}); err != nil {
+		t.Fatal(err)
+	}
 	state, err := db.Read(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	row := state.LocalSessions["H3"]
-	if row.State != "unknown" || row.ReferenceRemovedAt == nil || row.ReferenceRemovedBy != "admin" || !row.StopRequested || row.ExitedAt != nil {
+	if row.State != "unknown" || row.ReferenceRemovedAt == nil || row.ReferenceRemovedBy != "admin" || row.CapacityReleasedAt == nil || row.CapacityReleasedBy != "admin" || !row.StopRequested || row.CredentialHash != "" || row.ExitedAt != nil {
 		t.Fatal("quarantine or audit lost", row)
 	}
 	if err := db.Update(context.Background(), func(st *model.State) (bool, error) {

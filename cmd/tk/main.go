@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -95,6 +96,15 @@ func run(args []string) error {
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 		return localruntime.Run(ctx, *root)
+	}
+	if command == "_shell-session" {
+		if len(args) != 1 {
+			return errors.New("shell wrapper takes no arguments")
+		}
+		shell := exec.Command("/bin/zsh", "-i")
+		shell.Stdin, shell.Stdout, shell.Stderr = os.Stdin, os.Stdout, os.Stderr
+		shell.Env = append(os.Environ(), "TERM=xterm-256color")
+		return shell.Run()
 	}
 	if command == "_terminal-fixture" {
 		fmt.Println("teleport terminal fixture · no model")

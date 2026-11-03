@@ -184,7 +184,7 @@ func (s *Service) projectDirectory(ctx context.Context, token string, raw json.R
 		if session.ExitedAt != nil {
 			row.observeActivity(*session.ExitedAt)
 		}
-		if !activeLocal(session) || session.StopRequested || session.State == "stopping" {
+		if session.Harness == "shell" || !activeLocal(session) || session.StopRequested || session.State == "stopping" {
 			continue
 		}
 		status, ok := observed[session.ID]

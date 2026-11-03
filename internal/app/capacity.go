@@ -1,6 +1,10 @@
 package app
 
-import "teleport/internal/model"
+import (
+	"fmt"
+
+	"teleport/internal/model"
+)
 
 func refinePool(p model.Phase) bool {
 	return p.Role == "Refine" || p.Role == "Decompose"
@@ -13,6 +17,7 @@ func projectAgentCapacity(st *model.State, projectID int64) error {
 		return nil
 	}
 	used := 0
+	hiddenUnknown := 0
 	counted := map[string]bool{}
 	for _, ticket := range st.Tickets {
 		if ticket.ProjectID != projectID || !ticket.Agent || !busy(ticket) {
@@ -24,12 +29,24 @@ func projectAgentCapacity(st *model.State, projectID int64) error {
 		}
 	}
 	for _, row := range st.LocalSessions {
-		if row.ProjectID == projectID && activeLocal(row) && !counted["local:"+row.ID] {
-			used++
+		if row.ProjectID == projectID && row.Harness != "shell" && activeLocal(row) && row.CapacityReleasedAt == nil {
+			if row.State == "unknown" && row.ReferenceRemovedAt != nil {
+				hiddenUnknown++
+			}
+			if !counted["local:"+row.ID] {
+				used++
+			}
 		}
 	}
 	if used >= *maximum {
-		return failure(409, "project_agent_limit", "The project agent limit is fully reserved")
+		if *maximum == 0 {
+			return failure(409, "project_agent_limit", "The project agent limit is 0; update the project agent settings to allow starts")
+		}
+		message := fmt.Sprintf("The project agent limit is fully reserved (%d of %d). Ticket reservations and unresolved sessions also count", used, *maximum)
+		if hiddenUnknown > 0 {
+			message += "; an unresolved session with a removed reference still reserves capacity"
+		}
+		return failure(409, "project_agent_limit", message)
 	}
 	return nil
 }

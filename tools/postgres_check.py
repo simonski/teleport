@@ -33,7 +33,13 @@ def main():
     selection.add_argument("--tests-only", action="store_true", help="Run only Go tests against disposable PostgreSQL")
     selection.add_argument("--init-only", action="store_true", help="Verify initialization against a fresh database")
     parser.add_argument("--test-pattern", help="Go test -run pattern for a focused regression")
+    parser.add_argument("--native-large-frame", action="store_true", help="Exercise a large frame in the native fixture (requires --native-only)")
+    parser.add_argument("--shell-pty", action="store_true", help="Exercise zsh PTYs (requires --terminal-only)")
     args = parser.parse_args()
+    if args.native_large_frame and not args.native_only:
+        parser.error("--native-large-frame requires --native-only")
+    if args.shell_pty and not args.terminal_only:
+        parser.error("--shell-pty requires --terminal-only")
     if (args.shell_only or args.studio_only) and not args.browser:
         parser.error("--shell-only/--studio-only requires --browser")
     from postgres import binaries
@@ -118,6 +124,8 @@ def main():
                 pg("createdb", "--host", temporary, "--username", "teleport", "terminal")
                 terminal_url = "postgresql://teleport@/terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
                 terminal_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", terminal_url]
+                if args.shell_pty:
+                    terminal_command.append("--shell-pty")
                 if args.browser:
                     terminal_command.append("--browser")
                 subprocess.run(terminal_command, cwd=ROOT, env=environment, check=True)
@@ -125,6 +133,8 @@ def main():
                 pg("createdb", "--host", temporary, "--username", "teleport", "native_terminal")
                 native_url = "postgresql://teleport@/native_terminal?" + urlencode({"host": temporary, "sslmode": "disable"})
                 native_command = ["python3", "-B", "tools/local_runtime_check.py", "--database", native_url, "--native-fixture"]
+                if args.native_large_frame:
+                    native_command.append("--native-large-frame")
                 if args.browser:
                     native_command.append("--browser")
                 subprocess.run(native_command, cwd=ROOT, env=environment, check=True)

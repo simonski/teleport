@@ -2,7 +2,9 @@ package app
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"teleport/internal/model"
 )
@@ -26,8 +28,22 @@ func TestProjectAgentLimitCountsOwnedReservationsAndUnknownSessions(t *testing.T
 		t.Fatal(err)
 	}
 	maximum = 0
-	if err := projectAgentCapacity(st, 1); err == nil {
+	if err := projectAgentCapacity(st, 1); err == nil || !strings.Contains(ErrorResponse(err).Message, "limit is 0") {
 		t.Fatal("zero maximum did not block admission")
+	}
+	maximum = 1
+	now := time.Now()
+	row.State, row.ReferenceRemovedAt = "unknown", &now
+	st.LocalSessions["H2"] = row
+	if err := projectAgentCapacity(st, 1); err == nil || !strings.Contains(ErrorResponse(err).Message, "removed reference") {
+		t.Fatal("hidden unresolved reservation was not explained", err)
+	}
+	delete(st.Tickets, 7)
+	delete(st.LocalSessions, "H1")
+	row.CapacityReleasedAt = &now
+	st.LocalSessions["H2"] = row
+	if err := projectAgentCapacity(st, 1); err != nil {
+		t.Fatal("explicitly released console still consumes capacity", err)
 	}
 }
 

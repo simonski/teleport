@@ -362,3 +362,31 @@ goal lifecycle
     it's possible that a goal is nto actuallty achievable insofar as marked as "done" - that is directional for hte capabilitiesand outcomes that are desired of any given software solution
 
     whereas a task can be done - so a task is discrete, bounded, constrained.   A goal is possibly. amuch longer-form thing.
+
+
+tk <usage>
+    ticket
+    workflow
+    goal
+    script
+
+    ls
+    project
+    preference
+
+
+    login
+    logout
+    register
+    preferences|config
+
+    prompt
+
+    skill
+    spec
+
+    system
+    version
+    weclome
+
+    email

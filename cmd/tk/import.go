@@ -136,13 +136,27 @@ func captureText(arguments []string, input io.Reader, out, diagnostics io.Writer
 		ProjectID int64  `json:"projectId,omitempty"`
 		Title     string `json:"title"`
 		Text      string `json:"text"`
+		Origin    string `json:"origin"`
 		RequestID string `json:"requestId"`
-	}{*project, *title, string(body), *request})
+	}{*project, *title, string(body), "import", *request})
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(diagnostics, "Request ID: %q (reuse -request-id for an uncertain retry)\n", *request)
 	result, err := requestOperation(*endpoint, creds, "saveIdea", encoded)
+	if err != nil && err.Error() == "400 Bad Request: Invalid request fields or JSON" {
+		// Older servers reject the additive origin field before any mutation.
+		legacy, marshalErr := json.Marshal(struct {
+			ProjectID int64  `json:"projectId,omitempty"`
+			Title     string `json:"title"`
+			Text      string `json:"text"`
+			RequestID string `json:"requestId"`
+		}{*project, *title, string(body), *request})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		result, err = requestOperation(*endpoint, creds, "saveIdea", legacy)
+	}
 	if err != nil {
 		return err
 	}

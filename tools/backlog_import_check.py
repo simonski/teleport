@@ -17,6 +17,7 @@ def main():
         return
     from playwright.sync_api import sync_playwright
     saved = []
+    ticket = {"id": 7, "projectId": 1, "parentId": 0, "kind": "goal", "title": "Fixture goal", "status": "Todo", "phase": "Todo", "workflow": "fixture@1", "agent": False}
     account = {"account": {"id": "import-fixture", "username": "fixture", "administrator": True}, "installationId": "import-fixture", "revision": 1, "contentRevision": 1, "preferences": {"version": 1, "style": "paper", "mode": "light", "defaultView": "Backlog", "defaultProject": 0}, "lastLocation": {"view": "Backlog", "projectId": 0}, "settings": {"executionMode": "off"}}
     errors = []
     with sync_playwright() as playwright:
@@ -42,6 +43,14 @@ def main():
                         result = {"idea": saved[-1], "proposals": [], "acceptances": [], "links": []}
                     elif operation == "getBacklogOrder":
                         result = {"version": 0, "keys": []}
+                    elif operation == "listIdeas":
+                        result = {"items": saved}
+                    elif operation == "listTickets":
+                        result = {"items": [ticket]}
+                    elif operation == "getTicket":
+                        result = ticket
+                    elif operation == "getWorkflow":
+                        result = {"id": "fixture", "version": 1, "phases": [{"id": "Todo", "title": "Todo", "role": "Todo"}], "rules": []}
                     elif operation.startswith("list") or operation == "getIdeaHistory":
                         result = {"items": []}
                     else:
@@ -82,7 +91,24 @@ def main():
             page.screenshot(path='/tmp/teleport-backlog-import.png')
             page.locator('#editor-form button[type=submit]').click()
             page.wait_for_function("document.querySelector('#editor')?.textContent.includes('idea:1')")
-            assert len(saved) == 1 and saved[0]['text'] == 'A goal\n\nMore detail\n' and saved[0]['title'] == 'A goal' and saved[0]['projectId'] == 0
+            assert len(saved) == 1 and saved[0]['text'] == 'A goal\n\nMore detail\n' and saved[0]['title'] == 'A goal' and saved[0]['projectId'] == 0 and saved[0]['origin'] == 'import'
+            page.locator('#cancel').click()
+            card = page.locator('[data-backlog-open="idea:1"]')
+            card.wait_for()
+            card.click(button='right')
+            menu = page.locator('.ticket-context-menu')
+            assert menu.get_by_role('menuitem', name='Decompose').is_disabled()
+            assert menu.get_by_role('menuitem', name='Spellcheck').is_disabled()
+            assert 'not available yet' in menu.inner_text()
+            page.keyboard.press('Escape')
+            assert page.evaluate("document.activeElement===document.querySelector('[data-backlog-open=\"idea:1\"]')")
+            page.keyboard.press('Shift+F10')
+            assert page.locator('.ticket-context-menu').is_visible()
+            page.screenshot(path='/tmp/teleport-backlog-context.png')
+            page.keyboard.press('Escape')
+            page.locator('[data-backlog-open="ticket:7"]').click(button='right')
+            page.get_by_role('menuitem', name='Open ticket').wait_for()
+            page.keyboard.press('Escape')
             assert not errors, json.dumps(errors)
         finally:
             browser.close()

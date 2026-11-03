@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=ROOT / "bin/tk")
     args = parser.parse_args()
-    receipts, calls, failures = {}, [], []
+    receipts, calls, failures, old_server = {}, [], [], [False]
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *arguments):
@@ -36,6 +36,14 @@ def main():
                     failures.append("Agent list changed project scope")
                 result = {"items": [], "nextCursor": ""}
             elif operation == "saveIdea":
+                if old_server[0] and "origin" in data:
+                    body = json.dumps({"error": {"code": "invalid_request", "message": "Invalid request fields or JSON"}}).encode()
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 key = data["requestId"]
                 if key in receipts and receipts[key][0] != data:
                     failures.append("A retry changed capture content")
@@ -97,6 +105,7 @@ def main():
             pipe_result = json.loads(tk("import", "-i", *common, input=text).stdout)
             assert file_result["id"] == pipe_result["id"] and file_result["text"] == pipe_result["text"] == text
             assert len(receipts) == 1
+            assert receipts["same-capture"][0]["origin"] == "import"
 
             if os.name == "posix":
                 import pty
@@ -125,6 +134,9 @@ def main():
                     os.close(master)
                     if slave >= 0:
                         os.close(slave)
+            old_server[0] = True
+            tk("import", str(source), "-request-id", "legacy-server")
+            assert "origin" not in receipts["legacy-server"][0]
             assert not failures, failures
     finally:
         fixture.shutdown()

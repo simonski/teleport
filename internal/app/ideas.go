@@ -17,6 +17,7 @@ type SaveIdeaInput struct {
 	ProjectID       int64  `json:"projectId,omitempty"`
 	Title           string `json:"title"`
 	Text            string `json:"text"`
+	Origin          string `json:"origin,omitempty"`
 	RequestID       string `json:"requestId,omitempty"`
 }
 type IdeaInput struct {
@@ -197,6 +198,9 @@ func ideaOperations(st *model.State, a model.Account, operation string, raw json
 			return nil, false, err
 		}
 		in.Title = strings.TrimSpace(in.Title)
+		if in.Origin != "" && (in.Origin != "import" || in.ID != "") {
+			return nil, false, failure(422, "invalid_idea_origin", "Use import origin only when creating an Idea")
+		}
 		if in.Title == "" || len(in.Title) > 500 || len(in.Text) > 20000 {
 			return nil, false, failure(422, "invalid_idea", "Use a title up to 500 bytes and text up to 20,000 bytes")
 		}
@@ -207,6 +211,16 @@ func ideaOperations(st *model.State, a model.Account, operation string, raw json
 				}
 			}
 			key, fingerprint, previous, err := receipt(st, a, operation, in.RequestID, in)
+			// Older import clients did not send origin. Preserve their retry identity
+			// without changing the already-created Idea or accepting other changes.
+			if err != nil && in.Origin == "import" {
+				legacy := in
+				legacy.Origin = ""
+				_, _, prior, legacyErr := receipt(st, a, operation, in.RequestID, legacy)
+				if legacyErr == nil && prior != nil {
+					previous, err = prior, nil
+				}
+			}
 			if err != nil {
 				return nil, false, err
 			}
@@ -217,7 +231,7 @@ func ideaOperations(st *model.State, a model.Account, operation string, raw json
 				return current, false, err
 			}
 			st.NextIdeaID++
-			i := model.Idea{ID: fmt.Sprintf("idea:%d", st.NextIdeaID), Title: in.Title, Text: in.Text, Creator: a.ID, ProjectID: in.ProjectID, Placement: "inbox"}
+			i := model.Idea{ID: fmt.Sprintf("idea:%d", st.NextIdeaID), Title: in.Title, Text: in.Text, Origin: in.Origin, Creator: a.ID, ProjectID: in.ProjectID, Placement: "inbox"}
 			if in.ProjectID != 0 {
 				i.Placement = "project"
 			}

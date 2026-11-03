@@ -8,6 +8,7 @@ type Idea struct {
 	Placement     string    `json:"placement"`
 	ProjectID     int64     `json:"projectId"`
 	Creator       string    `json:"creator"`
+	Origin        string    `json:"origin,omitempty"`
 	Title         string    `json:"title"`
 	Text          string    `json:"text"`
 	Archived      bool      `json:"archived"`

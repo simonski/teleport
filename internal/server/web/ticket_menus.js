@@ -8,11 +8,27 @@ function dismissTicketMenu(restore=false){
 }
 function menuForeground(text=true){return document.querySelector('tk-dialog[open],.account-menu:not([hidden]),.choice-list')||text&&document.activeElement?.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])');}
 function menuTicketSource(target){
+  if(view==='Backlog'){
+    const source=target.closest?.('[data-backlog-open]');if(!source)return null;
+    const key=source.dataset.backlogOpen;return key.startsWith('ticket:')?{id:Number(key.slice(7)),source}:{ideaId:key,source};
+  }
   if(!['Board','Todos','Graph'].includes(view))return null;
   const card=target.closest?.('.board-workspace [data-ticket-card]');
   if(card)return {id:Number(card.dataset.ticketCard),source:card.querySelector('.ticket-open')};
   const entry=target.closest?.('#graph-list [data-node]'),node=graphData?.nodes.find(row=>row.id===entry?.dataset.node);
   return node?.ticketId?{id:node.ticketId,source:entry}:null;
+}
+function showBacklogIdeaMenu(id,source,point=null){
+  if(!session||!source?.isConnected||menuForeground())return;
+  const idea=ideas.find(item=>item.id===id);if(!idea)return;
+  dismissTicketMenu();const element=document.createElement('div');element.className='ticket-context-menu';element.setAttribute('role','menu');element.setAttribute('aria-label','Idea actions');
+  const canDraft=ideaCanWrite(idea)&&!idea.archived&&!idea.deleted;
+  element.innerHTML=`<div class="ticket-context-title">${escapeHTML(idea.id)} · Idea</div><button type="button" role="menuitem" data-idea-menu="open">Open idea</button>${canDraft?'<button type="button" role="menuitem" data-idea-menu="propose">Draft work proposal</button>':''}${idea.origin==='import'?'<button type="button" role="menuitem" disabled>Decompose</button><button type="button" role="menuitem" disabled>Spellcheck</button><p class="ticket-context-note">Agent actions are not available yet.</p>':''}`;
+  document.body.append(element);ticketMenu={element,source,anchor:source.getBoundingClientRect(),width:innerWidth,height:innerHeight};
+  const anchor=source.getBoundingClientRect();element.style.left=Math.max(8,Math.min(point?.x??anchor.left,innerWidth-element.offsetWidth-8))+'px';element.style.top=Math.max(8,Math.min(point?.y??anchor.bottom,innerHeight-element.offsetHeight-8))+'px';
+  const buttons=[...element.querySelectorAll('button:not(:disabled)')];buttons[0].focus({preventScroll:true});
+  element.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const index=buttons.indexOf(document.activeElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();}else if(event.key==='Tab')dismissTicketMenu(true);});
+  element.addEventListener('click',event=>{const action=event.target.closest('[data-idea-menu]')?.dataset.ideaMenu;if(!action)return;dismissTicketMenu(true);if(action==='open')openIdea(id);else if(action==='propose')ideaProposalForm(idea);});
 }
 function attachedRunningSession(ticket,rows){return rows.find(row=>row.ticketId===ticket.id&&row.projectId===ticket.projectId&&row.state==='running'&&ticket.execution==='local:'+row.id);}
 function ticketMenuEntries(ticket,rows,nativePending=false){
@@ -69,11 +85,11 @@ async function teleportTicketSession(id,sessionId){
 }
 document.addEventListener('contextmenu',e=>{
   const target=menuTicketSource(e.target);if(!target||menuForeground(false))return;
-  e.preventDefault();target.source.focus({preventScroll:true});showTicketMenu(target.id,target.source,{x:e.clientX,y:e.clientY});
+  e.preventDefault();target.source.focus({preventScroll:true});if(target.ideaId)showBacklogIdeaMenu(target.ideaId,target.source,{x:e.clientX,y:e.clientY});else showTicketMenu(target.id,target.source,{x:e.clientX,y:e.clientY});
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&ticketMenuBusy()){e.preventDefault();e.stopImmediatePropagation();dismissTicketMenu(true);return;}
-  if(e.key==='F10'&&e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing){const target=menuTicketSource(e.target);if(target&&!menuForeground()){e.preventDefault();showTicketMenu(target.id,target.source);}}
+  if(e.key==='F10'&&e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing){const target=menuTicketSource(e.target);if(target&&!menuForeground()){e.preventDefault();if(target.ideaId)showBacklogIdeaMenu(target.ideaId,target.source);else showTicketMenu(target.id,target.source);}}
 },true);
 document.addEventListener('pointerdown',e=>{if(ticketMenuPending||ticketMenu&&!ticketMenu.element.contains(e.target))dismissTicketMenu();},true);
 window.addEventListener('resize',()=>{if(ticketMenu&&(ticketMenu.width!==innerWidth||ticketMenu.height!==innerHeight))dismissTicketMenu();});

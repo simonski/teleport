@@ -52,6 +52,24 @@ func TestUnknownSessionStopDoesNotClaimSignalOrChangeOwnership(t *testing.T) {
 	}
 }
 
+func TestSessionProcessIDVisibleAndRetained(t *testing.T) {
+	svc, token, db := fixtureWithStore(t)
+	project := call(t, svc, token, "createProject", app.CreateProjectInput{Name: "PID console", RequestID: "pid-console"}).(model.Project)
+	if err := db.Update(context.Background(), func(st *model.State) (bool, error) {
+		if st.LocalSessions == nil {
+			st.LocalSessions = map[string]model.LocalSession{}
+		}
+		st.LocalSessions["H1"] = model.LocalSession{ID: "H1", Number: 1, Creator: "admin", ProjectID: project.ID, State: "exited", ProcessID: 12345}
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	page := call(t, svc, token, "listSessions", app.ListInput{}).(app.LocalSessionPage)
+	if len(page.Items) != 1 || page.Items[0].ProcessID != 12345 {
+		t.Fatal("retained PID missing from session listing", page)
+	}
+}
+
 func TestRemoveStaleConsoleReference(t *testing.T) {
 	svc, token, db := fixtureWithStore(t)
 	project := call(t, svc, token, "createProject", app.CreateProjectInput{Name: "Stale console", RequestID: "stale-console"}).(model.Project)

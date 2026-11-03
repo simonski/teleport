@@ -26,9 +26,9 @@ test('unknown sessions offer a recorded stop intent and ended sessions are group
   const dialog={querySelectorAll:()=>[]};
   const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,document:{addEventListener(){}},setInterval(){},openDialog:(title,body)=>{html=body;return dialog},captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?cancel:form,on(){}});
   vm.runInContext(source,context);
-  vm.runInContext(`refreshSessionRoster=async()=>{};localSessions=[{id:'H1',harness:'codex',state:'exited'},{id:'H2',harness:'codex',state:'exited'},{id:'H3',harness:'codex',state:'unknown'}]`,context);
+  vm.runInContext(`refreshSessionRoster=async()=>{};localSessions=[{id:'H1',harness:'codex',state:'exited',processId:42},{id:'H2',harness:'codex',state:'exited'},{id:'H3',harness:'codex',state:'unknown',processId:43}]`,context);
   await vm.runInContext('sessionSwitcher()',context);
-  assert.match(html,/Ended sessions \(2\)/);assert.match(html,/Ownership unconfirmed/);assert.match(html,/data-stop-managed="H3" data-unknown="true"/);
+  assert.match(html,/Ended sessions \(2\)/);assert.match(html,/Ownership unconfirmed/);assert.match(html,/data-stop-managed="H3" data-unknown="true"/);assert.match(html,/session PID 42/);assert.match(html,/session PID 43/);
 });
 
 test('stop confirmation closes immediately and reports the eventual error',async()=>{

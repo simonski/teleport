@@ -3,6 +3,7 @@ package model
 import "time"
 
 type LocalSession struct {
+	ProcessID          int            `json:"processId,omitempty"`
 	ReferenceRemovedBy string         `json:"referenceRemovedBy,omitempty"`
 	ReferenceRemovedAt *time.Time     `json:"referenceRemovedAt,omitempty"`
 	Managed            *ManagedLaunch `json:"managed,omitempty"`

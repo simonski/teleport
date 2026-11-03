@@ -26,6 +26,7 @@ var ErrUnavailable = errors.New("local runtime is unavailable")
 var sessionID = regexp.MustCompile(`^[HJ][1-9][0-9]{0,15}$`)
 
 type Status struct {
+	ProcessID  int        `json:"processId,omitempty"`
 	ID         string     `json:"id"`
 	LaunchID   string     `json:"launchId"`
 	Generation string     `json:"generation"`

@@ -18,6 +18,7 @@ import (
 )
 
 type LocalSessionInfo struct {
+	ProcessID     int        `json:"processId,omitempty"`
 	Reference     string     `json:"reference,omitempty"`
 	StopRequested bool       `json:"stopRequested,omitempty"`
 	Activity      string     `json:"activity,omitempty"`
@@ -117,7 +118,7 @@ func sessionReference(row model.LocalSession) string {
 	return digest(row.ID + "\x00" + row.LaunchID + "\x00" + row.Generation)
 }
 func localInfo(row model.LocalSession) LocalSessionInfo {
-	info := LocalSessionInfo{StopRequested: row.StopRequested, ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
+	info := LocalSessionInfo{ProcessID: row.ProcessID, StopRequested: row.StopRequested, ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
 	if row.State == "unknown" && row.TicketID == 0 && row.Managed == nil {
 		info.Reference = sessionReference(row)
 	}
@@ -755,6 +756,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			return false, failure(503, "launch_ack_unknown", "Launch outcome is unknown; retry this exact request without replacing the instance")
 		}
 		current.State, current.ErrorCode = out.Status.State, out.Status.ErrorCode
+		current.ProcessID = out.Status.ProcessID
 		if current.State == "running" && row.TicketID != 0 {
 			t := st.Tickets[row.TicketID]
 			if t.Execution == "local:"+row.ID {
@@ -912,6 +914,11 @@ func (s *Service) PumpLocal(ctx context.Context) error {
 					changed = true
 				}
 				continue
+			}
+			if row.ProcessID == 0 && status.ProcessID > 0 {
+				row.ProcessID = status.ProcessID
+				st.LocalSessions[id] = row
+				changed = true
 			}
 			a := st.Accounts[row.Creator]
 			withdrawn := row.StopRequested || a.Suspended || a.ID == "" || require(st, a, row.ProjectID, "Contributor") != nil || len(st.Accounts) > 1

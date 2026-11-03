@@ -523,6 +523,7 @@ func (d *daemon) launch(in *Launch) Response {
 	}
 	e.cmd, e.pty, e.State = cmd, terminal, "running"
 	e.pgid = cmd.Process.Pid
+	e.ProcessID = cmd.Process.Pid
 	e.fd = int(terminal.Fd())
 	if err = unix.SetNonblock(e.fd, true); err != nil {
 		e.State = "stopping"

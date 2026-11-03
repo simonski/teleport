@@ -80,6 +80,9 @@ func TestPTYIdentityInputReceiptsAndReconnect(t *testing.T) {
 	if first.Status.State != "running" {
 		t.Fatalf("launch failed: %+v", first)
 	}
+	if first.Status.ProcessID <= 0 {
+		t.Fatal("spawned session process ID missing")
+	}
 	id := Request{ID: launch.ID, LaunchID: launch.LaunchID, Generation: first.Status.Generation}
 	input := id
 	input.Operation, input.Sequence, input.Data = "input", 1, []byte("first input\n")
@@ -127,12 +130,19 @@ func TestPTYIdentityInputReceiptsAndReconnect(t *testing.T) {
 	if out.Status.ExitedAt == nil || out.Status.ExitCode == nil {
 		t.Fatal("exit was not observed")
 	}
+	if out.Status.ProcessID != first.Status.ProcessID {
+		t.Fatal("session process ID was not retained after exit")
+	}
 	manifest, err := os.ReadFile(filepath.Join(c.Root, "sessions.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(manifest), "first input") {
 		t.Fatal("raw keystrokes entered receipt audit")
+	}
+	var saved map[string]struct{ Status }
+	if err := json.Unmarshal(manifest, &saved); err != nil || saved["H1"].ProcessID != first.Status.ProcessID {
+		t.Fatal("session process ID was not persisted", err)
 	}
 }
 func idWithOperation(in Request, operation string) Request { in.Operation = operation; return in }

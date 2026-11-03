@@ -149,6 +149,7 @@ def main():
                         if args.screenshot:
                             page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem + "-carrier")))
                 assert state["minimum"] is None or state["minimum"] >= 29, state
+                assert state["maxTurn"] <= 7.500001, state
                 assert len(state["fleet"]) <= 1, state
                 positions = [state["position"]] + [craft["position"] for craft in state["fleet"]]
                 for index, first in enumerate(positions):

@@ -7,7 +7,7 @@ async function startLandingFlight(){
   const ship=svg.querySelector('.flight-rocket'),engine=svg.querySelector('.rocket-engine'),flame=svg.querySelector('.rocket-flame'),moonElement=svg.querySelector('.login-moon'),arms=svg.querySelectorAll('.catch-arm'),smoke=svg.querySelectorAll('.landing-smoke circle'),media=window.matchMedia('(prefers-reduced-motion: reduce)');
   const variants=[...svg.querySelectorAll('.rocket-variant')],fins=svg.querySelectorAll('.rocket-fins'),panels=svg.querySelectorAll('.rocket-panel'),vehicle=svg.querySelector('.ground-vehicle'),vehicles=svg.querySelectorAll('[data-vehicle]'),wheels=svg.querySelectorAll('.ground-wheel'),hose=svg.querySelector('.fuel-hose'),steam=svg.querySelectorAll('.fuel-steam circle'),debris=svg.querySelector('.rocket-debris'),level=svg.querySelector('.tank-level');
   const destinations=[{name:'moon',point:()=>moon},...[...svg.querySelectorAll('[data-planet]')].map(node=>({name:node.dataset.planet,point:()=>({x:Number(node.dataset.x),y:Number(node.dataset.y)})}))];
-  let moon={...route.DEFAULT_MOON},destination=destinations[Math.floor(Math.random()*destinations.length)],elapsed=0,cycle=0,previous=0,request=0,disposed=false,dragging=null,manual=false,smoothed=null,currentVariant=-1,currentVehicle='';
+  let moon={...route.DEFAULT_MOON},destination=destinations[Math.floor(Math.random()*destinations.length)],elapsed=0,cycle=0,previous=0,request=0,disposed=false,dragging=null,manual=false,smoothed=null,attitude=null,currentVariant=-1,currentVehicle='';
   const fleet=[],colors=['#c96951','#698fa3','#a884b0','#b99865','#6e9f8b','#c27e91','#929b63','#8390be','#bd8b70'];
   let padOwner=null,fleetClock=0,nextLaunch=0,fleetSerial=0;
   function stageStart(plan,name){return plan.stages.find(stage=>stage.name===name).start;}
@@ -16,7 +16,7 @@ async function startLandingFlight(){
     const number=++fleetSerial,node=ship.cloneNode(true);node.classList.remove('flight-rocket','login-ship');node.classList.add('fleet-rocket');node.style.color=colors[(number-1)%colors.length];node.style.opacity='1';
     const carrier=vehicle.cloneNode(true);carrier.classList.add('fleet-carrier');carrier.dataset.rocket=String(number);node.dataset.rocket=String(number);node.setAttribute('transform','translate(-78 108) rotate(-90)');carrier.setAttribute('transform','translate(-78 137)');carrier.style.opacity='0';carrier.querySelectorAll('[data-vehicle]').forEach(item=>{item.style.display=item.dataset.vehicle==='carrier'?'':'none';});
     svg.insertBefore(carrier,moonElement);svg.insertBefore(node,moonElement);const trip=number,plan=route.flightPlan(trip),target=destinations[Math.floor(Math.random()*destinations.length)];
-    const craft={node,carrier,trip,plan,target,time:stageStart(plan,'lift'),position:{x:-78,y:108},holding:false,finished:false,serial:number,ground:'delivery',groundTime:0};
+    const craft={node,carrier,trip,plan,target,time:stageStart(plan,'lift'),position:{x:-78,y:108},angle:-90,holding:false,finished:false,serial:number,ground:'delivery',groundTime:0};
     node.querySelectorAll('.rocket-variant').forEach((variant,index)=>{variant.style.display=index===trip%route.ROCKETS.length?'':'none';});
     fleet.push(craft);padOwner=craft;nextLaunch=fleetClock+6500;
   }
@@ -33,7 +33,7 @@ async function startLandingFlight(){
         else{truck=46-124*ease((t-3500)/1400);load=delivery?0:1;if(!delivery){rocketX=truck;rocketY-=4;}}
         const candidate={x:rocketX,y:rocketY},others=fleet.filter(other=>other!==craft&&!other.finished).map(other=>other.position);if(smoothed)others.push(smoothed);
         if(others.some(other=>{const before=Math.hypot(craft.position.x-other.x,craft.position.y-other.y),after=Math.hypot(candidate.x-other.x,candidate.y-other.y);return before<route.ROCKET_CLEARANCE?after<before:after<route.ROCKET_CLEARANCE;})){craft.groundTime=previousGroundTime;continue;}
-        craft.position=candidate;craft.node.setAttribute('transform',`translate(${rocketX} ${rocketY}) rotate(-90)`);craft.node.querySelector('.rocket-engine').style.opacity='0';
+        craft.position=candidate;craft.angle=route.turnAttitude(craft.angle,-90,dt,fleetClock,craft.serial,0);craft.node.setAttribute('transform',`translate(${rocketX} ${rocketY}) rotate(${craft.angle})`);craft.node.querySelector('.rocket-engine').style.opacity='0';
         craft.node.querySelectorAll('.rocket-fins').forEach(fin=>fin.setAttribute('transform',`scale(1 ${.28+.72*Math.sin(Math.PI*Math.min(1,t/4900))**2})`));
         craft.carrier.style.opacity=String(t<3500?Math.min(1,t/400):Math.max(0,Math.min(1,(4900-t)/420)));craft.carrier.setAttribute('transform',`translate(${truck} 137)`);
         craft.carrier.querySelectorAll('.ground-wheel').forEach(wheel=>wheel.setAttribute('transform',`rotate(${truck*12} ${wheel.dataset.wheelX} 3)`));craft.carrier.querySelector('.carrier-support').setAttribute('transform',`rotate(${(1-load)*65} -10 -7)`);
@@ -53,7 +53,9 @@ async function startLandingFlight(){
       const others=fleet.filter(other=>other!==craft&&!other.finished).map(other=>other.position);if(smoothed)others.push(smoothed);
       craft.position=route.separatedStep(craft.position,wanted,others,dt*.09);
       const angle=craft.holding?-90+Math.sin(fleetClock*.006+craft.trip)*4:frame.angle;
-      craft.node.setAttribute('transform',`translate(${craft.position.x} ${craft.position.y}) rotate(${angle})`);
+      const noise=frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-craft.position.y)/35)):1;
+      craft.angle=route.turnAttitude(craft.angle,angle,dt,fleetClock,craft.serial,noise);
+      craft.node.setAttribute('transform',`translate(${craft.position.x} ${craft.position.y}) rotate(${craft.angle})`);
       const engine=craft.node.querySelector('.rocket-engine'),thrust=craft.holding?.8:frame.engine;
       engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${craft.holding?Math.sin(fleetClock*.008+craft.trip)*12:frame.gimbal})`);engine.style.opacity=String(thrust);
       craft.node.querySelector('.rocket-flame').setAttribute('transform',`scale(${Math.max(.01,thrust)} ${.65+thrust*.35})`);
@@ -68,7 +70,10 @@ async function startLandingFlight(){
     const target={x:smoothed.x+dx*step,y:smoothed.y+dy*step};
     if(!instant&&['outbound','orbit','return','lift','descend'].includes(frame.phase))smoothed=route.separatedStep(smoothed,target,fleet.filter(craft=>!craft.finished).map(craft=>craft.position),Math.max(.01,dt)*.09);
     else smoothed=target;
-    ship.setAttribute('transform',`translate(${smoothed.x} ${smoothed.y}) rotate(${frame.angle})`);
+    const airborne=['outbound','orbit','return','lift','descend'].includes(frame.phase);
+    const noise=frame.phase==='descend'?Math.min(1,Math.max(0,(route.LANDING_HOME.y-smoothed.y)/35)):airborne?1:0;
+    attitude=instant||attitude===null?frame.angle:route.turnAttitude(attitude,frame.angle,dt,fleetClock,0,noise);
+    ship.setAttribute('transform',`translate(${smoothed.x} ${smoothed.y}) rotate(${attitude})`);
     ship.style.opacity=String(frame.opacity);
     engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${frame.gimbal})`);
     engine.style.opacity=String(frame.engine);
@@ -135,7 +140,7 @@ async function startLandingFlight(){
   landingFlight={
     seek(milliseconds,nextCycle=cycle){manual=true;clearFleet();elapsed=milliseconds;cycle=nextCycle;smoothed=null;paint(sample(),true);resume();return {...sample(),moon:{...moon}};},
     seekPhase(name,fraction=.5,nextCycle=cycle){const stage=route.flightPlan(nextCycle).stages.find(stage=>stage.name===name);if(!stage)throw new Error('Unknown landing phase');return this.seek(stage.start+stage.duration*Math.max(0,Math.min(.999999,fraction)),nextCycle);},
-    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;let minimum=Infinity;for(let time=0;time<milliseconds;time+=50){advance(Math.min(50,milliseconds-time),time);const positions=[smoothed,...fleet.filter(craft=>!craft.finished).map(craft=>craft.position)];for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++)minimum=Math.min(minimum,Math.hypot(positions[a].x-positions[b].x,positions[a].y-positions[b].y));}return {phase:sample().phase,holding:svg.dataset.holding==='true',position:{...smoothed},minimum:Number.isFinite(minimum)?minimum:null,fleet:fleet.map(craft=>({serial:craft.serial,phase:craft.node.dataset.phase,destination:craft.target.name,position:{...craft.position},groundTime:craft.groundTime})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
+    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;let minimum=Infinity,maxTurn=0;for(let time=0;time<milliseconds;time+=50){const before=attitude,angles=new Map(fleet.map(craft=>[craft.serial,craft.angle]));advance(Math.min(50,milliseconds-time),time);if(before!==null)maxTurn=Math.max(maxTurn,Math.abs(attitude-before));for(const craft of fleet)if(angles.has(craft.serial))maxTurn=Math.max(maxTurn,Math.abs(craft.angle-angles.get(craft.serial)));const positions=[smoothed,...fleet.filter(craft=>!craft.finished).map(craft=>craft.position)];for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++)minimum=Math.min(minimum,Math.hypot(positions[a].x-positions[b].x,positions[a].y-positions[b].y));}return {phase:sample().phase,holding:svg.dataset.holding==='true',position:{...smoothed},minimum:Number.isFinite(minimum)?minimum:null,maxTurn,fleet:fleet.map(craft=>({serial:craft.serial,phase:craft.node.dataset.phase,destination:craft.target.name,position:{...craft.position},groundTime:craft.groundTime})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
     play(){manual=false;resume();},snapshot:()=>({...sample(),x:smoothed?.x??sample().x,y:smoothed?.y??sample().y,moon:{...moon},elapsed,cycle,destination:destination.name}),
     dispose(){disposed=true;clearFleet();if(request)cancelAnimationFrame(request);moonElement.removeEventListener('pointerdown',down);moonElement.removeEventListener('pointermove',move);moonElement.removeEventListener('pointerup',up);moonElement.removeEventListener('pointercancel',up);moonElement.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',resume);media.removeEventListener('change',resume);window.removeEventListener('resize',resize);},
   };

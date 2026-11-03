@@ -18,6 +18,14 @@ export function perlin1D(value,seed=0){
   const fade=x*x*x*(x*(x*6-15)+10);
   return mix(gradient(index)*x,gradient(index+1)*(x-1),fade)*2;
 }
+// Follow the shortest turn with a soft response and a strict angular speed limit.
+export function turnAttitude(current,target,dt,clock,seed=0,noise=1){
+  const desired=target+perlin1D(clock/2200+seed*.37,seed+73)*3*noise;
+  const difference=((desired-current)%360+540)%360-180;
+  const step=difference*(1-Math.exp(-Math.max(0,dt)/450));
+  const limit=Math.max(0,dt)*.15;
+  return current+Math.max(-limit,Math.min(limit,step));
+}
 export function holdingPoint(serial,clock){
   const lane=serial%2,drift=clock/9000;
   return {x:130+lane*55+perlin1D(drift+serial*.37,serial+7)*12,y:38+lane*45+perlin1D(drift+.4,serial+13)*9};

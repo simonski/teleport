@@ -5,6 +5,20 @@ const path=require('node:path');
 const route=import('data:text/javascript;base64,'+fs.readFileSync(path.join(__dirname,'../web/landing_route.js')).toString('base64'));
 const at=(plan,name,fraction=.5)=>{const stage=plan.stages.find(stage=>stage.name===name);return stage.start+stage.duration*fraction;};
 
+test('attitude turns gradually across angle wrap and uses smooth, seeded variation',async()=>{
+  const {turnAttitude}=await route;
+  let angle=179;
+  for(let time=0;time<3000;time+=50){const next=turnAttitude(angle,-179,50,time,0,0);assert.ok(Math.abs(next-angle)<=7.5);angle=next;}
+  assert.ok(Math.abs(angle-181)<.01);
+  let noisy=0,plain=0,variation=0;
+  for(let time=0;time<5000;time+=50){
+    const next=turnAttitude(noisy,90,50,time,2),without=turnAttitude(plain,90,50,time,2,0);
+    assert.ok(Math.abs(next-noisy)<=7.5);variation=Math.max(variation,Math.abs(next-without));noisy=next;plain=without;
+  }
+  assert.ok(variation>.1&&variation<3);
+  assert.equal(turnAttitude(20,180,0,0),20);
+});
+
 test('outbound travel is slower and holding points drift away from the pad',async()=>{
   const {flightPlan,holdingPoint,LANDING_HOME,FLEET_LIMIT}=await route;
   assert.equal(FLEET_LIMIT,2);

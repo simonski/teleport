@@ -133,18 +133,25 @@ def main():
             page.evaluate("landingFlight.simulate(50)")
             assert page.evaluate("()=>{const current=landingFlight.snapshot();const old=window.flightBeforeMove;const distance=Math.hypot(current.x-old.x,current.y-old.y);return distance>0&&distance<=4.5}")
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
-            maximum, held = 0, False
-            for _ in range(35):
+            maximum, held, launches = 0, False, set()
+            for _ in range(80):
                 state = page.evaluate("landingFlight.simulate(1000)")
                 maximum = max(maximum, len(state["fleet"]))
+                launches.update(craft["serial"] for craft in state["fleet"])
                 held = held or state["holding"] or any(craft.get("phase") == "holding" for craft in state["fleet"])
-                assert len(state["fleet"]) <= 9, state
+                assert state["minimum"] is None or state["minimum"] >= 29, state
+                assert len(state["fleet"]) <= 2, state
+                positions = [state["position"]] + [craft["position"] for craft in state["fleet"]]
+                for index, first in enumerate(positions):
+                    for second in positions[index+1:]:
+                        assert (first["x"]-second["x"])**2+(first["y"]-second["y"])**2 >= 29**2, state
                 pad_craft = [craft for craft in state["fleet"] if craft.get("phase") in ("lift", "descend")]
                 assert len(pad_craft) <= 1, state
                 if state["phase"] not in ("outbound", "orbit", "return"):
                     assert not pad_craft, state
             assert maximum >= 2, maximum
             assert held, "A returning rocket never entered the holding pattern"
+            assert len(launches) >= 3, "Rockets did not land and release the pad for later launches"
             assert not errors, json.dumps(errors)
         finally:
             browser.close()

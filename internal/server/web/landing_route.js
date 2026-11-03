@@ -1,5 +1,6 @@
 // A deterministic flight sampler keeps motion testable without real-time waits.
 export const LANDING_HOME={x:46,y:112},DEFAULT_MOON={x:319,y:33},ORBIT_RADIUS=34;
+export const FLEET_LIMIT=3,ROCKET_CLEARANCE=30;
 export const ROCKETS=[
   {id:'dart',name:'Dart',tail:-10,fins:true},
   {id:'capsule',name:'Capsule',tail:-10,fins:false},
@@ -17,9 +18,28 @@ export function perlin1D(value,seed=0){
   const fade=x*x*x*(x*(x*6-15)+10);
   return mix(gradient(index)*x,gradient(index+1)*(x-1),fade)*2;
 }
+export function holdingPoint(serial,clock){
+  const lane=serial%2,drift=clock/9000;
+  return {x:130+lane*55+perlin1D(drift+serial*.37,serial+7)*12,y:38+lane*45+perlin1D(drift+.4,serial+13)*9};
+}
+// Choose a bounded step that maintains clearance from every other rocket.
+export function separatedStep(position,target,others,maxDistance,clearance=ROCKET_CLEARANCE){
+  const dx=target.x-position.x,dy=target.y-position.y,distance=Math.hypot(dx,dy);
+  if(!distance||maxDistance<=0)return {...position};
+  const ux=dx/distance,uy=dy/distance,step=Math.min(distance,maxDistance);
+  const directions=[[ux,uy],[-uy,ux],[uy,-ux],[-ux,-uy]];
+  for(const [x,y] of directions){
+    const next={x:position.x+x*step,y:position.y+y*step};
+    if(others.every(other=>{
+      const before=Math.hypot(position.x-other.x,position.y-other.y),after=Math.hypot(next.x-other.x,next.y-other.y);
+      return before<clearance?after>before:after>=clearance;
+    }))return next;
+  }
+  return {...position};
+}
 export function flightPlan(cycle=0){
   const orbits=2+(Math.abs(cycle)%4),replacement=cycle%3===2;
-  const stages=[...(cycle===0?[['delivery',2400],['unload',1100],['carrier-exit',1400]]:[]),['rest',1800],['ignite',1000],['lift',1600],['outbound',3400],['orbit',orbits*2700],['return',4000],['descend',2300],['smoke',1400],['pause',1000],
+  const stages=[...(cycle===0?[['delivery',2400],['unload',1100],['carrier-exit',1400]]:[]),['rest',1800],['ignite',1000],['lift',1600],['outbound',6800],['orbit',orbits*2700],['return',4000],['descend',2300],['smoke',1400],['pause',1000],
     ...(replacement?[['fault',1200],['recovery-arrive',1700],['recovery-load',1400],['recovery-exit',1800],['replacement-arrive',2400],['replacement-unload',1100],['replacement-exit',1400]]:
       [['tanker-arrive',1700],['connect',900],['refuel',2400],['disconnect',900],['tanker-back',1000],['tanker-exit',1300]])];
   let at=0;return {orbits,replacement,duration:stages.reduce((sum,stage)=>sum+stage[1],0),stages:stages.map(([name,duration])=>{const stage={name,start:at,duration};at+=duration;return stage;})};

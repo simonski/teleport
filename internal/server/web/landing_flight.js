@@ -15,25 +15,26 @@ async function startLandingFlight(){
   function launchFleet(){
     const number=++fleetSerial,node=ship.cloneNode(true);node.classList.remove('flight-rocket','login-ship');node.classList.add('fleet-rocket');node.style.color=colors[(number-1)%colors.length];node.style.opacity='1';
     svg.insertBefore(node,moonElement);const trip=number*3,plan=route.flightPlan(trip),target=destinations[Math.floor(Math.random()*destinations.length)];
-    const craft={node,trip,plan,target,time:stageStart(plan,'lift'),position:{...route.LANDING_HOME},holding:false,finished:false};
+    const craft={node,trip,plan,target,time:stageStart(plan,'lift'),position:{...route.LANDING_HOME},holding:false,finished:false,serial:number};
     node.querySelectorAll('.rocket-variant').forEach((variant,index)=>{variant.style.display=index===Math.floor(trip/3)%route.ROCKETS.length?'':'none';});
     fleet.push(craft);padOwner=craft;nextLaunch=fleetClock+6500;
   }
   function advanceFleet(dt,primaryPhase){
     fleetClock+=dt;
-    const primaryBusy=!['outbound','orbit','return'].includes(primaryPhase)||primaryPhase==='return'&&stageStart(route.flightPlan(cycle),'descend')-elapsed<2800;
+    const primaryBusy=!['outbound','orbit'].includes(primaryPhase);
     for(const craft of fleet){
       if(craft.finished)continue;
-      const next=craft.time+dt,descend=stageStart(craft.plan,'descend'),smokeAt=stageStart(craft.plan,'smoke');
-      if(craft.time<descend&&next>=descend){
-        if(primaryBusy||padOwner&&padOwner!==craft){craft.time=descend-.01;craft.holding=true;}
+      const next=craft.time+dt,returnAt=stageStart(craft.plan,'return'),smokeAt=stageStart(craft.plan,'smoke');
+      if(craft.time<returnAt&&next>=returnAt){
+        if(primaryBusy||padOwner&&padOwner!==craft){craft.time=returnAt-.01;craft.holding=true;}
         else{padOwner=craft;craft.holding=false;craft.time=next;}
       }else craft.time=next;
       if(craft.time>=smokeAt){if(Math.hypot(craft.position.x-route.LANDING_HOME.x,craft.position.y-route.LANDING_HOME.y)>2)craft.time=smokeAt-.01;else{craft.finished=true;craft.node.style.display='none';if(padOwner===craft)padOwner=null;continue;}}
       const frame=route.sampleFlight(craft.time,craft.trip,craft.target.point());
       if(frame.phase==='outbound'&&padOwner===craft)padOwner=null;
-      const wanted=craft.holding?{x:route.LANDING_HOME.x+28+fleet.indexOf(craft)*5,y:route.LANDING_HOME.y-51+Math.sin(fleetClock*.004+craft.trip)*3}:frame;
-      const dx=wanted.x-craft.position.x,dy=wanted.y-craft.position.y,length=Math.hypot(dx,dy),step=Math.min(1,dt*.09/(length||1));craft.position.x+=dx*step;craft.position.y+=dy*step;
+      const wanted=craft.holding?route.holdingPoint(craft.serial,fleetClock):frame;
+      const others=fleet.filter(other=>other!==craft&&!other.finished).map(other=>other.position);if(smoothed)others.push(smoothed);
+      craft.position=route.separatedStep(craft.position,wanted,others,dt*.09);
       const angle=craft.holding?-90+Math.sin(fleetClock*.006+craft.trip)*4:frame.angle;
       craft.node.setAttribute('transform',`translate(${craft.position.x} ${craft.position.y}) rotate(${angle})`);
       const engine=craft.node.querySelector('.rocket-engine'),thrust=craft.holding?.8:frame.engine;
@@ -42,11 +43,14 @@ async function startLandingFlight(){
       craft.node.dataset.phase=craft.holding?'holding':frame.phase;craft.node.dataset.destination=craft.target.name;
     }
     for(let index=fleet.length-1;index>=0;index--)if(fleet[index].finished){fleet[index].node.remove();fleet.splice(index,1);}
-    if(!primaryBusy&&!padOwner&&fleet.length<9&&fleetClock>=nextLaunch)launchFleet();
+    if(!primaryBusy&&!padOwner&&fleet.length<route.FLEET_LIMIT-1&&fleetClock>=nextLaunch&&smoothed&&Math.hypot(smoothed.x-route.LANDING_HOME.x,smoothed.y-route.LANDING_HOME.y)>=route.ROCKET_CLEARANCE)launchFleet();
   }
   function paint(frame,instant=false,dt=1000/60){
     const factor=!instant&&['outbound','orbit','return'].includes(frame.phase)?.22:1;
-    if(!smoothed)smoothed={x:frame.x,y:frame.y};const dx=frame.x-smoothed.x,dy=frame.y-smoothed.y,distance=Math.hypot(dx,dy),step=instant?1:Math.min(factor,Math.max(.01,dt)*.09/(distance||1));smoothed.x+=dx*step;smoothed.y+=dy*step;
+    if(!smoothed)smoothed={x:frame.x,y:frame.y};const dx=frame.x-smoothed.x,dy=frame.y-smoothed.y,distance=Math.hypot(dx,dy),step=instant?1:Math.min(factor,Math.max(.01,dt)*.09/(distance||1));
+    const target={x:smoothed.x+dx*step,y:smoothed.y+dy*step};
+    if(!instant&&['outbound','orbit','return','lift','descend'].includes(frame.phase))smoothed=route.separatedStep(smoothed,target,fleet.filter(craft=>!craft.finished).map(craft=>craft.position),Math.max(.01,dt)*.09);
+    else smoothed=target;
     ship.setAttribute('transform',`translate(${smoothed.x} ${smoothed.y}) rotate(${frame.angle})`);
     ship.style.opacity=String(frame.opacity);
     engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${frame.gimbal})`);
@@ -83,11 +87,11 @@ async function startLandingFlight(){
   }
   function sample(){return route.sampleFlight(media.matches?route.flightPlan(cycle).stages.find(stage=>stage.name==='rest').start:elapsed,cycle,manual?moon:destination.point());}
   function advance(dt,now){
-    const plan=route.flightPlan(cycle),landing=stageStart(plan,'descend'),next=elapsed+dt,holding=elapsed<landing&&next>=landing&&!!padOwner;
+    const plan=route.flightPlan(cycle),landing=stageStart(plan,'descend'),returnAt=stageStart(plan,'return'),next=elapsed+dt,holding=elapsed<returnAt&&next>=returnAt&&!!padOwner;
     const touchdown=stageStart(plan,'smoke'),stillApproaching=elapsed<touchdown&&next>=touchdown&&smoothed&&Math.hypot(smoothed.x-route.LANDING_HOME.x,smoothed.y-route.LANDING_HOME.y)>2;
-    if(holding)elapsed=landing-.01;else if(stillApproaching)elapsed=touchdown-.01;else elapsed=next;
+    if(holding)elapsed=returnAt-.01;else if(stillApproaching)elapsed=touchdown-.01;else elapsed=next;
     while(elapsed>=route.flightPlan(cycle).duration){elapsed-=route.flightPlan(cycle).duration;cycle++;destination=destinations[Math.floor(Math.random()*destinations.length)];smoothed=null;}
-    const frame=sample();if(holding){frame.y+=Math.sin(now*.004)*2;frame.angle=-90+Math.sin(now*.006)*4;frame.gimbal=Math.sin(now*.008)*12;frame.engine=.8;}
+    const frame=sample();if(holding){Object.assign(frame,route.holdingPoint(0,fleetClock));frame.angle=-90+Math.sin(now*.006)*4;frame.gimbal=Math.sin(now*.008)*12;frame.engine=.8;}
     advanceFleet(dt,frame.phase);paint(frame,false,dt);svg.dataset.destination=destination.name;svg.dataset.holding=String(holding);
   }
   function tick(now){
@@ -114,7 +118,7 @@ async function startLandingFlight(){
   landingFlight={
     seek(milliseconds,nextCycle=cycle){manual=true;clearFleet();elapsed=milliseconds;cycle=nextCycle;smoothed=null;paint(sample(),true);resume();return {...sample(),moon:{...moon}};},
     seekPhase(name,fraction=.5,nextCycle=cycle){const stage=route.flightPlan(nextCycle).stages.find(stage=>stage.name===name);if(!stage)throw new Error('Unknown landing phase');return this.seek(stage.start+stage.duration*Math.max(0,Math.min(.999999,fraction)),nextCycle);},
-    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;for(let time=0;time<milliseconds;time+=50)advance(Math.min(50,milliseconds-time),time);return {phase:sample().phase,holding:svg.dataset.holding==='true',fleet:fleet.map(craft=>({phase:craft.node.dataset.phase,destination:craft.target.name})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
+    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;let minimum=Infinity;for(let time=0;time<milliseconds;time+=50){advance(Math.min(50,milliseconds-time),time);const positions=[smoothed,...fleet.filter(craft=>!craft.finished).map(craft=>craft.position)];for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++)minimum=Math.min(minimum,Math.hypot(positions[a].x-positions[b].x,positions[a].y-positions[b].y));}return {phase:sample().phase,holding:svg.dataset.holding==='true',position:{...smoothed},minimum:Number.isFinite(minimum)?minimum:null,fleet:fleet.map(craft=>({serial:craft.serial,phase:craft.node.dataset.phase,destination:craft.target.name,position:{...craft.position}})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
     play(){manual=false;resume();},snapshot:()=>({...sample(),x:smoothed?.x??sample().x,y:smoothed?.y??sample().y,moon:{...moon},elapsed,cycle,destination:destination.name}),
     dispose(){disposed=true;clearFleet();if(request)cancelAnimationFrame(request);moonElement.removeEventListener('pointerdown',down);moonElement.removeEventListener('pointermove',move);moonElement.removeEventListener('pointerup',up);moonElement.removeEventListener('pointercancel',up);moonElement.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',resume);media.removeEventListener('change',resume);window.removeEventListener('resize',resize);},
   };

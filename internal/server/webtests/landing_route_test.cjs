@@ -5,6 +5,26 @@ const path=require('node:path');
 const route=import('data:text/javascript;base64,'+fs.readFileSync(path.join(__dirname,'../web/landing_route.js')).toString('base64'));
 const at=(plan,name,fraction=.5)=>{const stage=plan.stages.find(stage=>stage.name===name);return stage.start+stage.duration*fraction;};
 
+test('outbound travel is slower and holding points drift away from the pad',async()=>{
+  const {flightPlan,holdingPoint,LANDING_HOME,FLEET_LIMIT}=await route;
+  assert.equal(FLEET_LIMIT,3);
+  assert.equal(flightPlan().stages.find(stage=>stage.name==='outbound').duration,6800);
+  const a=holdingPoint(1,0),b=holdingPoint(1,5000),c=holdingPoint(2,0);
+  assert.ok(Math.hypot(a.x-LANDING_HOME.x,a.y-LANDING_HOME.y)>60);
+  assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>1);
+  assert.ok(Math.hypot(a.x-c.x,a.y-c.y)>30);
+});
+
+test('opposing rockets steer without crossing the clearance boundary',async()=>{
+  const {separatedStep,ROCKET_CLEARANCE}=await route;
+  let a={x:0,y:0},b={x:100,y:0};
+  for(let i=0;i<80;i++){
+    a=separatedStep(a,{x:100,y:0},[b],2);
+    b=separatedStep(b,{x:0,y:0},[a],2);
+    assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>=ROCKET_CLEARANCE-1e-9);
+  }
+});
+
 test('launch wobbles on the support, lifts vertically, and lands under gimballed thrust',async()=>{
   const {flightPlan,sampleFlight,LANDING_HOME}=await route,plan=flightPlan();
   const rest=sampleFlight(at(plan,'rest')),ignite=sampleFlight(at(plan,'ignite',.375)),lift=sampleFlight(at(plan,'lift'));

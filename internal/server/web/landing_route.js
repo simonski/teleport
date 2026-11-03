@@ -1,6 +1,6 @@
 // A deterministic flight sampler keeps motion testable without real-time waits.
 export const LANDING_HOME={x:46,y:112},DEFAULT_MOON={x:319,y:33},ORBIT_RADIUS=34;
-export const FLEET_LIMIT=3,ROCKET_CLEARANCE=30;
+export const FLEET_LIMIT=2,ROCKET_CLEARANCE=30;
 export const ROCKETS=[
   {id:'dart',name:'Dart',tail:-10,fins:true},
   {id:'capsule',name:'Capsule',tail:-10,fins:false},

@@ -134,7 +134,7 @@ def main():
             assert page.evaluate("()=>{const current=landingFlight.snapshot();const old=window.flightBeforeMove;const distance=Math.hypot(current.x-old.x,current.y-old.y);return distance>0&&distance<=4.5}")
             page.evaluate("landingFlight.seekPhase('outbound',.1,0)")
             maximum, held, launches, delivered, collected = 0, False, set(), False, False
-            for _ in range(80):
+            for _ in range(160):
                 state = page.evaluate("landingFlight.simulate(1000)")
                 maximum = max(maximum, len(state["fleet"]))
                 launches.update(craft["serial"] for craft in state["fleet"])
@@ -149,7 +149,7 @@ def main():
                         if args.screenshot:
                             page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem + "-carrier")))
                 assert state["minimum"] is None or state["minimum"] >= 29, state
-                assert len(state["fleet"]) <= 2, state
+                assert len(state["fleet"]) <= 1, state
                 positions = [state["position"]] + [craft["position"] for craft in state["fleet"]]
                 for index, first in enumerate(positions):
                     for second in positions[index+1:]:
@@ -158,7 +158,7 @@ def main():
                 assert len(pad_craft) <= 1, state
                 if state["phase"] not in ("outbound", "orbit", "return"):
                     assert not pad_craft, state
-            assert maximum >= 2, maximum
+            assert maximum == 1, maximum
             assert held, "A returning rocket never entered the holding pattern"
             assert delivered and collected, "A rocket skipped its carrier delivery or pickup"
             assert len(launches) >= 3, "Rockets did not land and release the pad for later launches"

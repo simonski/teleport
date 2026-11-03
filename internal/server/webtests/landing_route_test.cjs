@@ -7,7 +7,7 @@ const at=(plan,name,fraction=.5)=>{const stage=plan.stages.find(stage=>stage.nam
 
 test('outbound travel is slower and holding points drift away from the pad',async()=>{
   const {flightPlan,holdingPoint,LANDING_HOME,FLEET_LIMIT}=await route;
-  assert.equal(FLEET_LIMIT,3);
+  assert.equal(FLEET_LIMIT,2);
   assert.equal(flightPlan().stages.find(stage=>stage.name==='outbound').duration,6800);
   const a=holdingPoint(1,0),b=holdingPoint(1,5000),c=holdingPoint(2,0);
   assert.ok(Math.hypot(a.x-LANDING_HOME.x,a.y-LANDING_HOME.y)>60);

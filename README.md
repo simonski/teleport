@@ -25,6 +25,10 @@ The captured [product roadmap](planning/roadmap.json) separates MVP and later st
 
 Run `tk skill > SKILL.md` to export the bundled agent skill for a harness. No running server or sign-in is required for this export.
 
+Bare `tk` or `tk help` lists every shipped public command, grouped by noun/action. Use `tk commands -json` for the machine-readable catalogue and `tk agent ls -h` (or `tk help agent ls`) for typed flags. Examples: `tk project ls`, `tk ticket show 35`, `tk agent ls -project 2`, `tk idea ls`, and `tk workflow ls`. Agent listing reads accessible harness sessions; starting one remains explicit. Existing API-style commands such as `tk listTickets -data '{"projectId":2,"limit":50}'` keep working.
+
+Capture freeform text with `tk import notes.txt -project 2` or `tk import -i` and paste multiple lines, finishing with Ctrl-D. Piped input and `tk import -` work too. Capture creates one Idea, defaults to the private inbox unless `-project` is supplied, and preserves up to 20,000 UTF-8 bytes without truncation. `-title` overrides the derived title; `-request-id` reuses the identity printed on stderr for an uncertain retry; `-json` emits the full Idea on stdout. Classification and goal creation follow separately and no agent is started by capture.
+
 Choose **Graph → 2D Map** for the card-and-curve view, or **3D** for the spatial viewer. **Workflows → Map** uses the same visual treatment for phase routes. **Settings → Visual style → Studio** enables the compact menu/table treatment; choose Top or Left under Navigation. The Paper and Instrument styles remain available.
 
 Deploy to the Linux host with:

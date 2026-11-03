@@ -4,10 +4,25 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 from source_cache import source_identity, verified_artifact, record_artifact
 from tool_history import locked_history
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def install_artifact(binary, destination):
+    """Replace the directory entry atomically so running executables retain their bytes."""
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=".tk-install-", dir=destination.parent)
+    os.close(descriptor)
+    temporary = Path(temporary)
+    try:
+        shutil.copy2(binary, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 def local_version(root, count):
     revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=root, text=True).strip()
@@ -45,7 +60,7 @@ def build(args, binary, manifest):
         env = subprocess.check_output(["go", "env", "GOBIN", "GOPATH"], text=True).splitlines()
         destination = Path(env[0] or str(Path(env[1].split(os.pathsep)[0]) / "bin"))
         destination.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(binary, destination / "tk")
+        install_artifact(binary, destination / "tk")
         print(f"Installed {destination / 'tk'}")
 
 if __name__ == "__main__":

@@ -4,11 +4,39 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from build import local_version
+from build import install_artifact, local_version
 
 
 class BuildIdentityTest(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "POSIX permits a running executable's directory entry to be replaced")
+    def test_install_replaces_the_path_without_changing_open_binary_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            source, destination = folder / "new", folder / "tk"
+            source.write_bytes(b"new executable")
+            source.chmod(0o755)
+            destination.write_bytes(b"running executable")
+            with destination.open("rb") as running:
+                install_artifact(source, destination)
+                self.assertEqual(running.read(), b"running executable")
+            self.assertEqual(destination.read_bytes(), b"new executable")
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o755)
+            self.assertFalse(list(folder.glob(".tk-install-*")))
+
+    def test_failed_install_retains_existing_binary_and_cleans_temporary_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            source, destination = folder / "new", folder / "tk"
+            source.write_bytes(b"new executable")
+            destination.write_bytes(b"existing executable")
+            with patch("build.shutil.copy2", side_effect=OSError("fixture copy failure")):
+                with self.assertRaises(OSError):
+                    install_artifact(source, destination)
+            self.assertEqual(destination.read_bytes(), b"existing executable")
+            self.assertFalse(list(folder.glob(".tk-install-*")))
+
     def test_clean_modified_untracked_and_ignored_sources(self):
         with tempfile.TemporaryDirectory(prefix="teleport-build-test-") as temporary:
             folder = Path(temporary)

@@ -2,7 +2,7 @@
 name: teleport
 description: Use the tk CLI to inspect and manage teleport projects, Goal/Epic/Task tickets, workflows, questions and supervised agent delivery through the authenticated server API.
 metadata:
-  version: "1"
+  version: "2"
 ---
 
 # Teleport through `tk`
@@ -11,19 +11,24 @@ Use this skill when the task involves an existing teleport installation. Work wi
 
 ## Discover the installation
 
-`tk skill` prints this standalone skill from the binary, without a server or login. It can be saved as a harness skill's `SKILL.md`. The remaining discovery commands describe the running server:
+`tk skill` prints this standalone skill from the binary, without a server or login. Save it as a harness skill's `SKILL.md` when requested. Bare `tk`, `tk help`, `tk commands -json` and `tk help NOUN` list all shipped public commands offline. Command-specific help (`tk agent ls -h`) lists typed field flags from the bundled request schemas. `tk tools` and `tk spec` describe the running server, which may differ from the local build.
 
 ```sh
 tk version
+tk help
+tk commands -json
+tk help agent
 tk tools
 tk spec
 tk getSession
-tk listProjects --data '{"limit":50}'
+tk listProjects -data '{"limit":50}'
 ```
 
 `tk tools` returns registered operation names and summaries. `tk spec` returns OpenAPI request/response schemas, required fields and limits. Consult them before using an unfamiliar operation; do not invent commands or assume an operation from another version exists.
 
-`TELEPORT_SERVER` selects the server (default `http://localhost:9999`); `--server URL` overrides it per call. `TELEPORT_CONFIG` or `--config PATH` selects the private client credential file. Use the supplied configuration and identity; never print tokens or switch to a more privileged account to bypass a refusal. If sign-in is required, use `tk login --username NAME --password-stdin` with credentials supplied through the authorized secret-input mechanism, never a password in command arguments.
+Noun/action commands wrap existing API operations: `tk project ls`, `tk ticket show ID`, `tk workflow ls`, `tk idea ls` and `tk agent ls`. Agent listing reads accessible harness sessions; it neither launches agents nor claims that a standalone remote agent daemon exists. `list/create/get/update/grep` are aliases for `ls/new/show/edit/search` where those actions exist. Use `-project`, `-id`, `-version`, `-limit`, `-cursor` and other discovered field flags; IDs may be positional for commands whose schema has an `id`. Do not combine conflicting JSON and field selectors. `-data JSON` and `-f FILE`/`-f -` remain available; complex fields take JSON and sensitive fields use file/stdin input. Raw `tk OPERATION -data JSON` and `tk api OPERATION -data JSON` remain supported.
+
+`TELEPORT_SERVER` selects the server (default `http://localhost:9999`); `-server URL` overrides it per call. `TELEPORT_CONFIG` or `-config PATH` selects the private client credential file. Use the supplied configuration and identity; never print tokens or switch to a more privileged account to bypass a refusal. If sign-in is required, use `tk login -username NAME -password-stdin` with credentials supplied through the authorized secret-input mechanism, never a password in command arguments.
 
 An unavailable server is a blocker for API operations. Do not open its PostgreSQL database as a fallback. `tk init` initializes configured storage and `tk serve` runs the server; neither is an implicit repair step. Forced initialization is unsupported. Offline snapshot export/restore is administrator maintenance and requires explicit authorization.
 
@@ -32,11 +37,11 @@ An unavailable server is a blocker for API operations. Do not open its PostgreSQ
 The hierarchy is **Goal → Epic → Task**. A Task belongs to an Epic; an Epic belongs to a Goal, all in the same real project. Protected Unassigned records supply valid defaults. Do not fabricate IDs, edit protected defaults, assign work to the All projects view or assume IDs identify the same records on another installation.
 
 ```sh
-tk listTickets --data '{"projectId":1,"kind":"task","limit":50}'
-tk getTicket --data '{"id":123}'
-tk listTicketHistory --data '{"id":123,"limit":50}'
+tk listTickets -data '{"projectId":1,"kind":"task","limit":50}'
+tk getTicket -data '{"id":123}'
+tk listTicketHistory -data '{"id":123,"limit":50}'
 tk listWorkflows
-tk getTicketAgreements --data '{"id":123}'
+tk getTicketAgreements -data '{"id":123}'
 ```
 
 Replace example IDs with values read from this installation. Lists return `items` and `nextCursor`; request subsequent pages with the returned `cursor` and the same filters when more results are needed. Project access, hidden records and actor scope affect results; an empty page does not grant access to other projects.
@@ -45,19 +50,25 @@ Read the ticket's original request, criteria, parent/project context, pinned wor
 
 ## Make bounded, versioned changes
 
-Call registered operations as `tk OPERATION --data JSON`. Successful API calls print JSON; failures print diagnostics to stderr and return a nonzero exit status. Build JSON as data with proper escaping rather than interpolating untrusted text into shell commands.
+Call registered operations as `tk NOUN ACTION [flags]` or `tk OPERATION -data JSON`. Successful API calls print JSON; failures print diagnostics to stderr and return a nonzero exit status. Build JSON as data with proper escaping rather than interpolating untrusted text into shell commands.
 
 Use the record's current `version` as `expectedVersion` where the schema requires it. On a version conflict, re-read the record and reconcile the requested change; do not blindly replace another actor's work or loop retries. On authentication or permission errors, retain the failure and resolve the actual identity/access issue.
 
-For creation and other operations with `requestId`, generate a unique ID for that logical request. Reuse that same ID only when retrying an uncertain response to the same request; generate a new one for distinct work. Re-read state before replaying any mutation whose result is uncertain.
+For creation and other operations with `requestId`, use a unique ID for that logical request. Noun/action commands generate a required request ID when omitted and print it on stderr; pass `-request-id` to repeat that exact request after reconciling an uncertain response. Raw API calls require the ID in their JSON. Reuse the ID only for the same request, never distinct work. Re-read state before replaying any mutation whose result is uncertain.
 
 For an authorized new agent Task, the request shape is:
 
 ```sh
-tk createTicket --data '{"projectId":1,"kind":"task","title":"Describe the requested change","description":"Bound the work","criteria":"State observable acceptance","agent":true,"requestId":"REPLACE-WITH-A-UNIQUE-REQUEST-ID"}'
+tk createTicket -data '{"projectId":1,"kind":"task","title":"Describe the requested change","description":"Bound the work","criteria":"State observable acceptance","agent":true,"requestId":"REPLACE-WITH-A-UNIQUE-REQUEST-ID"}'
 ```
 
 Choose human or agent intent from the actual request. Omit `parentId` only when the project's protected Unassigned parent is appropriate. Agent work has no human execution assignee. Original title, description and criteria are editable only while the ticket is already Todo; returning to Todo is a separate allowed operation, not a way to discard an implementation awaiting review.
+
+## Capture freeform text
+
+`tk import FILE` captures a regular UTF-8 text file as one Idea. `tk import -i` reads multiline stdin until EOF (Ctrl-D in a terminal); `tk import -` also reads stdin. Preserve the text exactly, up to the current 20,000-byte Idea limit; oversized or invalid text is rejected without saving. An omitted `-project` uses the current account's private Idea inbox; an explicit project ID publishes under that project's existing access rules. `-title` overrides the file basename or first nonblank input line. Stdin capture verifies authentication before consuming a long paste.
+
+Capture does not classify, create goals or start a harness. The classifier/refinement session is separate later work. This is not the structured Copy/Update interchange importer. Human output reports the captured Idea; `-json` emits the full Idea with diagnostics and the retry request ID on stderr. After an uncertain response, reconcile the Idea/request identity before repeating with the same `-request-id`.
 
 ## Preserve supervision and execution ownership
 

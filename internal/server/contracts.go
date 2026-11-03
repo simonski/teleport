@@ -38,6 +38,15 @@ var contracts = map[string]contract{
 
 type oneOf []any
 
+// OperationInputSchema exposes the same shipped request contract to offline CLI discovery.
+func OperationInputSchema(name string) (map[string]any, bool) {
+	definition, ok := contracts[name]
+	if !ok {
+		return nil, false
+	}
+	return schema(definition.Input), true
+}
+
 func schema(value any) map[string]any {
 	if alternatives, ok := value.(oneOf); ok {
 		items := []any{}
@@ -90,7 +99,7 @@ func schemaType(t reflect.Type) map[string]any {
 		return map[string]any{"type": "object", "additionalProperties": schemaType(t.Elem())}
 	case reflect.Bool:
 		return map[string]any{"type": "boolean"}
-	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Uint64:
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return map[string]any{"type": "integer"}
 	case reflect.Float64:
 		return map[string]any{"type": "number"}

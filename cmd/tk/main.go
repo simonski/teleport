@@ -47,11 +47,15 @@ func env(key, fallback string) string {
 	return fallback
 }
 func run(args []string) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" {
-		fmt.Println("teleport (tk)\n\n  tk init [-demo] [-db-config PATH] [-admin-password-stdin]  Initialize PostgreSQL; -demo seeds PetStore\n  tk init -export-state-stdout     Export private state offline\n  tk init -restore-state-stdin -state-sha256 HASH  Restore into an empty database offline\n  tk serve [-db-config PATH] [-addr localhost:9999]\n  tk login [-username admin] -password-stdin\n  tk OPERATION -data JSON         Call the authenticated server API\n  tk tools | spec                  Read server discovery\n  tk skill                         Export the bundled harness SKILL.md\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_DB_CONFIG, TELEPORT_SERVER, TELEPORT_CONFIG")
-		return nil
+	expanded, done, err := expandCommand(args, os.Stdout)
+	if err != nil || done {
+		return err
 	}
+	args = expanded
 	command := args[0]
+	if command == "import" {
+		return captureText(args[1:], os.Stdin, os.Stdout, os.Stderr)
+	}
 	if command == "_script-run" {
 		flags := flag.NewFlagSet(command, flag.ContinueOnError)
 		config := flags.String("config", "", "owned script configuration")
@@ -146,10 +150,13 @@ func run(args []string) error {
 		flags.BoolVar(&demo, "demo", false, "add the PetStore simulation project and synthetic sample work")
 	}
 	if err := flags.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("unexpected arguments; use --data JSON")
+		return errors.New("unexpected arguments; use -data JSON or tk help for noun/action commands")
 	}
 	var explicitDB, explicitConfig bool
 	flags.Visit(func(value *flag.Flag) {
@@ -306,16 +313,13 @@ func run(args []string) error {
 		_, err = io.Copy(os.Stdout, io.LimitReader(resp.Body, 4<<20))
 		return err
 	}
-	creds := credentials{Server: *endpoint}
-	if b, err := os.ReadFile(*config); err == nil {
-		json.Unmarshal(b, &creds)
-		if creds.Server != *endpoint {
-			return errors.New("credential server differs; sign in for this server")
-		}
+	creds, err := readCredentials(*endpoint, *config)
+	if err != nil {
+		return err
 	}
 	if command == "login" {
 		if !*passwordStdin {
-			return errors.New("use --password-stdin to read a password without exposing it in process arguments")
+			return errors.New("use -password-stdin to read a password without exposing it in process arguments")
 		}
 		b, err := io.ReadAll(io.LimitReader(os.Stdin, 1025))
 		if err != nil {
@@ -327,36 +331,9 @@ func run(args []string) error {
 		encoded, _ := json.Marshal(map[string]string{"username": *username, "password": strings.TrimRight(string(b), "\r\n")})
 		*data = string(encoded)
 	}
-	if !json.Valid([]byte(*data)) {
-		return errors.New("--data must be valid JSON")
-	}
-	req, err := http.NewRequest("POST", *endpoint+"/api/tools/"+command, bytes.NewBufferString(*data))
+	body, err := requestOperation(*endpoint, creds, command, []byte(*data))
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if creds.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+creds.Token)
-	}
-	client := http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("server unavailable; run tk serve (no database fallback): %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, (4<<20)+1))
-	if err != nil {
-		return err
-	}
-	if len(body) > 4<<20 {
-		return errors.New("response exceeds 4 MiB; reduce the page limit and retry")
-	}
-	if resp.StatusCode >= 400 {
-		var result struct {
-			Error app.Error `json:"error"`
-		}
-		json.Unmarshal(body, &result)
-		return fmt.Errorf("%s: %s", resp.Status, result.Error.Message)
 	}
 	if command == "login" {
 		var login app.LoginResult

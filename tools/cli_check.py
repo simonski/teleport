@@ -76,7 +76,7 @@ def main():
             assert {"agent ls", "ticket show", "project ls", "import FILE | -i"} <= {item["command"] for item in catalogue}
             assert len(catalogue) > 100 and not calls
             overview = tk().stdout
-            assert "tk agent " in overview and "tk ticket " in overview and "tk agent ls " not in overview and "tk ticket show " not in overview
+            assert "\n  agent " in overview and "\n  ticket " in overview and "\n  tk " not in overview and "\n  agent ls " not in overview
             agent_help = tk("agent").stdout
             assert "tk agent ls " in agent_help and "tk ticket show " not in agent_help and not calls
             assert "-project" in tk("agent", "ls", "-h").stdout and not calls

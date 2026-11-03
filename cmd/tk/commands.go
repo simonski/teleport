@@ -184,7 +184,7 @@ func printCommandOverview(out io.Writer) {
 	sort.Strings(names)
 	fmt.Fprintln(out, "teleport (tk) — commands")
 	for _, name := range names {
-		fmt.Fprintf(out, "  tk %-18s %s\n", name, groups[name])
+		fmt.Fprintf(out, "  %-18s %s\n", name, groups[name])
 	}
 	fmt.Fprintln(out, "\nUse tk COMMAND to list its actions and tk COMMAND ACTION -h for action flags.")
 	fmt.Fprintln(out, "Use tk commands for the full catalogue, or tk commands -json for machine-readable discovery.")

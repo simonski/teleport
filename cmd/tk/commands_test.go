@@ -64,12 +64,12 @@ func TestDefaultHelpListsCommandsAndNounHelpListsOnlyItsActions(t *testing.T) {
 			t.Fatalf("overview for %v: %v", arguments, err)
 		}
 		text := output.String()
-		for _, name := range []string{"tk agent ", "tk ticket ", "tk init ", "tk import ", "tk logout "} {
+		for _, name := range []string{"\n  agent ", "\n  ticket ", "\n  init ", "\n  import ", "\n  logout "} {
 			if !strings.Contains(text, name) {
 				t.Errorf("overview missing %s", name)
 			}
 		}
-		if strings.Contains(text, "tk agent ls ") || strings.Contains(text, "tk ticket show ") {
+		if strings.Contains(text, "\n  tk ") || strings.Contains(text, "\n  agent ls ") || strings.Contains(text, "\n  ticket show ") {
 			t.Fatal("overview expanded action lists")
 		}
 	}

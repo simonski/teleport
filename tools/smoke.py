@@ -64,6 +64,8 @@ def main(temporary_root=None):
             "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
         ])))
         def tk(*arguments, input=None, success=True):
+            if arguments[0] not in ("init", "serve", "login", "version", "skill"):
+                arguments = (*arguments, "-json")
             result = profile.call("tk", lambda: subprocess.run([str(ROOT / "bin/tk"), *arguments], env=environment, input=input, text=True, capture_output=True, timeout=3))
             if success and result.returncode:
                 raise RuntimeError(result.stderr)

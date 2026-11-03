@@ -34,7 +34,7 @@ def main(database_url=None):
     browser_name = f"teleport-workflow-{port}"
 
     def tk(op, data=None):
-        command = [str(ROOT / "bin/tk"), op]
+        command = [str(ROOT / "bin/tk"), op, "-json"]
         if data is not None:
             command += ["--data", json.dumps(data)]
         result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=35)

@@ -142,11 +142,12 @@ func commandCatalogue() []cliCommand {
 		{Command: "api OPERATION", Summary: "Call a server operation with explicit JSON; native/private commands are rejected"},
 		{Command: "help [NOUN [ACTION]]", Summary: "Show command groups or command-specific help (offline)"},
 		{Command: "commands [-json]", Summary: "Print the complete offline command catalogue"},
+		{Command: "setup", Summary: "Configure common settings and create the Teleport project"},
 		{Command: "init", Summary: "Initialize configured PostgreSQL; never starts services"},
 		{Command: "serve", Summary: "Run the web/API server and configured components"},
 		{Command: "login -password-stdin", Operation: "login", Summary: "Sign in without putting a password in process arguments"},
 		{Command: "logout", Summary: "Sign out of the current session"},
-		{Command: "import FILE | -i", Summary: "Capture UTF-8 text as an Idea; classification follows separately"},
+		{Command: "import -project NAME [FILE | -i]", Summary: "Capture UTF-8 text as an Idea; classification follows separately"},
 		{Command: "skill", Summary: "Print the bundled harness SKILL.md (offline)"},
 		{Command: "version", Summary: "Print the local build identity (offline)"},
 		{Command: "tools", Summary: "Fetch the running server's operation discovery JSON"},
@@ -245,7 +246,7 @@ func expandCommand(args []string, out io.Writer) ([]string, bool, error) {
 		}
 		return nil, true, printCatalogue(out, strings.Join(topic, " "), machine)
 	}
-	for _, native := range []string{"init", "serve", "login", "logout", "skill", "version", "tools", "spec", "import"} {
+	for _, native := range []string{"init", "setup", "serve", "login", "logout", "skill", "version", "tools", "spec", "import"} {
 		if args[0] == native || strings.HasPrefix(args[0], "_") {
 			return args, false, nil
 		}
@@ -257,7 +258,7 @@ func expandCommand(args []string, out io.Writer) ([]string, bool, error) {
 		if args[1] == "" {
 			return nil, false, errors.New("provide an API operation name")
 		}
-		for _, reserved := range []string{"init", "serve", "skill", "version", "tools", "spec", "import", "help", "commands", "api"} {
+		for _, reserved := range []string{"init", "setup", "serve", "skill", "version", "tools", "spec", "import", "help", "commands", "api"} {
 			if args[1] == reserved {
 				return nil, false, errors.New("tk api accepts API operation names, not native commands")
 			}

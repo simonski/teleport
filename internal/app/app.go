@@ -69,7 +69,6 @@ func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
 }
 
 type InitializeOptions struct {
-	Demo          bool
 	AdminPassword string
 }
 
@@ -92,10 +91,6 @@ func InitializeWithOptions(ctx context.Context, db *store.Store, options Initial
 			*st = freshInstallation(options.AdminPassword)
 		} else if options.AdminPassword != "" && !passwordMatches(st.Accounts["admin"].PasswordHash, options.AdminPassword) {
 			return false, failure(409, "initial_password_mismatch", "Existing admin credentials differ; initialization never resets a password")
-		}
-		if options.Demo {
-			seeded, err := seedPetStore(st)
-			return changed || seeded, err
 		}
 		return changed, nil
 	})

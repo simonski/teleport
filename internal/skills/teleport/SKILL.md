@@ -50,7 +50,7 @@ Read the ticket's original request, criteria, parent/project context, pinned wor
 
 ## Make bounded, versioned changes
 
-Call registered operations as `tk NOUN ACTION [flags]` or `tk OPERATION -data JSON`. Successful API calls print JSON; failures print diagnostics to stderr and return a nonzero exit status. Build JSON as data with proper escaping rather than interpolating untrusted text into shell commands.
+Call registered operations as `tk NOUN ACTION [flags]` or `tk OPERATION -data JSON`. Successful API calls print human-readable output by default; pass `-json` for pretty-printed JSON. Failures print diagnostics to stderr and return a nonzero exit status. Build JSON as data with proper escaping rather than interpolating untrusted text into shell commands.
 
 Use the record's current `version` as `expectedVersion` where the schema requires it. On a version conflict, re-read the record and reconcile the requested change; do not blindly replace another actor's work or loop retries. On authentication or permission errors, retain the failure and resolve the actual identity/access issue.
 
@@ -66,7 +66,7 @@ Choose human or agent intent from the actual request. Omit `parentId` only when 
 
 ## Capture freeform text
 
-`tk import FILE` captures a regular UTF-8 text file as one Idea. `tk import -i` reads multiline stdin until EOF (Ctrl-D in a terminal); `tk import -` also reads stdin. Preserve the text exactly, up to the current 20,000-byte Idea limit; oversized or invalid text is rejected without saving. An omitted `-project` uses the current account's private Idea inbox; an explicit project ID publishes under that project's existing access rules. `-title` overrides the file basename or first nonblank input line. Stdin capture verifies authentication before consuming a long paste.
+`tk import -project NAME FILE` captures a regular UTF-8 text file as one Idea. `tk import -project NAME` or `tk import -project NAME -i` reads multiline stdin until EOF (Ctrl-D in a terminal). Preserve the text exactly, up to the current 20,000-byte Idea limit; oversized or invalid text is rejected without saving. The required project name must match an accessible project. `-title` overrides the file basename or first nonblank input line. Stdin capture verifies authentication before consuming a long paste.
 
 Capture does not classify, create goals or start a harness. The classifier/refinement session is separate later work. This is not the structured Copy/Update interchange importer. Human output reports the captured Idea; `-json` emits the full Idea with diagnostics and the retry request ID on stderr. After an uncertain response, reconcile the Idea/request identity before repeating with the same `-request-id`.
 

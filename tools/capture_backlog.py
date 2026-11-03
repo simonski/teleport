@@ -12,6 +12,7 @@ def tk(operation, data=None):
     command = [str(ROOT / "bin/tk"), operation]
     if data is not None:
         command += ["-data", json.dumps(data)]
+    command.append("-json")
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=15)
     except subprocess.TimeoutExpired:

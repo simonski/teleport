@@ -31,7 +31,7 @@ def main():
     selection.add_argument("--studio-only", action="store_true", help="Run 2D graph, Studio and workflow Map acceptance against a fresh database")
     selection.add_argument("--overview-only", action="store_true", help="Run Home, Tickets, Attention and workflow assembly acceptance")
     selection.add_argument("--tests-only", action="store_true", help="Run only Go tests against disposable PostgreSQL")
-    selection.add_argument("--init-only", action="store_true", help="Verify PetStore initialization against a fresh database")
+    selection.add_argument("--init-only", action="store_true", help="Verify initialization against a fresh database")
     parser.add_argument("--test-pattern", help="Go test -run pattern for a focused regression")
     args = parser.parse_args()
     if (args.shell_only or args.studio_only) and not args.browser:

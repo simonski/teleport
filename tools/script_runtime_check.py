@@ -32,7 +32,7 @@ def main(database_url=None):
     browser_name = f"teleport-script-{port}"
 
     def tk(operation, data=None, fail=False):
-        command = [str(ROOT / "bin/tk"), operation]
+        command = [str(ROOT / "bin/tk"), operation, "-json"]
         if data is not None:
             command += ["--data", json.dumps(data)]
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=20)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -53,6 +52,9 @@ func run(args []string) error {
 	}
 	args = expanded
 	command := args[0]
+	if command == "setup" {
+		return setupProject(args[1:], os.Stdin, os.Stdout, os.Stderr)
+	}
 	if command == "import" {
 		return captureText(args[1:], os.Stdin, os.Stdout, os.Stderr)
 	}
@@ -103,6 +105,21 @@ func run(args []string) error {
 		return scanner.Err()
 	}
 	if command == "version" {
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		machine := flags.Bool("json", false, "print build identity as JSON")
+		if err := flags.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+		if flags.NArg() != 0 {
+			return errors.New("usage: tk version [-json]")
+		}
+		if *machine {
+			body, _ := json.Marshal(map[string]string{"version": version})
+			return printResponse(os.Stdout, body, true)
+		}
 		fmt.Println(version)
 		return nil
 	}
@@ -136,9 +153,9 @@ func run(args []string) error {
 	endpoint := flags.String("server", env("TELEPORT_SERVER", "http://localhost:9999"), "server URL")
 	config := flags.String("config", env("TELEPORT_CONFIG", filepath.Join(home, ".teleport", "client.json")), "client credential file")
 	data := flags.String("data", "{}", "JSON request")
+	machine := flags.Bool("json", false, "pretty-print JSON response")
 	username := flags.String("username", "admin", "local username")
 	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
-	demo := false
 	var exportState, restoreState bool
 	var stateSHA string
 	adminPasswordStdin := false
@@ -147,7 +164,6 @@ func run(args []string) error {
 		flags.BoolVar(&exportState, "export-state-stdout", false, "export private installation state for offline backup")
 		flags.BoolVar(&restoreState, "restore-state-stdin", false, "restore a checksummed offline snapshot into an empty database")
 		flags.StringVar(&stateSHA, "state-sha256", "", "required checksum for offline restoration")
-		flags.BoolVar(&demo, "demo", false, "add the PetStore simulation project and synthetic sample work")
 	}
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -186,7 +202,7 @@ func run(args []string) error {
 		if stateSHA != "" && !restoreState {
 			return errors.New("-state-sha256 requires -restore-state-stdin")
 		}
-		if exportState && restoreState || (exportState || restoreState) && (demo || adminPasswordStdin) {
+		if exportState && restoreState || (exportState || restoreState) && adminPasswordStdin {
 			return errors.New("choose exactly one initialization or offline snapshot operation")
 		}
 		location, err := databaseLocation(*dbPath, *dbConfig)
@@ -219,12 +235,9 @@ func run(args []string) error {
 				fmt.Println("Installation snapshot restored and verified; existing identity and credentials preserved.")
 				return nil
 			}
-			_, _, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{Demo: demo, AdminPassword: initialPassword})
+			_, _, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{AdminPassword: initialPassword})
 			if initErr != nil {
 				return initErr
-			}
-			if demo {
-				fmt.Println("PetStore simulation ready: no real harnesses or model calls.")
 			}
 			fmt.Printf("Storage: %s\nInitialization complete. Run: tk serve\n", redactLocation(*dbPath))
 			return nil
@@ -310,8 +323,11 @@ func run(args []string) error {
 		if resp.StatusCode != 200 {
 			return fmt.Errorf("server returned %s", resp.Status)
 		}
-		_, err = io.Copy(os.Stdout, io.LimitReader(resp.Body, 4<<20))
-		return err
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		if err != nil {
+			return err
+		}
+		return printResponse(os.Stdout, body, *machine)
 	}
 	creds, err := readCredentials(*endpoint, *config)
 	if err != nil {
@@ -344,6 +360,10 @@ func run(args []string) error {
 		if err = saveCredentials(*config, creds); err != nil {
 			return err
 		}
+		if *machine {
+			body, _ := json.Marshal(map[string]string{"username": login.Account.Username})
+			return printResponse(os.Stdout, body, true)
+		}
 		fmt.Println("Signed in as", login.Account.Username)
 		return nil
 	}
@@ -352,13 +372,7 @@ func run(args []string) error {
 			return err
 		}
 	}
-	var pretty bytes.Buffer
-	if json.Indent(&pretty, body, "", "  ") == nil {
-		fmt.Println(pretty.String())
-	} else {
-		fmt.Print(string(body))
-	}
-	return nil
+	return printResponse(os.Stdout, body, *machine)
 }
 func redactLocation(location string) string {
 	if strings.HasPrefix(location, "postgres") {

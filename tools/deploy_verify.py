@@ -52,7 +52,7 @@ def main():
                 result=subprocess.run([str(ROOT/"bin/tk"),"login",*common,"--username",credentials["username"],"--password-stdin"],input=credentials["password"]+"\n",capture_output=True,text=True,timeout=10)
                 if result.returncode:raise RuntimeError("Protected credential sign-in could not be verified on "+host)
                 try:
-                    result=subprocess.run([str(ROOT/"bin/tk"),"getSession",*common],capture_output=True,text=True,timeout=10,check=True)
+                    result=subprocess.run([str(ROOT/"bin/tk"),"getSession",*common,"-json"],capture_output=True,text=True,timeout=10,check=True)
                     installations.add(json.loads(result.stdout)["installationId"])
                 finally:
                     subprocess.run([str(ROOT/"bin/tk"),"logout",*common],capture_output=True,text=True,timeout=10,check=True)

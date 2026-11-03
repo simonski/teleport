@@ -180,7 +180,7 @@ func expandOperation(command cliCommand, arguments []string, out io.Writer) ([]s
 	file := set.String("f", "", "read a JSON request from FILE, or - for stdin")
 	endpoint := set.String("server", "", "server URL (otherwise TELEPORT_SERVER/default)")
 	config := set.String("config", "", "private client credential file")
-	set.Bool("json", false, "JSON result on stdout; diagnostics remain on stderr")
+	machine := set.Bool("json", false, "JSON result on stdout; diagnostics remain on stderr")
 	fields := map[string]json.RawMessage{}
 	properties, _ := command.Input["properties"].(map[string]any)
 	required, _ := command.Input["required"].([]string)
@@ -311,6 +311,9 @@ func expandOperation(command cliCommand, arguments []string, out io.Writer) ([]s
 		return nil, false, errors.New("complete JSON request must fit within 1 MiB")
 	}
 	result := []string{command.Operation, "-data", string(body)}
+	if *machine {
+		result = append(result, "-json")
+	}
 	if *endpoint != "" {
 		result = append(result, "-server", *endpoint)
 	}

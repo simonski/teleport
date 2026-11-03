@@ -27,6 +27,8 @@ func importFixture(t *testing.T, denied bool) (string, string, *[]map[string]any
 			return
 		}
 		switch r.URL.Path {
+		case "/api/tools/listProjects":
+			io.WriteString(w, `{"items":[{"id":2,"name":"Example"}]}`)
 		case "/api/tools/getSession":
 			io.WriteString(w, `{"account":{"id":"fixture"}}`)
 		case "/api/tools/saveIdea":
@@ -57,9 +59,9 @@ func TestImportFileAndMultilineStdinPreserveTextAndCaptureOnlyIdeas(t *testing.T
 	if err := os.WriteFile(file, []byte(text), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, source := range [][]string{{file, "-project", "2"}, {"-i"}, {"-"}} {
+	for _, source := range [][]string{{file}, {"-i"}, {"-"}, {}} {
 		var out, diagnostics bytes.Buffer
-		arguments := append(append([]string{}, source...), "-server", endpoint, "-config", config, "-request-id", "capture-retry", "-json")
+		arguments := append(append([]string{}, source...), "-project", "Example", "-server", endpoint, "-config", config, "-request-id", "capture-retry", "-json")
 		if err := captureText(arguments, strings.NewReader(text), &out, &diagnostics); err != nil {
 			t.Fatal(err)
 		}
@@ -70,12 +72,12 @@ func TestImportFileAndMultilineStdinPreserveTextAndCaptureOnlyIdeas(t *testing.T
 		if captured["text"] != text || captured["requestId"] != "capture-retry" || captured["agent"] != nil {
 			t.Fatal("capture changed source text, retry identity or execution intent")
 		}
-		if source[0] == file {
+		if len(source) > 0 && source[0] == file {
 			if captured["projectId"] != float64(2) || captured["title"] != "notes.txt" {
 				t.Fatal("explicit project or file title was lost")
 			}
-		} else if captured["projectId"] != nil || captured["title"] != "# Goals" {
-			t.Fatal("stdin did not default to a private inbox with a useful title")
+		} else if captured["projectId"] != float64(2) || captured["title"] != "# Goals" {
+			t.Fatal("stdin did not use the named project with a useful title")
 		}
 	}
 }
@@ -84,7 +86,7 @@ func TestImportRejectsOversizeEmptyInvalidAndConflictingInputWithoutSaving(t *te
 	endpoint, config, saved := importFixture(t, false)
 	for _, text := range []string{strings.Repeat("x", ideaCaptureLimit+1), " \n\t", "invalid\x00text", string([]byte{0xff, 0xfe})} {
 		var out, diagnostics bytes.Buffer
-		if err := captureText([]string{"-i", "-server", endpoint, "-config", config}, strings.NewReader(text), &out, &diagnostics); err == nil {
+		if err := captureText([]string{"-i", "-project", "Example", "-server", endpoint, "-config", config}, strings.NewReader(text), &out, &diagnostics); err == nil {
 			t.Fatal("invalid capture was accepted")
 		}
 	}
@@ -110,7 +112,7 @@ func TestImportAuthenticatesBeforeConsumingAnInteractivePaste(t *testing.T) {
 	endpoint, config, saved := importFixture(t, true)
 	var out, diagnostics bytes.Buffer
 	input := &unreadableCapture{}
-	err := captureText([]string{"-i", "-server", endpoint, "-config", config}, input, &out, &diagnostics)
+	err := captureText([]string{"-i", "-project", "Example", "-server", endpoint, "-config", config}, input, &out, &diagnostics)
 	if err == nil || input.read || len(*saved) != 0 {
 		t.Fatal("unauthenticated capture consumed or saved a paste")
 	}
@@ -123,7 +125,7 @@ func TestImportBoundaryAndDerivedUnicodeTitleAreNotTruncatedOrCorrupted(t *testi
 	if len(text) != ideaCaptureLimit {
 		t.Fatal("bad boundary fixture")
 	}
-	if err := captureText([]string{"-i", "-server", endpoint, "-config", config}, strings.NewReader(text), &out, &diagnostics); err != nil {
+	if err := captureText([]string{"-i", "-project", "Example", "-server", endpoint, "-config", config}, strings.NewReader(text), &out, &diagnostics); err != nil {
 		t.Fatal(err)
 	}
 	idea := (*saved)[0]
@@ -149,7 +151,7 @@ func TestImportTerminalOutputEscapesControlsWithoutChangingStoredText(t *testing
 	endpoint, config, saved := importFixture(t, false)
 	text := "\x1b]52;c;payload\a\nrest of the idea\n"
 	var out, diagnostics bytes.Buffer
-	err := captureText([]string{"-i", "-server", endpoint, "-config", config, "-request-id", "request\n\x1b[2J"}, strings.NewReader(text), &out, &diagnostics)
+	err := captureText([]string{"-i", "-project", "Example", "-server", endpoint, "-config", config, "-request-id", "request\n\x1b[2J"}, strings.NewReader(text), &out, &diagnostics)
 	if err != nil {
 		t.Fatal(err)
 	}

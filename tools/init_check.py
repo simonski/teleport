@@ -1,4 +1,4 @@
-"""Verify PostgreSQL initialization and PetStore through an isolated real binary and API."""
+"""Verify PostgreSQL initialization through an isolated real binary and API."""
 import argparse
 import json
 import os
@@ -51,7 +51,7 @@ def main(database_url=None):
             return result.stdout
 
         def api(operation, data=None):
-            return json.loads(tk(operation, "--data", json.dumps(data or {})))
+            return json.loads(tk(operation, "--data", json.dumps(data or {}), "-json"))
 
         def start():
             nonlocal process
@@ -78,15 +78,14 @@ def main(database_url=None):
                 process = None
 
         try:
-            assert "PetStore simulation ready" in tk("init", "-demo")
+            assert "Initialization complete" in tk("init")
             first = start()
-            project = api("listProjects")["items"][0]
-            assert project["simulation"] and project["demoSeed"] == "petstore-v1"
-            tickets = api("listTickets", {"projectId": project["id"], "limit": 200})["items"]
-            ideas = api("listIdeas", {"projectId": project["id"], "limit": 200})["items"]
-            assert len(tickets) >= 25 and len(ideas) == 4, (len(tickets), len(ideas), project["id"])
-            assert not first["settings"]["agents"] and first["preferences"]["defaultProject"] == project["id"]
-            assert all(not ticket["agent"] for ticket in tickets if ticket["status"] == "Done")
+            assert api("listProjects")["items"] == []
+            project = json.loads(tk("setup", "-json", input="Fixture project\n2\nkeep\n"))
+            assert project["name"] == "Teleport" and project["maxAgents"] == 2
+            assert "already exists" in tk("setup", fail=True)
+            api("createTicket", {"projectId": project["id"], "title": "Fixture human task", "agent": False, "requestId": "init-task"})
+            assert not first["settings"]["agents"]
             if args.browser:
                 browser("open", endpoint)
                 browser("fill", 'input[name="username"]', "admin")
@@ -104,17 +103,18 @@ def main(database_url=None):
                     verify_location(browser, api, project)
                 browser("close")
                 project = api("listProjects")["items"][0]
-            tk("init", "-demo", fail=True)
+            tk("init", fail=True)
             assert api("getSession")["installationId"] == first["installationId"]
             api("saveProject", {"id": project["id"], "expectedVersion": project["version"], "description": "Human-edited sample"})
             stop()
-            tk("init", "-demo")
+            tk("init")
             again = start()
             assert again["installationId"] == first["installationId"]
             assert api("listProjects")["items"][0]["description"] == "Human-edited sample"
             stop()
             assert "flag provided but not defined" in tk("init", "-f", fail=True)
-            print("PASS: PostgreSQL demo bootstrap, idempotent human edits, API hierarchy, owned-init refusal and removed reset refusal", flush=True)
+            assert "flag provided but not defined" in tk("init", "-demo", fail=True)
+            print("PASS: PostgreSQL bootstrap, idempotent human edits, API hierarchy, owned-init refusal and removed reset refusal", flush=True)
         except Exception:
             if args.browser:
                 print(browser("eval", "JSON.stringify({trace:window.__ticketTrace,notice:document.querySelector('#notice')?.textContent,dialog:document.querySelector('#editor')?.open,calendar:typeof enhanceDate,fields:[...document.querySelectorAll('#editor input')].map(input=>({name:input.name,type:input.type,calendar:input.dataset.calendar}))})"), flush=True)

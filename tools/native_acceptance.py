@@ -106,7 +106,7 @@ def main(database_url=None):
     log = (folder / "server.log").open("w")
 
     def tk(operation, data=None):
-        command = [str(ROOT / "bin/tk"), operation]
+        command = [str(ROOT / "bin/tk"), operation, "-json"]
         if data is not None:
             command += ["--data", json.dumps(data)]
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=20)

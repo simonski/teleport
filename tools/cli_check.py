@@ -31,6 +31,8 @@ def main():
             data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             if operation == "getSession":
                 result = {"account": {"id": "fixture"}}
+            elif operation == "listProjects":
+                result = {"items": [{"id": 2, "name": "Flight"}]}
             elif operation == "listSessions":
                 if data != {"projectId": 2}:
                     failures.append("Agent list changed project scope")
@@ -81,15 +83,15 @@ def main():
                 return result
 
             catalogue = json.loads(tk("commands", "-json").stdout)["commands"]
-            assert {"agent ls", "ticket show", "project ls", "import FILE | -i"} <= {item["command"] for item in catalogue}
+            assert {"agent ls", "ticket show", "project ls", "import -project NAME [FILE | -i]"} <= {item["command"] for item in catalogue}
             assert len(catalogue) > 100 and not calls
             overview = tk().stdout
             assert "\n  agent " in overview and "\n  ticket " in overview and "\n  tk " not in overview and "\n  agent ls " not in overview
             agent_help = tk("agent").stdout
             assert "tk agent ls " in agent_help and "tk ticket show " not in agent_help and not calls
             assert "-project" in tk("agent", "ls", "-h").stdout and not calls
-            assert json.loads(tk("agent", "ls", "-project", "2").stdout)["items"] == []
-            assert json.loads(tk("agent", "ls", "-f", "-", input='{"projectId":2}').stdout)["items"] == []
+            assert json.loads(tk("agent", "ls", "-project", "2", "-json").stdout)["items"] == []
+            assert json.loads(tk("agent", "ls", "-f", "-", "-json", input='{"projectId":2}').stdout)["items"] == []
             before = len(calls)
             for name in ("init", "serve", "_session-daemon"):
                 tk("api", name, okay=False)
@@ -100,7 +102,7 @@ def main():
             text = "CLI capture fixture\n\nKeep Unicode: 月 🌙\n  and exact indentation.\n"
             source = folder / "notes.txt"
             source.write_bytes(text.encode())
-            common = ["-project", "2", "-title", "CLI capture fixture", "-request-id", "same-capture", "-json"]
+            common = ["-project", "Flight", "-title", "CLI capture fixture", "-request-id", "same-capture", "-json"]
             file_result = json.loads(tk("import", str(source), *common).stdout)
             pipe_result = json.loads(tk("import", "-i", *common, input=text).stdout)
             assert file_result["id"] == pipe_result["id"] and file_result["text"] == pipe_result["text"] == text
@@ -112,7 +114,7 @@ def main():
                 master, slave = pty.openpty()
                 process = None
                 try:
-                    process = subprocess.Popen([str(args.binary), "import", "-i", "-request-id", "terminal-capture"], env=environment, stdin=slave, stderr=slave, stdout=subprocess.PIPE)
+                    process = subprocess.Popen([str(args.binary), "import", "-i", "-project", "Flight", "-request-id", "terminal-capture"], env=environment, stdin=slave, stderr=slave, stdout=subprocess.PIPE)
                     os.close(slave)
                     slave = -1
                     prompt = b""
@@ -126,7 +128,7 @@ def main():
                     output, _ = process.communicate(timeout=3)
                     assert process.returncode == 0 and b"Classification follows separately" in output
                     assert receipts["terminal-capture"][0]["text"] == text
-                    assert "projectId" not in receipts["terminal-capture"][0]
+                    assert receipts["terminal-capture"][0]["projectId"] == 2
                 finally:
                     if process and process.poll() is None:
                         process.terminate()
@@ -135,7 +137,7 @@ def main():
                     if slave >= 0:
                         os.close(slave)
             old_server[0] = True
-            tk("import", str(source), "-request-id", "legacy-server")
+            tk("import", str(source), "-project", "Flight", "-request-id", "legacy-server")
             assert "origin" not in receipts["legacy-server"][0]
             assert not failures, failures
     finally:

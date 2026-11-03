@@ -76,7 +76,12 @@ def main():
     parser.add_argument("--build-only",action="store_true")
     parser.add_argument("--dry-run",action="store_true")
     parser.add_argument("--migration-bridge",type=Path,help="Archived historical init bridge for an existing file-backed deployment")
+    parser.add_argument("--reset",action="store_true",help="Archive the existing installation and initialize a fresh one; requires CONFIRM=reset")
     args=parser.parse_args()
+    if args.reset and os.environ.get("CONFIRM") != "reset":
+        parser.error("reset requires CONFIRM=reset; no connection or build was started")
+    if args.reset and (args.build_only or args.migration_bridge):
+        parser.error("reset cannot be combined with build-only or migration")
     directory=validate_target(args.host,args.directory)
     primary=args.host.split("@",1)[1].lower()
     aliases=["teleport.engineering","teleport.exe.xyz"] if primary in ("teleport.engineering","teleport.exe.xyz") else []
@@ -87,6 +92,7 @@ def main():
     if not re.fullmatch(r"(?:127\.0\.0\.1|0\.0\.0\.0):[1-9][0-9]{0,4}",args.addr) or int(args.addr.rsplit(":",1)[1])>65535:
         parser.error("Use a Linux listen address such as 127.0.0.1:9999")
     if args.dry_run:
+        if args.reset: print("RESET: archive the existing installation, stop owned processes, and create a fresh database and credentials")
         print(f"Build Linux {args.arch or 'architecture detected over SSH'}; scp to {args.host}:{directory}/releases; initialize only if needed; start {args.addr}; HTTPS hosts: {', '.join(public_hosts)}; retrieve protected credentials to .deploy/")
         return
     ssh=["ssh","-o","BatchMode=yes","-o","ConnectTimeout=10",args.host]
@@ -112,6 +118,7 @@ def main():
     for source,destination in uploads:
         subprocess.run(["scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=10",str(source),args.host+":"+shlex.quote(remote+"/"+destination)],check=True,timeout=120)
     manifest={"root":directory,"release":release,"version":version,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"addr":args.addr,"publicHost":primary,"publicHosts":public_hosts}
+    if args.reset:manifest["reset"]="reset"
     if args.migration_bridge:manifest["migrationBridgeSHA256"]=hashlib.sha256(args.migration_bridge.read_bytes()).hexdigest()
     subprocess.run([*ssh,shlex.join(["env","TELEPORT_TOOL_HISTORY="+directory+"/tool_calls_history.csv","python3",remote+"/deploy_remote.py"])],input=json.dumps(manifest),text=True,check=True,timeout=120)
     credentials=ROOT/".deploy";credentials.mkdir(mode=0o700,exist_ok=True)

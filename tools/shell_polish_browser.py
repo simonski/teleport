@@ -36,7 +36,7 @@ def verify_landing(browser):
     browser("mouse", "up", "left")
     moved = json.loads(browser("eval", "landingFlight.snapshot()"))
     assert moved["moon"]["x"] < original["moon"]["x"] - 20 and moved["moon"]["y"] > original["moon"]["y"]
-    assert abs((moved["x"]-original["x"]) - (moved["moon"]["x"]-original["moon"]["x"])) < .01
+    assert abs(moved["x"]-original["x"]) < .01 and abs(moved["y"]-original["y"]) < .01
     browser("set", "viewport", "390", "844")
     browser("eval", "landingFlight.seekPhase('refuel',.5,15);if(document.documentElement.scrollWidth>innerWidth)throw new Error('Landing animation overflows mobile')")
     browser("screenshot", "/tmp/teleport-landing-mobile.png")

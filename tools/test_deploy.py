@@ -7,10 +7,41 @@ import unittest
 from unittest.mock import patch,MagicMock
 
 from deploy import validate_target
-from deploy_remote import deploy,read_credentials,secure_json,validate_manifest
+from deploy_remote import deploy,read_credentials,reset_installation,secure_json,validate_manifest
 
 
 class DeployTest(unittest.TestCase):
+    def test_reset_guard_precedes_build_and_network(self):
+        import os, subprocess, sys
+        environment=dict(os.environ,CONFIRM="")
+        result=subprocess.run([sys.executable,"-B",str(Path(__file__).with_name("deploy.py")),"--reset"],env=environment,capture_output=True,text=True,timeout=3)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn("CONFIRM=reset",result.stderr)
+
+    def test_reset_archives_old_data_and_keeps_uploaded_release(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base=Path(temporary).resolve();root=base/"teleport";release=root/"releases/123-abcdef123456";release.mkdir(parents=True)
+            binary=release/"tk";binary.write_bytes(b"fixture");(root/"database.db").write_bytes(b"old data")
+            manifest={"root":str(root),"release":release.name,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"version":"fixture","addr":"127.0.0.1:8000","publicHost":"teleport.engineering","reset":"reset"}
+            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.subprocess.check_output",return_value="fixture"):
+                backup=reset_installation(manifest)
+            self.assertEqual((backup/"database.db").read_bytes(),b"old data")
+            self.assertEqual((root/"releases"/release.name/"tk").read_bytes(),b"fixture")
+            self.assertFalse((root/"database.db").exists())
+
+    def test_reset_rejects_external_database_and_unreconciled_runtime_before_stopping(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base=Path(temporary).resolve();root=base/"teleport";release=root/"releases/123-abcdef123456";release.mkdir(parents=True)
+            binary=release/"tk";binary.write_bytes(b"fixture")
+            manifest={"root":str(root),"release":release.name,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"version":"fixture","addr":"127.0.0.1:8000","publicHost":"teleport.engineering","reset":"reset"}
+            config=root/"database.json";secure_json(config,{"url":"postgresql://example.test/production"})
+            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.stop_owned") as stop:
+                with self.assertRaisesRegex(RuntimeError,"external"):reset_installation(manifest)
+                config.unlink();(root/"runtime").mkdir();(root/"runtime/session").write_text("owned work")
+                with self.assertRaisesRegex(RuntimeError,"runtime"):reset_installation(manifest)
+                stop.assert_not_called()
+                self.assertTrue(binary.exists())
+
     def test_destination_is_below_the_requested_home_without_shell_fragments(self):
         self.assertEqual(validate_target("exedev@teleport.engineering","/home/exedev/teleport"),"/home/exedev/teleport")
         for host,path in (("-oProxyCommand=bad","/home/exedev/teleport"),("exedev@teleport.engineering","/tmp/app"),("exedev@teleport.engineering","/home/exedev/../other"),("exedev@teleport.engineering","/home/exedev/$(bad)")):

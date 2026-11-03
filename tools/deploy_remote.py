@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import secrets
 import signal
 import stat
@@ -13,6 +14,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from urllib.parse import parse_qs,urlsplit
 
 HOME_BASE=Path("/home/exedev")
 
@@ -101,6 +103,96 @@ def prepare_database(root):
 def process_arguments(pid,root):
     if not owned_process(pid,root):return None
     return [part.decode() for part in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\x00") if part]
+
+
+def reset_installation(manifest):
+    """Archive the owned installation; never delete or touch an external database."""
+    if manifest.get("reset") != "reset":
+        raise RuntimeError("Reset confirmation is missing")
+    root=validate_manifest(manifest)
+    if root.is_symlink() or root.resolve()!=root:
+        raise RuntimeError("Reset root must not traverse symlinks")
+    if root.stat().st_uid!=os.getuid():
+        raise RuntimeError("Reset root must be owned by the deployment account")
+    release=root/"releases"/manifest["release"]
+    binary=release/"tk"
+    if release.is_symlink() or binary.is_symlink() or not binary.is_file() or hashlib.sha256(binary.read_bytes()).hexdigest()!=manifest["sha256"]:
+        raise RuntimeError("Uploaded reset binary is invalid")
+    if subprocess.check_output([str(binary),"version"],text=True,timeout=5).strip()!=manifest["version"]:
+        raise RuntimeError("Uploaded reset binary identity differs")
+    config=root/"database.json"
+    data=root/"postgres/data"
+    socket=root/"pgsocket"
+    for path in (data,socket):
+        if path.is_symlink() or path.exists() and (path.resolve()!=path or not path.is_dir() or path.stat().st_uid!=os.getuid()):
+            raise RuntimeError("Reset refuses external or unverified PostgreSQL directories")
+    if config.exists() or config.is_symlink():
+        info=config.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:
+            raise RuntimeError("Database configuration is not a private owned file")
+        url=urlsplit(json.loads(config.read_text()).get("url",""))
+        if url.scheme not in ("postgresql","postgres") or url.hostname or parse_qs(url.query).get("host") != [str(socket)] or not (data/"PG_VERSION").is_file():
+            raise RuntimeError("Reset refuses external or unverified PostgreSQL databases")
+        for path in (data,socket):
+            if path.is_symlink() or path.resolve()!=path or not path.is_dir() or path.stat().st_uid!=os.getuid():
+                raise RuntimeError("Reset refuses external or unverified PostgreSQL directories")
+    runtime=root/"runtime"
+    if runtime.is_symlink() or runtime.exists() and (not runtime.is_dir() or any(runtime.iterdir())):
+        raise RuntimeError("Reset requires an empty runtime directory; reconcile agent sessions first")
+    postgres_running=(data/"postmaster.pid").exists()
+    if (data/"postmaster.pid").is_symlink():
+        raise RuntimeError("PostgreSQL identity must be a regular file")
+    if postgres_running:
+        try:
+            postgres_pid=int((data/"postmaster.pid").read_text().splitlines()[0])
+            executable=Path(os.readlink(f"/proc/{postgres_pid}/exe"))
+            arguments=Path(f"/proc/{postgres_pid}/cmdline").read_bytes().split(b"\x00")
+            if postgres_pid<=1 or executable.name!="postgres" or str(data).encode() not in arguments or Path(f"/proc/{postgres_pid}").stat().st_uid!=os.getuid():
+                raise ValueError("unowned process")
+        except (OSError,ValueError,IndexError):
+            raise RuntimeError("PostgreSQL process ownership is uncertain; reset aborted") from None
+    pid_file=root/"server.json"
+    if pid_file.is_symlink() or pid_file.exists() and not pid_file.is_file():
+        raise RuntimeError("Server identity must be a regular file")
+    recorded=None
+    if pid_file.exists():
+        recorded=json.loads(pid_file.read_text()).get("pid")
+    proc=Path("/proc")
+    if sys.platform.startswith("linux") and not proc.is_dir():
+        raise RuntimeError("Process ownership cannot be verified without /proc")
+    if proc.is_dir():
+        for entry in proc.iterdir():
+            if entry.name.isdigit() and int(entry.name)!=recorded and owned_process(int(entry.name),root):
+                raise RuntimeError("An unrecorded deployment server is running; reset aborted")
+    if pid_file.exists():
+        pid=recorded
+        if not isinstance(pid,int) or pid<=1:
+            raise RuntimeError("Server identity is invalid")
+        if Path(f"/proc/{pid}").exists() and not owned_process(pid,root):
+            raise RuntimeError("Recorded server process is not owned by this deployment")
+        stop_owned(pid,root)
+        if owned_process(pid,root):
+            raise RuntimeError("Owned server did not stop; reset aborted")
+    if postgres_running:
+        from postgres import binaries,pg
+        pg(binaries(),"pg_ctl","-D",data,"-m","fast","-w","stop")
+        if (data/"postmaster.pid").exists():
+            raise RuntimeError("PostgreSQL did not stop; reset aborted")
+    backup=root.parent/(root.name+"-backup-"+secrets.token_hex(8))
+    if backup.exists() or backup.is_symlink():
+        raise RuntimeError("Backup destination already exists")
+    root.chmod(0o700)
+    root.rename(backup)
+    try:
+        root.mkdir(mode=0o700)
+        target=root/"releases"/manifest["release"]
+        target.parent.mkdir(mode=0o700)
+        shutil.move(str(backup/"releases"/manifest["release"]),str(target))
+    except BaseException:
+        print("Reset interrupted; previous installation retained at "+str(backup),file=sys.stderr,flush=True)
+        raise
+    print("Previous installation retained at "+str(backup),flush=True)
+    return backup
 
 
 def deploy(manifest):
@@ -212,7 +304,10 @@ def main():
     if root.resolve()!=root:
         raise RuntimeError("Deployment root must not traverse symlinks")
     from tool_history import locked_history
-    with locked_history(Path(manifest["root"])/"deploy"):
+    root=Path(manifest["root"])
+    with locked_history(root.parent/("."+root.name+"-deploy")):
+        if manifest.get("reset") is not None:
+            reset_installation(manifest)
         deploy(manifest)
 
 

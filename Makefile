@@ -1,10 +1,11 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install sbom browser-tools deploy db-up db-down check check-go check-integration check-race race-check check-full test lint clean
+.PHONY: help build install sbom browser-tools deploy deploy-reset db-up db-down check check-go check-integration check-race race-check check-full test lint clean
 DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
 DEPLOY_ADDR ?= 0.0.0.0:8000
 export DEPLOY_HOST DEPLOY_DIR DEPLOY_BUILDER DEPLOY_ADDR DEPLOY_PUBLIC_HOSTS
+export CONFIRM
 help:
 	@echo ""
 	@echo "build         Build bin/tk with a local build identity"
@@ -12,6 +13,7 @@ help:
 	@echo "sbom          Generate sbom.cdx.json for Go and bundled browser dependencies"
 	@echo "browser-tools Prepare the pinned persistent browser client"
 	@echo "deploy        Build Linux tk, scp to /home/exedev/teleport and start it"
+	@echo "deploy-reset  Replace the remote installation after CONFIRM=reset; retain a backup"
 	@echo "db-up         Start the private local PostgreSQL installation"
 	@echo "db-down       Stop local PostgreSQL without deleting data"
 	@echo "check         Lightweight source and unit checks; no database or browser processes"
@@ -34,6 +36,8 @@ browser-tools:
 	python3 -B tools/browser_setup.py
 deploy:
 	python3 -B tools/deploy.py
+deploy-reset:
+	python3 -B tools/deploy.py --reset
 db-up:
 	python3 -B tools/postgres.py up
 db-down:

@@ -6,10 +6,47 @@ async function startLandingFlight(){
   const route=await import('/landing_route.js');if(generation!==landingFlightGeneration||!svg.isConnected)return;
   const ship=svg.querySelector('.flight-rocket'),engine=svg.querySelector('.rocket-engine'),flame=svg.querySelector('.rocket-flame'),moonElement=svg.querySelector('.login-moon'),arms=svg.querySelectorAll('.catch-arm'),smoke=svg.querySelectorAll('.landing-smoke circle'),media=window.matchMedia('(prefers-reduced-motion: reduce)');
   const variants=[...svg.querySelectorAll('.rocket-variant')],fins=svg.querySelectorAll('.rocket-fins'),panels=svg.querySelectorAll('.rocket-panel'),vehicle=svg.querySelector('.ground-vehicle'),vehicles=svg.querySelectorAll('[data-vehicle]'),wheels=svg.querySelectorAll('.ground-wheel'),hose=svg.querySelector('.fuel-hose'),steam=svg.querySelectorAll('.fuel-steam circle'),debris=svg.querySelector('.rocket-debris'),level=svg.querySelector('.tank-level');
-  let moon={...route.DEFAULT_MOON},elapsed=0,cycle=0,previous=0,request=0,disposed=false,dragging=null,manual=false,smoothed=null,currentVariant=-1,currentVehicle='';
-  function paint(frame,instant=false){
+  const destinations=[{name:'moon',point:()=>moon},...[...svg.querySelectorAll('[data-planet]')].map(node=>({name:node.dataset.planet,point:()=>({x:Number(node.dataset.x),y:Number(node.dataset.y)})}))];
+  let moon={...route.DEFAULT_MOON},destination=destinations[Math.floor(Math.random()*destinations.length)],elapsed=0,cycle=0,previous=0,request=0,disposed=false,dragging=null,manual=false,smoothed=null,currentVariant=-1,currentVehicle='';
+  const fleet=[],colors=['#c96951','#698fa3','#a884b0','#b99865','#6e9f8b','#c27e91','#929b63','#8390be','#bd8b70'];
+  let padOwner=null,fleetClock=0,nextLaunch=0,fleetSerial=0;
+  function stageStart(plan,name){return plan.stages.find(stage=>stage.name===name).start;}
+  function clearFleet(){for(const craft of fleet)craft.node.remove();fleet.length=0;padOwner=null;fleetClock=0;nextLaunch=0;fleetSerial=0;}
+  function launchFleet(){
+    const number=++fleetSerial,node=ship.cloneNode(true);node.classList.remove('flight-rocket','login-ship');node.classList.add('fleet-rocket');node.style.color=colors[(number-1)%colors.length];node.style.opacity='1';
+    svg.insertBefore(node,moonElement);const trip=number*3,plan=route.flightPlan(trip),target=destinations[Math.floor(Math.random()*destinations.length)];
+    const craft={node,trip,plan,target,time:stageStart(plan,'lift'),position:{...route.LANDING_HOME},holding:false,finished:false};
+    node.querySelectorAll('.rocket-variant').forEach((variant,index)=>{variant.style.display=index===Math.floor(trip/3)%route.ROCKETS.length?'':'none';});
+    fleet.push(craft);padOwner=craft;nextLaunch=fleetClock+6500;
+  }
+  function advanceFleet(dt,primaryPhase){
+    fleetClock+=dt;
+    const primaryBusy=!['outbound','orbit','return'].includes(primaryPhase)||primaryPhase==='return'&&stageStart(route.flightPlan(cycle),'descend')-elapsed<2800;
+    for(const craft of fleet){
+      if(craft.finished)continue;
+      const next=craft.time+dt,descend=stageStart(craft.plan,'descend'),smokeAt=stageStart(craft.plan,'smoke');
+      if(craft.time<descend&&next>=descend){
+        if(primaryBusy||padOwner&&padOwner!==craft){craft.time=descend-.01;craft.holding=true;}
+        else{padOwner=craft;craft.holding=false;craft.time=next;}
+      }else craft.time=next;
+      if(craft.time>=smokeAt){if(Math.hypot(craft.position.x-route.LANDING_HOME.x,craft.position.y-route.LANDING_HOME.y)>2)craft.time=smokeAt-.01;else{craft.finished=true;craft.node.style.display='none';if(padOwner===craft)padOwner=null;continue;}}
+      const frame=route.sampleFlight(craft.time,craft.trip,craft.target.point());
+      if(frame.phase==='outbound'&&padOwner===craft)padOwner=null;
+      const wanted=craft.holding?{x:route.LANDING_HOME.x+28+fleet.indexOf(craft)*5,y:route.LANDING_HOME.y-51+Math.sin(fleetClock*.004+craft.trip)*3}:frame;
+      const dx=wanted.x-craft.position.x,dy=wanted.y-craft.position.y,length=Math.hypot(dx,dy),step=Math.min(1,dt*.09/(length||1));craft.position.x+=dx*step;craft.position.y+=dy*step;
+      const angle=craft.holding?-90+Math.sin(fleetClock*.006+craft.trip)*4:frame.angle;
+      craft.node.setAttribute('transform',`translate(${craft.position.x} ${craft.position.y}) rotate(${angle})`);
+      const engine=craft.node.querySelector('.rocket-engine'),thrust=craft.holding?.8:frame.engine;
+      engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${craft.holding?Math.sin(fleetClock*.008+craft.trip)*12:frame.gimbal})`);engine.style.opacity=String(thrust);
+      craft.node.querySelector('.rocket-flame').setAttribute('transform',`scale(${Math.max(.01,thrust)} ${.65+thrust*.35})`);
+      craft.node.dataset.phase=craft.holding?'holding':frame.phase;craft.node.dataset.destination=craft.target.name;
+    }
+    for(let index=fleet.length-1;index>=0;index--)if(fleet[index].finished){fleet[index].node.remove();fleet.splice(index,1);}
+    if(!primaryBusy&&!padOwner&&fleet.length<9&&fleetClock>=nextLaunch)launchFleet();
+  }
+  function paint(frame,instant=false,dt=1000/60){
     const factor=!instant&&['outbound','orbit','return'].includes(frame.phase)?.22:1;
-    if(!smoothed)smoothed={x:frame.x,y:frame.y};smoothed.x+=(frame.x-smoothed.x)*factor;smoothed.y+=(frame.y-smoothed.y)*factor;
+    if(!smoothed)smoothed={x:frame.x,y:frame.y};const dx=frame.x-smoothed.x,dy=frame.y-smoothed.y,distance=Math.hypot(dx,dy),step=instant?1:Math.min(factor,Math.max(.01,dt)*.09/(distance||1));smoothed.x+=dx*step;smoothed.y+=dy*step;
     ship.setAttribute('transform',`translate(${smoothed.x} ${smoothed.y}) rotate(${frame.angle})`);
     ship.style.opacity=String(frame.opacity);
     engine.setAttribute('transform',`translate(${route.ROCKETS[frame.variant].tail} 0) rotate(${frame.gimbal})`);
@@ -44,32 +81,41 @@ async function startLandingFlight(){
     moonElement.setAttribute('transform',`translate(${moon.x-route.DEFAULT_MOON.x} ${moon.y-route.DEFAULT_MOON.y})`);
     svg.dataset.flightPhase=frame.phase;svg.dataset.engine=String(frame.engine);svg.dataset.orbits=String(frame.orbits);svg.dataset.rocket=route.ROCKETS[frame.variant].id;svg.dataset.exhaust=String(frame.exhaust);svg.dataset.steam=String(frame.steam);svg.dataset.hose=String(frame.hose);
   }
-  function sample(){return route.sampleFlight(media.matches?route.flightPlan(cycle).stages.find(stage=>stage.name==='rest').start:elapsed,cycle,moon);}
+  function sample(){return route.sampleFlight(media.matches?route.flightPlan(cycle).stages.find(stage=>stage.name==='rest').start:elapsed,cycle,manual?moon:destination.point());}
+  function advance(dt,now){
+    const plan=route.flightPlan(cycle),landing=stageStart(plan,'descend'),next=elapsed+dt,holding=elapsed<landing&&next>=landing&&!!padOwner;
+    const touchdown=stageStart(plan,'smoke'),stillApproaching=elapsed<touchdown&&next>=touchdown&&smoothed&&Math.hypot(smoothed.x-route.LANDING_HOME.x,smoothed.y-route.LANDING_HOME.y)>2;
+    if(holding)elapsed=landing-.01;else if(stillApproaching)elapsed=touchdown-.01;else elapsed=next;
+    while(elapsed>=route.flightPlan(cycle).duration){elapsed-=route.flightPlan(cycle).duration;cycle++;destination=destinations[Math.floor(Math.random()*destinations.length)];smoothed=null;}
+    const frame=sample();if(holding){frame.y+=Math.sin(now*.004)*2;frame.angle=-90+Math.sin(now*.006)*4;frame.gimbal=Math.sin(now*.008)*12;frame.engine=.8;}
+    advanceFleet(dt,frame.phase);paint(frame,false,dt);svg.dataset.destination=destination.name;svg.dataset.holding=String(holding);
+  }
   function tick(now){
     request=0;if(disposed||!svg.isConnected)return;
-    if(!document.hidden&&!media.matches&&!manual){if(previous)elapsed+=Math.min(now-previous,60);while(elapsed>=route.flightPlan(cycle).duration){elapsed-=route.flightPlan(cycle).duration;cycle++;smoothed=null;}paint(sample());}
+    if(!document.hidden&&!media.matches&&!manual)advance(previous?Math.min(now-previous,60):0,now);
     previous=now;if(!media.matches&&!document.hidden&&!manual)request=requestAnimationFrame(tick);
   }
-  function resume(){if(disposed)return;if(request)cancelAnimationFrame(request);request=0;previous=0;if(media.matches)paint(sample(),true);else if(!document.hidden&&!manual)request=requestAnimationFrame(tick);}
+  function resume(){if(disposed)return;if(request)cancelAnimationFrame(request);request=0;previous=0;svg.dataset.paused=String(document.hidden);if(media.matches){clearFleet();paint(sample(),true);}else if(!document.hidden&&!manual)request=requestAnimationFrame(tick);}
   function moonPoint(event){const point=new DOMPoint(event.clientX,event.clientY);return point.matrixTransform(svg.getScreenCTM().inverse());}
   function moveMoon(x,y){
     const bounds=svg.getScreenCTM(),inverse=bounds.inverse(),margin=48;
     const low=new DOMPoint(margin,margin).matrixTransform(inverse),high=new DOMPoint(window.innerWidth-margin,window.innerHeight-margin).matrixTransform(inverse);
-    moon={x:Math.max(low.x,Math.min(high.x,x)),y:Math.max(low.y,Math.min(high.y,y))};paint(sample(),manual||media.matches);
+    moon={x:Math.max(low.x,Math.min(high.x,x)),y:Math.max(low.y,Math.min(high.y,y))};moonElement.setAttribute('transform',`translate(${moon.x-route.DEFAULT_MOON.x} ${moon.y-route.DEFAULT_MOON.y})`);
   }
   function down(event){if(event.button!==0)return;event.preventDefault();const point=moonPoint(event);dragging={id:event.pointerId,x:point.x-moon.x,y:point.y-moon.y};moonElement.setPointerCapture(event.pointerId);}
   function move(event){if(dragging?.id!==event.pointerId)return;event.preventDefault();const point=moonPoint(event);moveMoon(point.x-dragging.x,point.y-dragging.y);}
   function up(event){if(dragging?.id===event.pointerId){if(moonElement.hasPointerCapture(event.pointerId))moonElement.releasePointerCapture(event.pointerId);dragging=null;}}
-  function key(event){const delta=event.shiftKey?20:5,offset={ArrowLeft:[-delta,0],ArrowRight:[delta,0],ArrowUp:[0,-delta],ArrowDown:[0,delta]}[event.key];if(offset){event.preventDefault();moveMoon(moon.x+offset[0],moon.y+offset[1]);}else if(event.key==='Escape'){event.preventDefault();moon={...route.DEFAULT_MOON};paint(sample(),true);}}
+  function key(event){const delta=event.shiftKey?20:5,offset={ArrowLeft:[-delta,0],ArrowRight:[delta,0],ArrowUp:[0,-delta],ArrowDown:[0,delta]}[event.key];if(offset){event.preventDefault();moveMoon(moon.x+offset[0],moon.y+offset[1]);}else if(event.key==='Escape'){event.preventDefault();moveMoon(route.DEFAULT_MOON.x,route.DEFAULT_MOON.y);}}
   function resize(){moveMoon(moon.x,moon.y);}
   moonElement.addEventListener('pointerdown',down);moonElement.addEventListener('pointermove',move);moonElement.addEventListener('pointerup',up);moonElement.addEventListener('pointercancel',up);moonElement.addEventListener('keydown',key);
   document.addEventListener('visibilitychange',resume);media.addEventListener('change',resume);
   window.addEventListener('resize',resize);
   paint(sample(),true);resume();
   landingFlight={
-    seek(milliseconds,nextCycle=cycle){manual=true;elapsed=milliseconds;cycle=nextCycle;smoothed=null;paint(sample(),true);resume();return {...sample(),moon:{...moon}};},
+    seek(milliseconds,nextCycle=cycle){manual=true;clearFleet();elapsed=milliseconds;cycle=nextCycle;smoothed=null;paint(sample(),true);resume();return {...sample(),moon:{...moon}};},
     seekPhase(name,fraction=.5,nextCycle=cycle){const stage=route.flightPlan(nextCycle).stages.find(stage=>stage.name===name);if(!stage)throw new Error('Unknown landing phase');return this.seek(stage.start+stage.duration*Math.max(0,Math.min(.999999,fraction)),nextCycle);},
-    play(){manual=false;resume();},snapshot:()=>({...sample(),moon:{...moon},elapsed,cycle}),
-    dispose(){disposed=true;if(request)cancelAnimationFrame(request);moonElement.removeEventListener('pointerdown',down);moonElement.removeEventListener('pointermove',move);moonElement.removeEventListener('pointerup',up);moonElement.removeEventListener('pointercancel',up);moonElement.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',resume);media.removeEventListener('change',resume);window.removeEventListener('resize',resize);},
+    simulate(milliseconds){manual=true;if(request)cancelAnimationFrame(request);request=0;for(let time=0;time<milliseconds;time+=50)advance(Math.min(50,milliseconds-time),time);return {phase:sample().phase,holding:svg.dataset.holding==='true',fleet:fleet.map(craft=>({phase:craft.node.dataset.phase,destination:craft.target.name})),pad:padOwner?fleet.indexOf(padOwner)+1:0};},
+    play(){manual=false;resume();},snapshot:()=>({...sample(),x:smoothed?.x??sample().x,y:smoothed?.y??sample().y,moon:{...moon},elapsed,cycle,destination:destination.name}),
+    dispose(){disposed=true;clearFleet();if(request)cancelAnimationFrame(request);moonElement.removeEventListener('pointerdown',down);moonElement.removeEventListener('pointermove',move);moonElement.removeEventListener('pointerup',up);moonElement.removeEventListener('pointercancel',up);moonElement.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',resume);media.removeEventListener('change',resume);window.removeEventListener('resize',resize);},
   };
 }

@@ -32,6 +32,7 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 - `make sbom`: generate `sbom.cdx.json` with Go and bundled browser dependencies, licenses and hashes.
 - `make browser-tools`: prepare a cached, pinned Python Playwright client and its matching headless Chromium for browser acceptance checks.
 - `make deploy`: detect Linux architecture over SSH, build a static target executable and SCP/start it below `/home/exedev/teleport`; strong first-run credentials are written to protected remote/local config files, never command arguments or tool history. Existing installations are never reset.
+- `make deploy-reset CONFIRM=reset`: explicitly archive and replace the hosted installation with fresh storage and credentials. It refuses external databases and nonempty runtime state. Do not invoke without an explicit hosted reset request.
 - `make db-up` / `make db-down`: explicitly start/stop the private local PostgreSQL service without deleting data.
 - `go test ./...`: run Go tests with `TELEPORT_TEST_POSTGRES` pointing at an isolated test-only PostgreSQL administration database. `make test` provisions a disposable socket-only cluster automatically.
 - `make check`: lightweight formatting, Python/browser source syntax, serial browser unit tests, documentation and tooling unit checks. It starts no application Go test suite, database, real browser or deliberate timeout fixture. `python3 -B tools/check.py --plan` prints its exact scope without running checks.

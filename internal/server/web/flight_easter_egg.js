@@ -52,15 +52,20 @@ function showFlightEasterEgg(){
 }
 
 const matchFlightCode=flightCodeMatcher();
-function resetFlightCode(){matchFlightCode.reset();}
+let backlogImportTimer=0;
+function resetFlightCode(){matchFlightCode.reset();if(backlogImportTimer)clearTimeout(backlogImportTimer);backlogImportTimer=0;}
 document.addEventListener('keydown',event=>{
   if(flightEasterEgg)return; // The dialog owns keys until its exit fade finishes.
   if(event.key==='Shift')return;
+  if(backlogImportTimer){clearTimeout(backlogImportTimer);backlogImportTimer=0;}
   const editing=event.composedPath().some(node=>node.matches?.('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],.xterm'));
   if(!session||event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey||event.isComposing||event.repeat||editing||foregroundOpen()||!/^[a-z]$/i.test(event.key)){
     resetFlightCode();return;
   }
   const result=matchFlightCode(event.key,performance.now());
+  if(result===null&&event.key.toLowerCase()==='i'&&typeof view!=='undefined'&&view==='Backlog'){
+    const actor=session.account.id;backlogImportTimer=setTimeout(()=>{backlogImportTimer=0;matchFlightCode.reset();if(session?.account.id===actor&&view==='Backlog'&&!foregroundOpen())backlogImportForm();},1800);
+  }
   if(result!==false){event.preventDefault();event.stopImmediatePropagation();}
   if(result===true)showFlightEasterEgg();
 },true);

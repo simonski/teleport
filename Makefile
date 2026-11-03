@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install sbom browser-tools deploy db-up db-down check check-race race-check check-full test lint clean
+.PHONY: help build install sbom browser-tools deploy db-up db-down check check-go check-integration check-race race-check check-full test lint clean
 DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
@@ -14,10 +14,12 @@ help:
 	@echo "deploy        Build Linux tk, scp to /home/exedev/teleport and start it"
 	@echo "db-up         Start the private local PostgreSQL installation"
 	@echo "db-down       Stop local PostgreSQL without deleting data"
-	@echo "check         Run everyday documentation, vet, unit and integration checks"
+	@echo "check         Lightweight source and unit checks; no database or browser processes"
+	@echo "check-go      Explicit Go tests with a disposable database, at low priority"
+	@echo "check-integration  Explicit vet, Go/database, browser and process/deadline checks"
 	@echo "check-race    Run the full Go race suite at low priority (optional locally)"
 	@echo "race-check    Alias for check-race"
-	@echo "check-full    Run everyday checks, then the race suite (CI/release gate)"
+	@echo "check-full    Run lightweight, integration and race checks in order"
 	@echo "test          Run Go tests"
 	@echo "lint          Verify Go formatting and run vet"
 	@echo "clean         Remove generated binary"
@@ -36,31 +38,20 @@ db-up:
 	python3 -B tools/postgres.py up
 db-down:
 	python3 -B tools/postgres.py down
-test:
+test check-go:
 	python3 -B tools/go_check.py
 lint:
-	@test -z "$$(gofmt -l cmd internal tools)"
-	go vet ./...
-	python3 -B tools/web_check.py
-check: lint
-	python3 -B tools/test_build.py
-	python3 -B tools/test_sbom.py
-	python3 -B tools/test_tool_history.py
-	python3 -B tools/test_timing.py
-	python3 -B tools/test_smoke_timeout.py
-	python3 -B tools/test_smoke_profile.py
-	python3 -B tools/test_browser_driver.py
-	python3 -B tools/test_source_cache.py
-	python3 -B tools/test_deploy.py
-	python3 -B tools/test_go_check.py
-	python3 -B tools/test_postgres.py
-	python3 -B tools/spec_sources.py --verify
-	python3 -B tools/client_scope.py
-	python3 -B tools/go_check.py
+	python3 -B tools/check.py --lint
+check:
+	python3 -B tools/check.py
+check-integration:
+	python3 -B tools/check.py --integration
 check-race:
 	python3 -B tools/go_check.py --race
 race-check: check-race
-check-full: check
+check-full:
+	$(MAKE) check
+	$(MAKE) check-integration
 	$(MAKE) check-race
 clean:
 	go clean

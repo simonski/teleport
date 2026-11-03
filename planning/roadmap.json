@@ -1,0 +1,207 @@
+{
+  "batch": "product-notes-2026-11-03",
+  "project": {
+    "key": "teleport",
+    "name": "teleport",
+    "description": "Product roadmap for a low-friction agent workspace that can build itself. MVP uses native Codex via PTY; later capabilities remain explicitly deferred."
+  },
+  "goal": {
+    "title": "Bootstrap teleport until the application can build itself",
+    "description": "Reduce the friction and human attention needed to capture intent, refine work and supervise native harness execution. MVP is the complete create-ticket to implemented-code loop using workflows, PTY, tk serve and tk agent. Waitlist, email, user inspection and additional harness providers are outside MVP. Directional outcome success remains separate from child delivery completion.",
+    "criteria": "A human can create a ticket, refine its scope, invoke a native Codex session through teleport, inspect the prompt and PTY, review the exact code candidate and explicitly approve integration. Measure human attention and external-harness escapes without bypassing approval or deployment authority."
+  },
+  "epics": {
+    "mvp": {
+      "title": "MVP — create work and supervise implementation",
+      "description": "Deliver the self-hosting loop through workflows, native Codex PTY sessions, tk serve and tk agent. Build on existing capabilities and verify remaining gaps. No waitlist, email, user inspection, Claude, Copilot or Ollama implementation belongs to this phase.",
+      "criteria": "The end-to-end ticket-to-reviewed-code loop is usable, inspectable, recoverable and cheap in human attention, with explicit gates for integration and deployment."
+    },
+    "later": {
+      "title": "Later capabilities — retained product direction",
+      "description": "Capture later product areas without admitting agent execution or expanding MVP scope. Resolve the recorded model, privacy, permissions and lifecycle questions before implementing affected behavior.",
+      "criteria": "Each area retains its original intent, observable acceptance and unresolved questions; implementation is separately prioritized and authorized."
+    }
+  },
+  "stories": [
+    {
+      "key": "check-performance", "phase": "mvp", "priority": "critical",
+      "title": "Make everyday checks lightweight and preserve explicit full validation",
+      "scope": ["Stop broad check and race runs during optimization; inspect recorded timings without rerunning expensive workloads.", "Separate cheap source/unit checks from database, native compilation, real browser and intentional timeout exercises.", "Bound Go and Node concurrency, lower scheduling priority and avoid redundant interpreter/process startup. Preserve honest check outcomes and explicit full/race commands."],
+      "acceptance": ["Default check planning starts no Go integration database, Chromium or deliberate hanging fixture.", "Focused regression tests prove CPU/package limits, scheduling priority and failure propagation.", "The explicit full gate retains every previous check and documents the reduced default scope; no GitHub Actions or deployment is introduced."]
+    },
+    {
+      "key": "self-hosting-mvp", "phase": "mvp",
+      "title": "Complete the create-ticket to implemented-code bootstrap loop",
+      "scope": ["Use teleport to create a ticket and implement code through a configured workflow, native PTY harness, tk serve and tk agent.", "Keep setup and execution sufficiently direct that the application can develop itself; start from existing implementation rather than duplicating it.", "Exclude waitlist, email, user inspection, Claude, Copilot and Ollama from MVP."],
+      "acceptance": ["A real ticket can proceed through scoped refinement, implementation, review and explicit human approval using the same visible prompt inside or outside teleport.", "PTY reconnect/stop, failure reporting and exact candidate review work without a provider API reimplementation.", "Integration and deployment retain separate explicit authorization."]
+    },
+    {
+      "key": "workflow-graph", "phase": "mvp",
+      "title": "Explain workflow states and design bounded refinement routes",
+      "scope": ["Represent each workflow state as an explanation of what is happening, with visible input, output and routing rules.", "Support human todo/doing/done and agent refinement, breakdown, ready, implementation, review, approval and integration paths.", "Retain finite attempts and human approval gates when work returns to an earlier state."],
+      "acceptance": ["The designer and runtime show state purpose, current activity and outcome routes.", "Rejection/refinement routes terminate or escalate within configured bounds.", "Any agreed acyclic representation is reconciled with bounded runtime loops before replacing current graph semantics."],
+      "questions": ["The notes call the workflow a DAG and also request loops. Decide whether the DAG is a single attempt expanded over time, or whether the designer remains a directed graph with bounded backward routes; current contracts allow the latter."]
+    },
+    {
+      "key": "rocket-animation", "phase": "later",
+      "title": "Finish the rocket logistics, destinations and coordinated fleet animation",
+      "scope": ["Verify the existing carrier delivery, supported launch, slight wobble, pad smoke, moon orbit, gimballed chopstick landing and tanker refuelling with hose and steam.", "Occasionally drop a panel, recover the damaged rocket and deliver one of six distinct replacements including Starship; exercise fins on the pad and fold them before launch.", "Preserve continuous flight when a dragged moon moves: course-correct rather than translating the rocket instantly.", "Add subtly coloured solar-system planets and the Moon, choose a destination per flight and support up to ten differently coloured rockets sharing the pad; returning rockets hold aloft with gimballed thrust until landing is clear.", "Reuse this animation in the logged-in idkfa/iddqd easter egg; Escape returns to the preserved workspace."],
+      "acceptance": ["Transport, refuelling and recovery choreography remains continuous and smoke/steam matches the activity.", "Dragging a destination preserves rocket position and velocity at the moment of movement, followed by bounded course correction.", "Only one rocket uses the launch/landing pad at a time; waiting returns are visible and eventually land.", "Orbital thrust is off for two to five orbits, relights for return, and reduced motion remains static with no leaked animation loops."]
+    },
+    {
+      "key": "import-classify", "phase": "mvp",
+      "title": "Import freeform text and iteratively propose goals",
+      "scope": ["Add tk import <file> and a Backlog import/upload action accepting a file or long-form pasted text.", "An agent classifies thoughts into proposed goals and identifies relevant existing epics/stories; optionally compare project documentation during refinement.", "Render proposed goals as graph-style cards with details, questions and clarifications on hover and equivalent keyboard access.", "Accept creates the goals and stops; accept-and-continue retains further refinement; refine accepts instructions such as merge 1/2/3 or split 5 and returns a revised proposal; cancel terminates the owned session.", "Accepting with unanswered questions is always possible; retain those questions on the resulting goals."],
+      "acceptance": ["CLI and web share a versioned proposal/session contract and create no goals before explicit acceptance.", "Merge/split refinement preserves original intent and provenance; cancellation stops the owned session without orphan jobs.", "Partial failures and retries cannot duplicate accepted goals or lose unanswered questions."]
+    },
+    {
+      "key": "human-todo", "phase": "mvp",
+      "title": "Keep human work in a direct todo, doing and done flow",
+      "scope": ["Provide the lowercase todo tab with three clear human states: todo, doing and done.", "Retain direct human assignment, contextual new-ticket defaults and keyboard/drag navigation without agent-only phases."],
+      "acceptance": ["Human-intended tickets use only the human workflow and can be moved between its valid states.", "Tab and arrow navigation do not mutate tickets; completion/reopening respects current content rules."]
+    },
+    {
+      "key": "agent-delivery-loop", "phase": "mvp",
+      "title": "Refine agent tickets to ready and supervise implementation through integration",
+      "scope": ["Route todo through intent/refine/breakdown/refine until the bounded readiness criteria are met.", "Implement only refined and ready work, then review the candidate and request human approval before integration.", "Rejected work returns to refinement with explicit feedback; retain original intent when decomposition creates an epic."],
+      "acceptance": ["Readiness, review and approval are inspectable gates with exact ticket/candidate versions.", "Rejections and exhausted attempts produce useful attention requests without an unbounded loop.", "Reporting 100% progress never bypasses human code approval."]
+    },
+    {
+      "key": "workflow-steps", "phase": "mvp",
+      "title": "Provide configurable intent, refinement, implementation and delivery steps",
+      "scope": ["Build an inventory of todo, intent, refinement, implement, integrator and deployer steps, each triggered with an input and ticket.", "Todo accepts unclassified, unassigned, unprioritized and potentially inconsistent freeform intent; optional pre-refinement spellchecks, classifies and interviews.", "Intent identifies the desired direction and relevant code areas. Refinement compares code, goals, epics, completed/remaining work and contradictions, then proposes a bounded task or epic decomposition.", "Implementation writes, runs and verifies code. Integration admits an approved candidate into the main codebase. Deployment targets an explicitly authorized environment.", "Assemble steps in the graph designer, including suggested nearby links with visible outcome rules."],
+      "acceptance": ["Every step exposes its purpose, inputs, configured prompt, outputs, outcomes and finite attempt policy.", "Promotion/decomposition preserves the original request and requires the established acceptance gate.", "Designer links are validated before publication; integrator/deployer cannot bypass their separate authorization."]
+    },
+    {
+      "key": "ticket-context", "phase": "mvp",
+      "title": "Expose complete ticket prompts and clarify recursive ticket structure",
+      "scope": ["Give tickets start/end planning dates, updated timestamps and immutable history.", "Build an inspectable, copyable prompt from the ticket plus parental context and guidance, suitable for direct use in the same preconfigured native harness.", "Permit teleporting into an owned task/session and provide structured web buttons alongside the original terminal interaction.", "Record the proposed unified parent/child ticket tree: project root, goals, epics and task/bug/feature/chore names as human classifications."],
+      "acceptance": ["Prompt preview identifies its exact source versions and matches the prompt dispatched to the harness.", "Manual prompt copy/paste and wrapped execution give equivalent task context on the same machine and permissions.", "Dates/history remain truthful and structured buttons send only the intended owned terminal input."],
+      "questions": ["Arbitrary child tasks conflict with the current Goal → Epic → Task hierarchy. Decide the migration and access/rollup semantics before implementing recursive tasks.", "The notes call a ticket an edge in a graph; confirm whether tickets are nodes connected by parent/dependency edges in the UI and APIs."]
+    },
+    {
+      "key": "attention", "phase": "mvp",
+      "title": "Measure human attention and improve harness interaction friction",
+      "scope": ["Treat attention as scarce: record agent requests for human input and steer important decisions and feedback ahead of routine interruptions.", "Measure attention cost and use ticket/session history to recommend better harness permission configurations between tasks.", "Version provider capabilities and plan truthful stop/reconfigure/resume behavior when a harness requires process replacement."],
+      "acceptance": ["Attention history distinguishes useful decisions, avoidable prompts and time spent waiting, without unrelated activity monitoring.", "Permission recommendations identify evidence and required human assent; no automatic widening of permissions occurs.", "Restart/resume retains owned process identity, pending input and exact configuration versions, or clearly reports unsupported recovery."],
+      "questions": ["Define attention scoring and human confirmation rules for learned permission changes; a negative attention score is a product metric, not authority to skip approvals."]
+    },
+    {
+      "key": "ideation", "phase": "mvp",
+      "title": "Capture ideas instantly and suggest related ideas for merging",
+      "scope": ["Capture unstructured thoughts quickly, edit later and show recent ideas first.", "Make double-Shift search contextual to the current project/view.", "Present similarly classified ideas with merge proposals and preserve source provenance."],
+      "acceptance": ["Capture works with minimal required structure and does not start agent execution.", "Contextual search respects project/private-inbox visibility and ignores typing in terminals/editors.", "Merging requires an explicit reviewed proposal and retains source/history links."]
+    },
+    {
+      "key": "headless", "phase": "mvp",
+      "title": "Dry-run workflows through the API without a browser",
+      "scope": ["Expose a headless workflow dry run with supplied ticket/context and explicit outcomes.", "Reuse published workflow validation and show step explanations, routing, attempt budgets and human gates."],
+      "acceptance": ["A default dry run makes no paid model calls, native harness launches, ticket mutations, integration or deployment.", "Results explain the traversed route and stop at required human/external decisions.", "CLI and API return consistent bounded diagnostics for invalid or exhausted routes."]
+    },
+    {
+      "key": "capability-boundaries", "phase": "later",
+      "title": "Extract hard capabilities behind tool and skill contracts",
+      "scope": ["Identify stable hard capabilities suitable for their own library or binary, leaving orchestration in teleport.", "Expose each boundary through a known API/tool contract and a discoverable harness skill to reduce code/context bleed."],
+      "acceptance": ["An initial extraction has explicit ownership, inputs, outputs, compatibility and failure semantics.", "The application consumes the public contract rather than reaching into extracted implementation state.", "Build/release overhead and context-size benefits are measured before further splitting."]
+    },
+    {
+      "key": "dedicated-sessions", "phase": "mvp",
+      "title": "Provide dedicated stoppable harness sessions and an agent monitor",
+      "scope": ["Display detected harness sessions inside and outside wrappers in a parent/process hierarchy, including the current shell where detectable.", "Make owned wrapped sessions clickable to teleport, similar to the JavaScript console.", "A dedicated session selects harness, model and thinking, preloads allowed/denied rules and the tk skill, and offers a truthful stop control."],
+      "acceptance": ["Owned sessions can be inspected, reattached and stopped without duplicate harness launches.", "Externally detected sessions are clearly distinguished from controllable owned wrappers; detection alone grants no takeover rights.", "MVP selects native Codex; other provider adapters remain deferred."]
+    },
+    {
+      "key": "agent-client", "phase": "mvp",
+      "title": "Run tk agent as an API client around a native harness PTY",
+      "scope": ["Run a named agent binary against the tk server API with identity/password, project ownership and server URL; receive ticket and project context from the server.", "Use the same public primitives and tk skill/help as a human, with a stable server protocol and separately versioned provider-specific PTY adapters.", "Initially run on the same machine; retain a future remote-host boundary and fast, reliable builds.", "Use already authenticated native Codex through stdin/stdout, not direct provider API calls or provider credential setup.", "Support working directory and environment configuration, with the intended TELEPORT_USERNAME, TELEPORT_PASSWORD and TELEPORT_URL names documented."],
+      "acceptance": ["A preauthenticated Codex session receives the exact server-configured task prompt and reports liveness/input/outcomes through the API.", "Agent local state is limited to identity, connection and owned runtime metadata; project truth stays server-owned.", "Secrets remain outside arguments/history/logs; provider protocol failures are explicit and recoverable."]
+    },
+    {
+      "key": "agent-management", "phase": "mvp",
+      "title": "Allocate project agents and enforce workflow lane capacity",
+      "scope": ["Allocate N agents to a project and M workers per agentic lane; warn when a workflow requests more agents than the project allocation.", "Allow an authorized user to open an ad hoc project-context agent and teleport into any owned accessible running agent.", "Route agent input requests to the profile actions/attention log and the ticket itself."],
+      "acceptance": ["Lane/project capacity admission is race-safe and distinguishes queued, running, unknown and stopping processes.", "Insufficient allocation is visible without fabricating worker availability.", "Attention appears on both profile and ticket; answering a ticket question is distinct from terminal input."]
+    },
+    {
+      "key": "waitlist", "phase": "later",
+      "title": "Add an administrator-enabled encrypted registration waitlist",
+      "scope": ["Keep waitlist outside MVP. An administrator may enable email capture on the login page.", "Store created time, waiting status and last administrator update; encrypt email content while supporting equality lookup and duplicate management."],
+      "acceptance": ["Ordinary administration never exposes plaintext waitlist emails.", "Authorized equality search finds existing entries without revealing the full list; duplicate submission is handled consistently.", "Enable/disable, retention and invitation transitions are audited."],
+      "questions": ["Define normalized-email matching, keyed lookup index ownership, key rotation and retention before implementation; encryption does not make email irrecoverable to a key holder."]
+    },
+    {
+      "key": "email-process", "phase": "later",
+      "title": "Queue encrypted email and expose role-gated email operations",
+      "scope": ["Keep email outside MVP. Configure Forward Email delivery through SMTP or explicit stdout mode, batch/page sizes and send frequency.", "Support invitation, forgot-password and change-password queueing plus bounded send commands and an email role.", "Provide an administrator queued/sent view with pagination, delivery status and controlled resend; encrypt addresses and message content at rest."],
+      "acceptance": ["CLI/API/UI queue the same audited operations with idempotency and authorization.", "SMTP secrets and email content remain out of tool history and ordinary logs; stdout delivery is an explicit private operational choice.", "Retries and resend distinguish sent, failed and uncertain delivery without duplicate invitations or invalid reset links."]
+    },
+    {
+      "key": "user-inspection", "phase": "later",
+      "title": "Provide scoped administrator inspection of account history",
+      "scope": ["Keep user inspection outside MVP. Let authorized administrators inspect users, account changes and permitted email-delivery metadata.", "Respect existing privacy boundaries for private script, idea and session content."],
+      "acceptance": ["Inspection is role-gated, paginated and audited.", "A user's private content is not exposed merely because an administrator can inspect operational account history.", "Sensitive credential and reset material is never displayed."]
+    },
+    {
+      "key": "email-daemon", "phase": "later",
+      "title": "Run email delivery as an independently managed API client",
+      "scope": ["Add a tk emaild delivery worker configured by the server, using SMTP or stdout with encrypted stored credentials.", "The worker retrieves owned queued work through the API rather than opening application storage."],
+      "acceptance": ["Worker leases, outcomes, retries and shutdown preserve truthful queue ownership.", "Restarting the daemon does not silently resend an uncertain delivery.", "Configuration updates and credential rotation are authenticated and versioned."]
+    },
+    {
+      "key": "service-components", "phase": "later",
+      "title": "Run bundled server components together or independently",
+      "scope": ["Keep one tk binary with tk serve as the simple all-services entry point.", "Allow deliberate independent www, api, email worker and scheduler processes with server-owned configuration and explicit ownership."],
+      "acceptance": ["All-in-one and split topologies expose consistent APIs and authentication boundaries.", "Starting a component cannot duplicate scheduler/email ownership or make a client access storage directly.", "Startup, health, stop and unsupported configurations are documented and tested."],
+      "questions": ["The notes label tk email as both email and www. Settle the exact worker/subcommand naming before publishing the CLI contract."]
+    },
+    {
+      "key": "organisations", "phase": "later",
+      "title": "Route organisation hostnames to separate infrastructure",
+      "scope": ["Support organisation-specific hostnames such as org.teleport.engineering with host identity preserved through routing.", "Run each organisation on fully separate infrastructure and installations; shared aliases teleport.engineering and teleport.exe.xyz remain the same existing deployment."],
+      "acceptance": ["Routing preserves the validated external host and does not conflate organisations with aliases.", "No cross-installation account, storage, session or execution-host access is possible through hostname changes.", "Provisioning/deployment remains an explicitly requested operation."]
+    },
+    {
+      "key": "membership", "phase": "later",
+      "title": "Issue bounded email-bound membership invitations",
+      "scope": ["Give a user N invitations with codes bound to an intended email address.", "Permit registration only for the invited address, then support an explicit verified email change."],
+      "acceptance": ["Invitation quotas, expiry and single-use redemption are enforced atomically.", "An invitation cannot be redeemed for another address or leak encrypted email through public lookup.", "Email changes require appropriate identity proof and preserve audit history."]
+    },
+    {
+      "key": "nested-card-ux", "phase": "mvp",
+      "title": "Use expandable graph-style containers and contextual child creation",
+      "scope": ["Use graph card styling for goals, epics and tasks, with expandable/collapsible containers exposing children and dependency links.", "Creating work from a selected parent preselects that context; selecting an epic and pressing New/N creates a task by default.", "Avoid implementing arbitrary task nesting until the ticket-model question is resolved."],
+      "acceptance": ["Containers expand and collapse without losing selection, layout or visible relationships.", "New-ticket forms show the exact inherited project and valid parent/type.", "Keyboard and pointer actions are equivalent and locked work cannot be reparented."]
+    },
+    {
+      "key": "workflow-context-actions", "phase": "mvp",
+      "title": "Offer inspectable spellcheck, classification and consistency actions",
+      "scope": ["Provide context-menu actions for spelling/grammar, goal/spec classification, refinement, duplicate detection and contradiction/consistency review.", "Configure the agent action through versioned server prompts and explicit ticket/project context.", "Present merge or content changes as proposals rather than silently rewriting original intent."],
+      "acceptance": ["Every result identifies its inputs and action configuration version, preserves original content and can be inspected before acceptance.", "Duplicate/consistency checks explain evidence and respect project/privacy boundaries.", "Fixtures use no paid calls; production invocation has explicit execution/spending authority."]
+    },
+    {
+      "key": "backlog-header", "phase": "mvp",
+      "title": "Polish the unified Backlog and configurable whole-header placement",
+      "scope": ["Verify the existing unified Ideas/Goals/Epics/Stories Backlog, graph-style indented cards, unlocked drag reorder/reparenting and project-dropdown directory.", "Keep the entire header configurable at top, left or right, including project/account controls; lowercase tab names and call Todos todo.", "Dropping a story onto another story adopts that story's epic and preserves the existing hierarchy."],
+      "acceptance": ["Backlog shows the correct visible hierarchy and unlocked movement updates both parent chains atomically.", "Top/left/right layouts retain all controls, work on mobile and preserve independent layout preferences.", "Visible lowercase labels do not break canonical persisted view identifiers."]
+    },
+    {
+      "key": "contextual-keyboard", "phase": "mvp",
+      "title": "Hand Q navigation into context-aware main-view keyboard focus",
+      "scope": ["After Q or Shift-Q changes views, let Tab enter the remembered or first meaningful main-view entry.", "Navigate calendar/backlog entries contextually; on boards move within lanes and across to the nearest card by visual geometry.", "Keep native editing, dialogs, terminals and graph/map-specific keys intact."],
+      "acceptance": ["Q/Shift-Q then Tab enters the correct scoped view even after asynchronous content loads.", "Board left/right selects the nearest vertically positioned card across nonempty lanes; up/down stays in the lane.", "Focus remains visible and stable across refreshes without late focus stealing, ticket mutations or changed Tab behavior after the handoff."]
+    },
+    {
+      "key": "agent-configuration", "phase": "mvp",
+      "title": "Version agent motivations, goals and prompts on the server",
+      "scope": ["Give every agent an inspectable/editable set of goals, motivations, persona and prompt configuration stored on the server.", "Use a generic harness runner driven by versioned configuration instead of hardcoded workflow-specific prompt logic.", "Retain exact configuration and contextual prompt snapshots for introspection and evolution over time."],
+      "acceptance": ["Authorized users can inspect, edit and compare configuration revisions with immutable author/time history.", "Running sessions retain the exact dispatched configuration and do not silently acquire later edits.", "Provider adapters remain code-owned capabilities; configurable prompts cannot widen tool or approval permissions."]
+    },
+    {
+      "key": "goal-lifecycle", "phase": "mvp",
+      "title": "Distinguish directional goal outcomes from bounded task completion",
+      "scope": ["Model goals as potentially long-lived directions for desired capabilities/outcomes, while tasks remain discrete, bounded and completable.", "Preserve the existing distinction between child delivery rollup and evidence of objective success.", "Clarify how continuing goals, new work and periodic outcome reviews should appear without rewriting locked original intent."],
+      "acceptance": ["Completing child tasks never automatically claims that a strategic goal's intended outcome is achieved.", "Goal outcome evidence and explicit human assessments retain immutable reviewed bases.", "Any change to Goal Done/rollup semantics is agreed and migrated before implementation rather than inferred from a new label."],
+      "questions": ["Should a directional goal remain open after all current delivery children finish, or retain delivery Done alongside a separate ongoing objective lifecycle? Current contracts use the separate-facts approach."]
+    }
+  ]
+}

@@ -19,15 +19,18 @@ def arguments(**overrides):
 
 class GoCheckTest(unittest.TestCase):
     def test_ordinary_tests_keep_go_cache_and_no_race_instrumentation(self):
-        command, environment = test_command(arguments(), {"PATH": "fixture"})
-        self.assertEqual(command, ["go", "test", "./..."])
-        self.assertNotIn("GOMAXPROCS", environment)
+        with patch("check_resources.shutil.which", return_value="/usr/bin/nice"):
+            command, environment = test_command(arguments(), {"PATH": "fixture"})
+        self.assertEqual(command[-5:], ["go", "test", "-p", "1", "./..."])
+        self.assertNotIn("-race", command)
+        self.assertNotIn("-count", command)
+        self.assertEqual(environment["GOMAXPROCS"], "2")
 
     @unittest.skipUnless(os.name == "posix", "POSIX nice scheduling")
     def test_race_tests_are_low_priority_and_bounded(self):
-        with patch("go_check.shutil.which", return_value="/usr/bin/nice"):
+        with patch("check_resources.shutil.which", return_value="/usr/bin/nice"):
             command, environment = test_command(arguments(race=True), {})
-        self.assertEqual(command, ["/usr/bin/nice", "-n", "15", "go", "test", "-race", "-p", "1", "./..."])
+        self.assertEqual(command, ["/usr/bin/nice", "-n", "15", "go", "test", "-p", "1", "-race", "./..."])
         self.assertEqual(environment["GOMAXPROCS"], "2")
         _, environment = test_command(arguments(race=True), {"GOMAXPROCS": "1"})
         self.assertEqual(environment["GOMAXPROCS"], "1")
@@ -38,7 +41,9 @@ class GoCheckTest(unittest.TestCase):
         everyday, race, full = dry("check"), dry("race-check"), dry("check-full")
         self.assertNotIn("go_check.py --race", everyday)
         self.assertIn("go_check.py --race", race)
-        self.assertLess(full.index("tools/go_check.py\n"), full.index("tools/go_check.py --race"))
+        self.assertNotIn("tools/go_check.py", everyday)
+        self.assertLess(full.index("tools/check.py\n"), full.index("tools/check.py --integration"))
+        self.assertLess(full.index("tools/check.py --integration"), full.index("tools/go_check.py --race"))
 
     @unittest.skipUnless(os.name == "posix", "POSIX executable fixture")
     def test_failure_reaches_make_and_history_without_arguments(self):
@@ -51,15 +56,16 @@ class GoCheckTest(unittest.TestCase):
             environment = dict(os.environ, PATH=str(folder) + os.pathsep + os.environ["PATH"], TELEPORT_TOOL_HISTORY=str(history))
             environment.pop("GOMAXPROCS", None)
             environment["TELEPORT_TEST_POSTGRES"] = "postgresql:///unused-fixture"
-            result = subprocess.run([sys.executable, "-B", str(ROOT / "tools/go_check.py"), "--race", "--run", "private-test-pattern"], env=environment, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 7)
-            scheduling = json.loads(result.stdout.splitlines()[1])
-            self.assertGreaterEqual(scheduling["nice"], 15)
-            self.assertEqual(scheduling["cpus"], "2")
+            for race in ([], ["--race"]):
+                result = subprocess.run([sys.executable, "-B", str(ROOT / "tools/go_check.py"), *race, "--run", "private-test-pattern"], env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 7)
+                scheduling = json.loads(result.stdout.splitlines()[1])
+                self.assertGreaterEqual(scheduling["nice"], 15)
+                self.assertEqual(scheduling["cpus"], "2")
             with history.open(newline="") as source:
                 rows = list(csv.DictReader(source))
-            self.assertEqual(rows[0]["outcome"], "failure")
-            self.assertEqual(rows[0]["exit_code"], "7")
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(row["outcome"] == "failure" and row["exit_code"] == "7" for row in rows))
             self.assertNotIn("private-test-pattern", history.read_text())
             result = subprocess.run(["make", "race-check"], cwd=ROOT, env=environment, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)

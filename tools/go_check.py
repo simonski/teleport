@@ -1,20 +1,19 @@
-"""Run Go tests; explicit race runs use low scheduling priority and bounded parallelism."""
+"""Run explicit Go tests at low scheduling priority with bounded package parallelism."""
 import argparse
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import time
+from check_resources import check_environment, process_options, scheduled
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_command(args, environment):
-    environment = dict(environment)
-    command = ["go", "test"]
+    environment = check_environment(environment)
+    command = ["go", "test", "-p", "1"]
     if args.race:
-        environment.setdefault("GOMAXPROCS", "2")
-        command += ["-race", "-p", "1"]
+        command += ["-race"]
     if args.run:
         command += ["-run", args.run]
     if args.count is not None:
@@ -24,12 +23,7 @@ def test_command(args, environment):
         destination.parent.mkdir(parents=True, exist_ok=True)
         command += ["-count=1", "-cpuprofile", str(destination), "-o", str(destination.with_suffix(".test"))]
     command += args.packages or ["./..."]
-    if args.race and os.name == "posix":
-        nice = shutil.which("nice")
-        if not nice:
-            raise RuntimeError("Race checks require nice to lower process scheduling priority")
-        command = [nice, "-n", "15", *command]
-    return command, environment
+    return scheduled(command), environment
 
 
 def main():
@@ -45,12 +39,9 @@ def main():
     if args.profile and (len(args.packages) != 1 or "..." in args.packages[0]):
         parser.error("--profile requires exactly one package without ...")
     command, environment = test_command(args, os.environ)
-    options = {}
-    if args.race and os.name == "nt":
-        options["creationflags"] = subprocess.IDLE_PRIORITY_CLASS
+    options = process_options()
     mode = "race" if args.race else "normal"
-    if args.race:
-        print(f"Go race tests: low scheduling priority, GOMAXPROCS={environment['GOMAXPROCS']}, one package at a time", flush=True)
+    print(f"Go {mode} tests: low scheduling priority, GOMAXPROCS={environment['GOMAXPROCS']}, one package at a time", flush=True)
     started = time.monotonic()
     from postgres import cluster
     with cluster(environment) as checked:

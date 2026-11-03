@@ -17,7 +17,11 @@ The browser bundles Three.js 0.187.0 under its [MIT license](internal/server/web
 
 Run `make sbom` to generate `sbom.cdx.json`.
 
-Use `make check` for everyday validation. `make race-check` (also `make check-race`) explicitly runs the full race suite at low scheduling priority with two Go execution threads and one package at a time. `make check-full` runs both in order for CI/release validation. PostgreSQL checks use normal tests unless `--race` is supplied.
+`make check` is the lightweight source/unit gate: formatting, Python/browser syntax, serial browser unit tests, documentation and tooling tests. It starts no application Go suite, database, real browser or deliberate timeout fixture. Preview its exact scope with `python3 -B tools/check.py --plan`. Broad checks are currently paused; use focused tests until explicitly resumed.
+
+Use `make check-go` (or `make test`) for normal Go tests with disposable PostgreSQL, `make check-integration` for full vet plus Go/database, cross-language history, browser-driver and timeout/cleanup checks, and `make race-check` (also `make check-race`) for explicit race instrumentation. Go checks use low scheduling priority, two execution threads by default and one package at a time; an explicit `GOMAXPROCS` is preserved. `make check-full` runs lightweight, integration and race checks in sequence for a deliberate local/release gate. No GitHub Actions are configured.
+
+The captured [product roadmap](planning/roadmap.json) separates MVP and later stories and retains unresolved model questions. `python3 -B tools/capture_backlog.py planning/roadmap.json --plan` previews its areas without API writes; authorized capture uses the existing signed-in `tk` identity, stable request IDs and inactive tickets with execution off.
 
 Run `tk skill > SKILL.md` to export the bundled agent skill for a harness. No running server or sign-in is required for this export.
 

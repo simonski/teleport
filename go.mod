@@ -8,6 +8,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/jackc/pgx/v5 v5.12.0
 	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.40.0
 	golang.org/x/text v0.43.0
 )
 

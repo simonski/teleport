@@ -146,7 +146,7 @@ func commandCatalogue() []cliCommand {
 		{Command: "setup", Summary: "Configure common settings and create the Teleport project"},
 		{Command: "init", Summary: "Initialize configured PostgreSQL; never starts services"},
 		{Command: "serve", Summary: "Run the web/API server and configured components"},
-		{Command: "login -password-stdin", Operation: "login", Summary: "Sign in without putting a password in process arguments"},
+		{Command: "login", Operation: "login", Summary: "Sign in interactively or with TELEPORT_USERNAME and TELEPORT_PASSWORD"},
 		{Command: "logout", Summary: "Sign out of the current session"},
 		{Command: "import -project NAME [FILE | -i]", Summary: "Capture UTF-8 text as an Idea; classification follows separately"},
 		{Command: "skill", Summary: "Print the bundled harness SKILL.md (offline)"},

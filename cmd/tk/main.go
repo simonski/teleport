@@ -157,7 +157,7 @@ func run(args []string) error {
 	config := flags.String("config", env("TELEPORT_CONFIG", filepath.Join(home, ".teleport", "client.json")), "client credential file")
 	data := flags.String("data", "{}", "JSON request")
 	machine := flags.Bool("json", false, "pretty-print JSON response")
-	username := flags.String("username", "admin", "local username")
+	username := flags.String("username", "", "username (otherwise TELEPORT_USERNAME or prompt)")
 	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
 	var exportState, restoreState bool
 	var stateSHA string
@@ -337,17 +337,11 @@ func run(args []string) error {
 		return err
 	}
 	if command == "login" {
-		if !*passwordStdin {
-			return errors.New("use -password-stdin to read a password without exposing it in process arguments")
-		}
-		b, err := io.ReadAll(io.LimitReader(os.Stdin, 1025))
+		name, password, err := loginInput(*username, *passwordStdin, os.Stdin, os.Stderr)
 		if err != nil {
 			return err
 		}
-		if len(b) > 1024 {
-			return errors.New("password is too long")
-		}
-		encoded, _ := json.Marshal(map[string]string{"username": *username, "password": strings.TrimRight(string(b), "\r\n")})
+		encoded, _ := json.Marshal(map[string]string{"username": name, "password": password})
 		*data = string(encoded)
 	}
 	body, err := requestOperation(*endpoint, creds, command, []byte(*data))

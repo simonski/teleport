@@ -31,6 +31,8 @@ Bare `tk` or `tk help` lists the top-level commands. Use `tk agent` (or `tk help
 
 `tk project ls` lists accessible projects. A signed-in administrator can run `tk project rm NAME`; the command previews affected records and retained artifacts, then requires the exact project name as confirmation. Active execution and cross-project references must be resolved first.
 
+Run `tk login` to enter a username and a hidden password. For unattended use, set `TELEPORT_USERNAME` and `TELEPORT_PASSWORD`, or use `tk login -username NAME -password-stdin` to supply the password through standard input. `-username` takes precedence over the environment, and `-password-stdin` takes precedence over `TELEPORT_PASSWORD`.
+
 After `tk init`, start the server and sign in, then run `tk setup` to create the Teleport project and choose its description and agent limit. Administrators can also choose the server execution mode. Setup refuses an existing Teleport project without changing settings.
 
 Capture freeform text with `tk import -project Teleport notes.txt` or `tk import -project Teleport` and paste multiple lines, finishing with Ctrl-D. Piped input and `tk import -` work too. Capture creates one Idea in the required named project and preserves up to 20,000 UTF-8 bytes without truncation. `-title` overrides the derived title; `-request-id` reuses the identity printed on stderr for an uncertain retry; `-json` emits the full Idea on stdout. Classification and goal creation follow separately and no agent is started by capture.

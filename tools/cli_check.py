@@ -26,10 +26,14 @@ def main():
         def do_POST(self):
             operation = self.path.rsplit("/", 1)[-1]
             calls.append(operation)
-            if self.headers.get("Authorization") != "Bearer cli-fixture-token":
+            if operation != "login" and self.headers.get("Authorization") != "Bearer cli-fixture-token":
                 failures.append("Current credentials were not retained")
             data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            if operation == "getSession":
+            if operation == "login":
+                if data != {"username": "pilot", "password": "fixture-secret"}:
+                    failures.append("Login changed supplied credentials")
+                result = {"token": "cli-fixture-token", "account": {"username": "pilot"}}
+            elif operation == "getSession":
                 result = {"account": {"id": "fixture"}}
             elif operation == "listProjects":
                 result = {"items": [{"id": 2, "name": "Flight"}]}
@@ -136,6 +140,50 @@ def main():
                     os.close(master)
                     if slave >= 0:
                         os.close(slave)
+            # The terminal must never echo the password; redirected output remains JSON-safe.
+            login_env = dict(environment, TELEPORT_CONFIG=str(folder / "login-client.json"))
+            login_env.pop("TELEPORT_USERNAME", None)
+            login_env.pop("TELEPORT_PASSWORD", None)
+            if os.name == "posix":
+                master, slave = pty.openpty()
+                process = subprocess.Popen([str(args.binary), "login", "-json"], env=login_env, stdin=slave, stderr=slave, stdout=subprocess.PIPE)
+                os.close(slave)
+                transcript = b""
+                try:
+                    def await_prompt(expected):
+                        nonlocal transcript
+                        deadline = time.monotonic() + 3
+                        while expected not in transcript:
+                            remaining = deadline - time.monotonic()
+                            if remaining <= 0 or not select.select([master], [], [], remaining)[0]:
+                                raise AssertionError("Login prompt was not presented")
+                            transcript += os.read(master, 4096)
+                    await_prompt(b"Username:")
+                    os.write(master, b"pilot\n")
+                    await_prompt(b"Password:")
+                    os.write(master, b"fixture-secret\n")
+                    stdout, _ = process.communicate(timeout=3)
+                    while select.select([master], [], [], 0)[0]:
+                        try:
+                            chunk = os.read(master, 4096)
+                            if not chunk:
+                                break
+                            transcript += chunk
+                        except OSError:
+                            break
+                    assert process.returncode == 0 and json.loads(stdout)["username"] == "pilot"
+                    assert b"fixture-secret" not in transcript and b"fixture-secret" not in stdout
+                finally:
+                    if process.poll() is None:
+                        process.terminate()
+                        process.wait(timeout=2)
+                    os.close(master)
+            env_login = dict(login_env, TELEPORT_USERNAME="pilot", TELEPORT_PASSWORD="fixture-secret")
+            result = subprocess.run([str(args.binary), "login", "-json"], env=env_login, input="", capture_output=True, text=True, timeout=5)
+            assert result.returncode == 0 and json.loads(result.stdout)["username"] == "pilot"
+            assert "fixture-secret" not in result.stdout + result.stderr
+            missing = subprocess.run([str(args.binary), "login"], env=login_env, input="", capture_output=True, text=True, timeout=5)
+            assert missing.returncode != 0 and "TELEPORT_USERNAME" in missing.stderr
             old_server[0] = True
             tk("import", str(source), "-project", "Flight", "-request-id", "legacy-server")
             assert "origin" not in receipts["legacy-server"][0]

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install sbom browser-tools deploy check check-race race-check check-full test lint clean
+.PHONY: help build install sbom browser-tools deploy db-up db-down check check-race race-check check-full test lint clean
 DEPLOY_HOST ?= exedev@teleport.engineering
 DEPLOY_DIR ?= /home/exedev/teleport
 DEPLOY_BUILDER ?= auto
@@ -12,6 +12,8 @@ help:
 	@echo "sbom          Generate sbom.cdx.json for Go and bundled browser dependencies"
 	@echo "browser-tools Prepare the pinned persistent browser client"
 	@echo "deploy        Build Linux tk, scp to /home/exedev/teleport and start it"
+	@echo "db-up         Start the private local PostgreSQL installation"
+	@echo "db-down       Stop local PostgreSQL without deleting data"
 	@echo "check         Run everyday documentation, vet, unit and integration checks"
 	@echo "check-race    Run the full Go race suite at low priority (optional locally)"
 	@echo "race-check    Alias for check-race"
@@ -30,6 +32,10 @@ browser-tools:
 	python3 -B tools/browser_setup.py
 deploy:
 	python3 -B tools/deploy.py
+db-up:
+	python3 -B tools/postgres.py up
+db-down:
+	python3 -B tools/postgres.py down
 test:
 	python3 -B tools/go_check.py
 lint:
@@ -47,6 +53,7 @@ check: lint
 	python3 -B tools/test_source_cache.py
 	python3 -B tools/test_deploy.py
 	python3 -B tools/test_go_check.py
+	python3 -B tools/test_postgres.py
 	python3 -B tools/spec_sources.py --verify
 	python3 -B tools/client_scope.py
 	python3 -B tools/go_check.py

@@ -48,7 +48,7 @@ func env(key, fallback string) string {
 }
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" {
-		fmt.Println("teleport (tk)\n\n  tk init [-f] [-demo] [--db PATH] [--admin-password-stdin]  Initialize; -f backs up/resets SQLite; -demo seeds PetStore\n  tk serve [--db PATH] [--addr localhost:9999]\n  tk login [--username admin] --password-stdin\n  tk OPERATION --data JSON         Call the authenticated server API\n  tk tools | spec                  Read server discovery\n  tk skill                         Export the bundled harness SKILL.md\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_SERVER, TELEPORT_CONFIG")
+		fmt.Println("teleport (tk)\n\n  tk init [-demo] [-db-config PATH] [-admin-password-stdin]  Initialize PostgreSQL; -demo seeds PetStore\n  tk init -export-state-stdout     Export private state offline\n  tk init -restore-state-stdin -state-sha256 HASH  Restore into an empty database offline\n  tk serve [-db-config PATH] [-addr localhost:9999]\n  tk login [-username admin] -password-stdin\n  tk OPERATION -data JSON         Call the authenticated server API\n  tk tools | spec                  Read server discovery\n  tk skill                         Export the bundled harness SKILL.md\n  tk version\n\nInit starts no services or agents. Stop the server before init.\nEnvironment: TELEPORT_DB, TELEPORT_DB_CONFIG, TELEPORT_SERVER, TELEPORT_CONFIG")
 		return nil
 	}
 	command := args[0]
@@ -123,7 +123,8 @@ func run(args []string) error {
 		return err
 	}
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
-	dbPath := flags.String("db", env("TELEPORT_DB", filepath.Join(home, ".teleport", "database.db")), "SQLite path or PostgreSQL URL (init/serve only)")
+	dbPath := flags.String("db", "", "PostgreSQL URL (init/serve only; prefer a protected -db-config file for secrets)")
+	dbConfig := flags.String("db-config", env("TELEPORT_DB_CONFIG", filepath.Join(home, ".teleport", "database.json")), "owner-only database configuration JSON containing url")
 	addr := flags.String("addr", "localhost:9999", "listen address")
 	publicHost := flags.String("public-host", "", "comma-separated trusted HTTPS browser hostnames behind a TLS proxy (no scheme or path)")
 	runtimeRoot := flags.String("runtime-dir", env("TELEPORT_RUNTIME_DIR", ""), "private local session daemon state directory (serve only)")
@@ -133,11 +134,15 @@ func run(args []string) error {
 	data := flags.String("data", "{}", "JSON request")
 	username := flags.String("username", "admin", "local username")
 	passwordStdin := flags.Bool("password-stdin", false, "read password from standard input")
-	force, demo := false, false
+	demo := false
+	var exportState, restoreState bool
+	var stateSHA string
 	adminPasswordStdin := false
 	if command == "init" {
 		flags.BoolVar(&adminPasswordStdin, "admin-password-stdin", false, "read a strong initial admin password from standard input; never reset an existing password")
-		flags.BoolVar(&force, "f", false, "back up and reset offline SQLite storage; replace all installation data")
+		flags.BoolVar(&exportState, "export-state-stdout", false, "export private installation state for offline backup")
+		flags.BoolVar(&restoreState, "restore-state-stdin", false, "restore a checksummed offline snapshot into an empty database")
+		flags.StringVar(&stateSHA, "state-sha256", "", "required checksum for offline restoration")
 		flags.BoolVar(&demo, "demo", false, "add the PetStore simulation project and synthetic sample work")
 	}
 	if err := flags.Parse(args[1:]); err != nil {
@@ -145,6 +150,18 @@ func run(args []string) error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected arguments; use --data JSON")
+	}
+	var explicitDB, explicitConfig bool
+	flags.Visit(func(value *flag.Flag) {
+		if value.Name == "db" {
+			explicitDB = true
+		}
+		if value.Name == "db-config" {
+			explicitConfig = true
+		}
+	})
+	if !explicitDB && !explicitConfig {
+		*dbPath = os.Getenv("TELEPORT_DB")
 	}
 	var initialPassword string
 	if adminPasswordStdin {
@@ -159,19 +176,43 @@ func run(args []string) error {
 	}
 	ctx := context.Background()
 	if command == "init" || command == "serve" {
-		if force && (strings.HasPrefix(*dbPath, "postgres://") || strings.HasPrefix(*dbPath, "postgresql://")) {
-			return errors.New("force initialization supports SQLite only; PostgreSQL requires a separately verified backup/restore procedure")
+		if stateSHA != "" && !restoreState {
+			return errors.New("-state-sha256 requires -restore-state-stdin")
 		}
-		db, err := store.Open(*dbPath, command == "init")
+		if exportState && restoreState || (exportState || restoreState) && (demo || adminPasswordStdin) {
+			return errors.New("choose exactly one initialization or offline snapshot operation")
+		}
+		location, err := databaseLocation(*dbPath, *dbConfig)
+		if err != nil {
+			return err
+		}
+		*dbPath = location
+		db, err := store.Open(*dbPath, command == "init" && !exportState)
 		if err != nil {
 			return err
 		}
 		defer db.Close()
 		if command == "init" {
-			_, backup, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{Force: force, Demo: demo, AdminPassword: initialPassword})
-			if backup != "" {
-				fmt.Printf("Backup: %s\n", backup)
+			if exportState {
+				body, err := db.Snapshot(ctx)
+				if err != nil {
+					return err
+				}
+				_, err = os.Stdout.Write(body)
+				return err
 			}
+			if restoreState {
+				body, err := io.ReadAll(io.LimitReader(os.Stdin, (256<<20)+1))
+				if err != nil || len(body) > 256<<20 {
+					return errors.New("snapshot must fit within 256 MiB")
+				}
+				if err = db.RestoreSnapshot(ctx, body, stateSHA); err != nil {
+					return err
+				}
+				fmt.Println("Installation snapshot restored and verified; existing identity and credentials preserved.")
+				return nil
+			}
+			_, _, initErr := app.InitializeWithOptions(ctx, db, app.InitializeOptions{Demo: demo, AdminPassword: initialPassword})
 			if initErr != nil {
 				return initErr
 			}

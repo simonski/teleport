@@ -25,7 +25,7 @@ tk listProjects --data '{"limit":50}'
 
 `TELEPORT_SERVER` selects the server (default `http://localhost:9999`); `--server URL` overrides it per call. `TELEPORT_CONFIG` or `--config PATH` selects the private client credential file. Use the supplied configuration and identity; never print tokens or switch to a more privileged account to bypass a refusal. If sign-in is required, use `tk login --username NAME --password-stdin` with credentials supplied through the authorized secret-input mechanism, never a password in command arguments.
 
-An unavailable server is a blocker for API operations. Do not open its SQLite/PostgreSQL database as a fallback. `tk init` initializes storage and `tk serve` runs the server; neither is an implicit repair step. Forced initialization replaces installation data and requires its own explicit authorization.
+An unavailable server is a blocker for API operations. Do not open its PostgreSQL database as a fallback. `tk init` initializes configured storage and `tk serve` runs the server; neither is an implicit repair step. Forced initialization is unsupported. Offline snapshot export/restore is administrator maintenance and requires explicit authorization.
 
 ## Read the exact work before changing it
 

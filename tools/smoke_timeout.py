@@ -74,15 +74,27 @@ def close_browser(folder, deadline):
         print(f"smoke cleanup: browser close was not confirmed ({type(error).__name__})", file=sys.stderr)
 
 
-def supervise(script, timeout_seconds=TIMEOUT_SECONDS, python_executable=None):
+def supervise(script, timeout_seconds=TIMEOUT_SECONDS, python_executable=None, provision_database=False):
+    # Provisioning and shutdown stay inside the existing total budget.
     started = time.monotonic()
+    from contextlib import nullcontext
+    from postgres import cluster
+    context = cluster(deadline=started+timeout_seconds,work_deadline=started+timeout_seconds-min(6,timeout_seconds/2)) if provision_database and "--database" not in sys.argv else nullcontext(dict(os.environ))
+    try:
+        with context as environment:
+            return _supervise(script, timeout_seconds, python_executable, started, environment)
+    except subprocess.TimeoutExpired:
+        raise ToolTimeout(124)
+
+
+def _supervise(script, timeout_seconds, python_executable, started, cluster_environment):
     deadline = started + timeout_seconds
     # Stop test work early enough to keep cleanup inside the full budget.
     reserve = min(6, timeout_seconds / 2)
     timed_out, code = False, None
     with tempfile.TemporaryDirectory(prefix="teleport-smoke-") as temporary:
         folder = Path(temporary)
-        environment = dict(os.environ, **{WORKER: str(Path(script).resolve()), DIRECTORY: temporary, "TELEPORT_TOOL_RUN_ID": current_invocation_id()})
+        environment = dict(cluster_environment, **{WORKER: str(Path(script).resolve()), DIRECTORY: temporary, "TELEPORT_TOOL_RUN_ID": current_invocation_id()})
         options = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
         process = subprocess.Popen([python_executable or sys.executable, "-B", str(script), *sys.argv[1:]], env=environment, **options)
         try:

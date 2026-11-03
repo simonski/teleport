@@ -15,7 +15,7 @@ from script_prompt_browser import verify_script_prompt
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
+def main(database_url=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--database")
@@ -25,7 +25,7 @@ def main():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     endpoint = f"http://127.0.0.1:{port}"
-    environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+    environment = dict(os.environ, TELEPORT_DB=args.database or database_url, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
     process = None
     clean = False
     browser_open = False
@@ -217,4 +217,5 @@ def main():
 
 if __name__ == "__main__":
     from tool_history import run
-    run(main)
+    from postgres import run_with_database
+    run(lambda: run_with_database(main))

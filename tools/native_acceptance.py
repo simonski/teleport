@@ -71,9 +71,10 @@ def workflow_acceptance(tk, wait_for, folder, project):
     return rows[-1]["id"]
 
 
-def main():
+def main(database_url=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--authorized", action="store_true", help="Separate user authorization for this real provider acceptance run has been obtained")
+    parser.add_argument("--database", help="Empty disposable PostgreSQL database")
     parser.add_argument("--workflow", action="store_true", help="Run three bounded real Task phases with isolated fixture-only scope/code gate checks")
     args = parser.parse_args()
     if not args.authorized:
@@ -84,7 +85,7 @@ def main():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     endpoint = f"http://127.0.0.1:{port}"
-    environment = dict(os.environ, TELEPORT_DB=str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+    environment = dict(os.environ, TELEPORT_DB=args.database or database_url, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
     installed = shutil.which("codex")
     if not installed:
         raise RuntimeError("The native Codex executable is unavailable")
@@ -223,4 +224,5 @@ def main():
 
 if __name__ == "__main__":
     from tool_history import run
-    run(main)
+    from postgres import run_with_database
+    run(lambda: run_with_database(main))

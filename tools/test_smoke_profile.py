@@ -16,7 +16,7 @@ class ProfileTest(unittest.TestCase):
             folder = Path(temporary)
             path = folder / "stages.csv"
             with patch.dict(os.environ, TELEPORT_TOOL_STAGES=str(path), TELEPORT_TOOL_RUN_ID="parent-run"):
-                profile = Profile("sqlite/full-persistent", folder)
+                profile = Profile("postgres/full-persistent", folder)
                 profile.start("navigation")
                 profile.call("browser.fill", lambda: "private-password")
                 with self.assertRaises(ValueError):
@@ -43,7 +43,7 @@ class ProfileTest(unittest.TestCase):
             folder = Path(temporary)
             path = folder / "stages.csv"
             with patch.dict(os.environ, TELEPORT_TOOL_STAGES=str(path)):
-                Profile("sqlite/full-persistent", folder).start("workflow")
+                Profile("postgres/full-persistent", folder).start("workflow")
                 record_timeout(folder)
                 record_timeout(folder)
             with path.open() as source:

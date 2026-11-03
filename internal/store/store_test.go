@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"os"
 	"testing"
 
 	"teleport/internal/app"
@@ -67,9 +66,6 @@ func TestOwnershipRollbackAndReopen(t *testing.T) {
 }
 
 func TestPostgresLostOwnershipFailsClosed(t *testing.T) {
-	if os.Getenv("TELEPORT_TEST_POSTGRES") == "" {
-		t.Skip("requires disposable PostgreSQL")
-	}
 	location := teststore.Location(t)
 	db, err := store.Open(location, true)
 	if err != nil {

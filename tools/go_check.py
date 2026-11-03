@@ -52,7 +52,9 @@ def main():
     if args.race:
         print(f"Go race tests: low scheduling priority, GOMAXPROCS={environment['GOMAXPROCS']}, one package at a time", flush=True)
     started = time.monotonic()
-    result = subprocess.run(command, cwd=ROOT, env=environment, **options)
+    from postgres import cluster
+    with cluster(environment) as checked:
+        result = subprocess.run(command, cwd=ROOT, env=checked, **options)
     code = result.returncode if result.returncode >= 0 else 128 - result.returncode
     print(f"Go {mode} tests: {'PASS' if code == 0 else 'FAIL'} ({time.monotonic() - started:.3f}s)", flush=True)
     if code:

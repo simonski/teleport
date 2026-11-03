@@ -8,15 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "modernc.org/sqlite"
 	"teleport/internal/model"
 )
 
@@ -25,63 +21,30 @@ var ErrUninitialized = errors.New("storage is not initialized; run tk init")
 type Store struct {
 	db         *sql.DB
 	connection *sql.Conn
-	postgres   bool
-	sqlitePath string
 	mu         sync.Mutex
 	release    func()
 }
 
 func Open(location string, initialize bool) (*Store, error) {
-	s := &Store{postgres: strings.HasPrefix(location, "postgres://") || strings.HasPrefix(location, "postgresql://")}
-	driver, dsn := "pgx", location
-	if !s.postgres {
-		abs, err := filepath.Abs(location)
-		if err != nil {
-			return nil, err
-		}
-		s.sqlitePath = abs
-		if initialize {
-			if err = os.MkdirAll(filepath.Dir(abs), 0700); err != nil {
-				return nil, err
-			}
-		} else if _, err = os.Stat(abs); err != nil {
-			return nil, ErrUninitialized
-		}
-		release, err := lockFile(abs + ".lock")
-		if err != nil {
-			return nil, err
-		}
-		s.release = release
-		if initialize {
-			f, err := os.OpenFile(abs, os.O_CREATE|os.O_RDWR, 0600)
-			if err != nil {
-				s.Close()
-				return nil, err
-			}
-			f.Close()
-		}
-		u := url.URL{Scheme: "file", Path: abs}
-		q := u.Query()
-		q.Add("_pragma", "foreign_keys(1)")
-		q.Add("_pragma", "busy_timeout(5000)")
-		q.Add("_pragma", "journal_mode(WAL)")
-		u.RawQuery = q.Encode()
-		driver, dsn = "sqlite", u.String()
+	u, err := url.Parse(location)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Path == "" || u.Path == "/" {
+		return nil, errors.New("configure a PostgreSQL database URL with TELEPORT_DB or -db-config; run make db-up for local setup")
 	}
-	db, err := sql.Open(driver, dsn)
+	s := &Store{}
+	db, err := sql.Open("pgx", location)
 	if err != nil {
 		s.Close()
-		return nil, err
+		return nil, errors.New("invalid PostgreSQL connection configuration")
 	}
 	s.db = db
-	if s.postgres {
+	{
 		db.SetMaxOpenConns(4)
 		ctx, cancel := context.WithTimeout(context.Background(), 10e9)
 		defer cancel()
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			s.Close()
-			return nil, fmt.Errorf("connect storage: %w", err)
+			return nil, errors.New("could not connect to PostgreSQL; verify database configuration and service availability")
 		}
 		var locked bool
 		err = conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock(1949675634)").Scan(&locked)
@@ -97,17 +60,11 @@ func Open(location string, initialize bool) (*Store, error) {
 			conn.ExecContext(ctx, "SELECT pg_advisory_unlock(1949675634)")
 		}
 		s.connection = conn
-	} else {
-		db.SetMaxOpenConns(1)
 	}
 	if initialize {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if s.connection != nil {
-			_, err = s.connection.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS teleport_state (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
-		} else {
-			_, err = db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS teleport_state (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
-		}
+		_, err = s.connection.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS teleport_state (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
 		if err != nil {
 			s.Close()
 			return nil, err
@@ -119,7 +76,7 @@ func Open(location string, initialize bool) (*Store, error) {
 func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.postgres && s.release != nil {
+	if s.release != nil {
 		s.release()
 		s.release = nil
 	}
@@ -133,26 +90,6 @@ func (s *Store) Close() error {
 	}
 	return err
 }
-func (s *Store) Bind(query string) string {
-	if !s.postgres {
-		return query
-	}
-	n := 0
-	return replaceParams(query, &n)
-}
-func replaceParams(query string, n *int) string {
-	var b strings.Builder
-	for _, r := range query {
-		if r == '?' {
-			*n++
-			fmt.Fprintf(&b, "$%d", *n)
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func (s *Store) Read(ctx context.Context) (*model.State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -163,7 +100,7 @@ func (s *Store) Read(ctx context.Context) (*model.State, error) {
 	}
 	if err := query(ctx, "SELECT body FROM teleport_state WHERE id=1").Scan(&body); err != nil {
 		var pgError *pgconn.PgError
-		if errors.Is(err, sql.ErrNoRows) || errors.As(err, &pgError) && pgError.Code == "42P01" || strings.Contains(err.Error(), "no such table: teleport_state") {
+		if errors.Is(err, sql.ErrNoRows) || errors.As(err, &pgError) && pgError.Code == "42P01" {
 			return nil, ErrUninitialized
 		}
 		return nil, fmt.Errorf("read storage: %w", err)
@@ -195,9 +132,7 @@ func (s *Store) Update(ctx context.Context, fn func(*model.State) (bool, error))
 	}
 	defer tx.Rollback()
 	query := "SELECT body FROM teleport_state WHERE id=1"
-	if s.postgres {
-		query += " FOR UPDATE"
-	}
+	query += " FOR UPDATE"
 	var body string
 	err = tx.QueryRowContext(ctx, query).Scan(&body)
 	st := &model.State{}
@@ -222,7 +157,7 @@ func (s *Store) Update(ctx context.Context, fn func(*model.State) (bool, error))
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, s.Bind("INSERT INTO teleport_state (id,body) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body"), string(encoded))
+	_, err = tx.ExecContext(ctx, "INSERT INTO teleport_state (id,body) VALUES (1,$1) ON CONFLICT(id) DO UPDATE SET body=excluded.body", string(encoded))
 	if err != nil {
 		return err
 	}

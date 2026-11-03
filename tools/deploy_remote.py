@@ -1,5 +1,6 @@
 """Install and supervise one deployment beneath /home/exedev (invoked over SSH)."""
 import hashlib
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -76,6 +77,32 @@ def stop_owned(pid,root):
         os.kill(pid,signal.SIGKILL)
 
 
+def prepare_database(root):
+    from postgres import binaries,start,pg,base_url
+    config=root/"database.json"
+    if config.exists() or config.is_symlink():
+        info=config.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_mode&0o077 or info.st_uid!=os.getuid():
+            raise RuntimeError("Database configuration must be an owner-only regular file")
+        value=json.loads(config.read_text()).get("url","")
+        if not value.startswith(("postgresql://","postgres://")):
+            raise RuntimeError("A PostgreSQL database configuration is required")
+        if (root/"postgres/data/PG_VERSION").exists():
+            start(binaries(),root/"postgres",root/"pgsocket")
+        return config,False
+    binary=binaries()
+    base=start(binary,root/"postgres",root/"pgsocket")
+    name="teleport_"+secrets.token_hex(8)
+    pg(binary,"createdb","--maintenance-db",base,name)
+    secure_json(config,{"url":base_url(root/"pgsocket",name)})
+    return config,True
+
+
+def process_arguments(pid,root):
+    if not owned_process(pid,root):return None
+    return [part.decode() for part in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\x00") if part]
+
+
 def deploy(manifest):
     root=validate_manifest(manifest)
     root.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -103,42 +130,79 @@ def deploy(manifest):
     if staged.exists() and staged.is_dir() and not staged.is_symlink():
         raise RuntimeError("Release staging path must not be a directory")
     credentials_path=root/"admin.json"
-    database=root/"database.db"
-    if database.is_symlink():
+    legacy=root/"database.db"
+    if legacy.is_symlink():
         raise RuntimeError("Refusing a symlinked deployment database")
+    bridge=release/"migration-tk"
+    had_legacy=legacy.exists()
+    if legacy.exists():
+        digest=manifest.get("migrationBridgeSHA256","")
+        if not re.fullmatch(r"[a-f0-9]{64}",digest) or bridge.is_symlink() or not bridge.is_file() or hashlib.sha256(bridge.read_bytes()).hexdigest()!=digest:
+            raise RuntimeError("Existing storage requires a verified historical migration bridge; refusing empty initialization")
+        bridge.chmod(0o700)
     if credentials_path.exists() or credentials_path.is_symlink():
         credentials=read_credentials(credentials_path)
-    elif database.exists():
+    elif legacy.exists() or (root/"database.json").exists():
         raise RuntimeError("Database exists without deployment credentials; refusing to reset the admin account")
     else:
         credentials={"server":"https://"+manifest["publicHost"],"username":"admin","password":secrets.token_urlsafe(32),"bootstrapComplete":False}
         secure_json(credentials_path,credentials)
-    # Save the secret before initialization so an interrupted first deploy can
-    # resume using the same password. Initialization is offline and never -f.
-    if not credentials.get("bootstrapComplete"):
-        subprocess.run([str(binary),"init","--db",str(database),"--admin-password-stdin"],input=credentials["password"]+"\n",text=True,check=True,timeout=15)
-        credentials["bootstrapComplete"]=True;secure_json(credentials_path,credentials)
-    if pid_file.exists():
-        stop_owned(json.loads(pid_file.read_text()).get("pid"),root)
-    staged.unlink(missing_ok=True);staged.symlink_to(release);staged.replace(current)
-    with log.open("ab") as output:
-        os.chmod(log,0o600)
-        process=subprocess.Popen([str(binary),"serve","--db",str(database),"--addr",manifest["addr"],"--public-host",",".join(manifest.get("publicHosts",[manifest["publicHost"]])),"--runtime-dir",str(root/"runtime")],cwd=root,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
-    secure_json(pid_file,{"pid":process.pid,"version":version,"release":str(release)})
-    port=int(manifest["addr"].rsplit(":",1)[1]);deadline=time.monotonic()+10
-    while time.monotonic()<deadline:
-        if process.poll() is not None:
-            raise RuntimeError("Remote server exited; inspect the protected server.log")
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz",timeout=.5) as response:
-                if json.load(response).get("version")==version:
-                    print(f"PASS: {version} running at {manifest['addr']}; credentials: {credentials_path} (0600)",flush=True)
-                    return
-        except (OSError,ValueError):
-            pass
-        time.sleep(.1)
-    stop_owned(process.pid,root)
-    raise RuntimeError("Remote health check failed; inspect the protected server.log")
+    previous=json.loads(pid_file.read_text()) if pid_file.exists() else None
+    previous_args=None
+    if previous:previous_args=process_arguments(previous.get("pid"),root)
+    previous_release=current.resolve() if current.is_symlink() else None
+    config,created_config=prepare_database(root)
+    archive=root/"migration"/manifest["release"]
+    process=None
+    committed=False
+    maintenance=ExitStack()
+    try:
+        if previous:stop_owned(previous.get("pid"),root)
+        if legacy.exists():
+            from migrate_storage import migration
+            maintenance.enter_context(migration(bridge,binary,legacy,config,archive,on_abort=lambda:stop_owned(process.pid,root) if process else None))
+        if not credentials.get("bootstrapComplete"):
+            subprocess.run([str(binary),"init","-db-config",str(config),"-admin-password-stdin"],input=credentials["password"]+"\n",text=True,check=True,timeout=15)
+            credentials["bootstrapComplete"]=True;secure_json(credentials_path,credentials)
+        staged.unlink(missing_ok=True);staged.symlink_to(release);staged.replace(current)
+        with log.open("ab") as output:
+            os.chmod(log,0o600)
+            process=subprocess.Popen([str(binary),"serve","-db-config",str(config),"-addr",manifest["addr"],"-public-host",",".join(manifest.get("publicHosts",[manifest["publicHost"]])),"-runtime-dir",str(root/"runtime")],cwd=root,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+        secure_json(pid_file,{"pid":process.pid,"version":version,"release":str(release)})
+        port=int(manifest["addr"].rsplit(":",1)[1]);deadline=time.monotonic()+10
+        healthy=False
+        while time.monotonic()<deadline:
+            if process.poll() is not None:
+                raise RuntimeError("Remote server exited; inspect the protected server.log")
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz",timeout=.5) as response:
+                    if json.load(response).get("version")==version:
+                        healthy=True;break
+            except (OSError,ValueError):pass
+            time.sleep(.1)
+        if not healthy:raise RuntimeError("Remote health check failed; inspect the protected server.log")
+        maintenance.close()
+        committed=True
+        print(f"PASS: {version} running with PostgreSQL at {manifest['addr']}; credentials: {credentials_path} (0600)",flush=True)
+    except BaseException:
+        if committed:raise
+        if process:stop_owned(process.pid,root)
+        failure=sys.exc_info()
+        try:maintenance.__exit__(*failure)
+        except BaseException as cleanup_error:
+            print("Migration cleanup required rollback recovery ("+type(cleanup_error).__name__+")",file=sys.stderr)
+        if previous_release:
+            staged.unlink(missing_ok=True);staged.symlink_to(previous_release);staged.replace(current)
+        if created_config and had_legacy and legacy.exists():
+            archive.mkdir(mode=0o700,parents=True,exist_ok=True)
+            config.replace(archive/"failed-database.json")
+        if previous_args and (not had_legacy or legacy.exists()):
+            with log.open("ab") as output:
+                restored=subprocess.Popen(previous_args,cwd=root,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+            previous["pid"]=restored.pid;secure_json(pid_file,previous)
+        raise
+    finally:
+        maintenance.close()
 
 
 def main():

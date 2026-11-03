@@ -36,20 +36,27 @@ class DeployTest(unittest.TestCase):
                 def __enter__(self):return self
                 def __exit__(self,*args):pass
                 def read(self):return b'{"version":"fixture"}'
-            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.subprocess.run") as run,patch("deploy_remote.subprocess.Popen",return_value=process) as popen,patch("deploy_remote.urllib.request.urlopen",return_value=Response()),patch("deploy_remote.stop_owned"):
+            def prepare(root):
+                config=root/"database.json"
+                existed=config.exists()
+                if not existed:secure_json(config,{"url":"postgresql:///fixture"})
+                return config,not existed
+            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.prepare_database",side_effect=prepare),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.subprocess.run") as run,patch("deploy_remote.subprocess.Popen",return_value=process) as popen,patch("deploy_remote.urllib.request.urlopen",return_value=Response()),patch("deploy_remote.stop_owned"):
                 deploy(manifest)
                 self.assertIn("teleport.engineering,teleport.exe.xyz",popen.call_args.args[0])
                 first=json.loads((root/"admin.json").read_text())
                 self.assertGreaterEqual(len(first["password"]),43)
                 arguments=run.call_args.args[0]
-                self.assertIn("--admin-password-stdin",arguments)
+                self.assertIn("-admin-password-stdin",arguments)
                 self.assertNotIn(first["password"],str(arguments))
                 self.assertEqual(run.call_args.kwargs["input"],first["password"]+"\n")
-                (root/"database.db").write_bytes(b"existing data")
+                (root/"postgres-data.marker").write_bytes(b"existing data")
                 run.reset_mock();deploy(manifest)
                 run.assert_not_called()
                 self.assertEqual(json.loads((root/"admin.json").read_text()),first)
-                self.assertEqual((root/"database.db").read_bytes(),b"existing data")
+                self.assertEqual((root/"postgres-data.marker").read_bytes(),b"existing data")
+                self.assertIn("-db-config",popen.call_args.args[0])
+                self.assertNotIn("--db",popen.call_args.args[0])
 
     def test_manifest_validation_precedes_remote_mutation(self):
         manifest={"root":"/tmp/forbidden","release":"123-abcdef123456","sha256":"a"*64,"version":"fixture","addr":"127.0.0.1:9999","publicHost":"teleport.engineering"}
@@ -72,6 +79,60 @@ class DeployTest(unittest.TestCase):
             with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.stop_owned") as stop:
                 with self.assertRaises(RuntimeError):deploy(manifest)
                 stop.assert_not_called()
+
+    def test_existing_file_database_requires_verified_migration_before_stop(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base=Path(temporary).resolve();root=base/"teleport";release=root/"releases/123-abcdef123456";release.mkdir(parents=True)
+            binary=release/"tk";binary.write_bytes(b"fixture")
+            (root/"database.db").write_bytes(b"retained installation")
+            manifest={"root":str(root),"release":release.name,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"version":"fixture","addr":"127.0.0.1:8000","publicHost":"teleport.engineering"}
+            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.stop_owned") as stop:
+                with self.assertRaisesRegex(RuntimeError,"migration bridge"):deploy(manifest)
+                stop.assert_not_called()
+                self.assertEqual((root/"database.db").read_bytes(),b"retained installation")
+
+    def test_failed_release_restores_previous_process_and_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base=Path(temporary).resolve();root=base/"teleport";release=root/"releases/123-abcdef123456";release.mkdir(parents=True)
+            binary=release/"tk";binary.write_bytes(b"fixture")
+            old=root/"releases/100-abcdef123456";old.mkdir();(root/"current").symlink_to(old)
+            secure_json(root/"server.json",{"pid":100,"version":"old","release":str(old)})
+            secure_json(root/"admin.json",{"username":"admin","password":"x"*43,"bootstrapComplete":True})
+            config=root/"database.json";secure_json(config,{"url":"postgresql:///fixture"})
+            manifest={"root":str(root),"release":release.name,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"version":"fixture","addr":"127.0.0.1:8000","publicHost":"teleport.engineering"}
+            failed=MagicMock(pid=200);failed.poll.return_value=1
+            restored=MagicMock(pid=300)
+            previous=[str(old/"tk"),"serve","--db-config",str(config)]
+            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.prepare_database",return_value=(config,False)),patch("deploy_remote.process_arguments",return_value=previous),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.subprocess.Popen",side_effect=[failed,restored]) as popen,patch("deploy_remote.stop_owned"):
+                with self.assertRaisesRegex(RuntimeError,"exited"):deploy(manifest)
+                self.assertEqual(popen.call_args.args[0],previous)
+                self.assertEqual((root/"current").resolve(),old)
+                self.assertEqual(json.loads((root/"server.json").read_text())["pid"],300)
+                self.assertEqual(json.loads(config.read_text())["url"],"postgresql:///fixture")
+
+    def test_first_run_failure_retains_initialized_target_for_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base=Path(temporary).resolve();root=base/"teleport";release=root/"releases/123-abcdef123456";release.mkdir(parents=True)
+            binary=release/"tk";binary.write_bytes(b"fixture")
+            config=root/"database.json"
+            def prepare(root):
+                existed=config.exists()
+                if not existed:secure_json(config,{"url":"postgresql:///same-target"})
+                return config,not existed
+            manifest={"root":str(root),"release":release.name,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"version":"fixture","addr":"127.0.0.1:8000","publicHost":"teleport.engineering"}
+            failed=MagicMock(pid=200);failed.poll.return_value=1
+            healthy=MagicMock(pid=300);healthy.poll.return_value=None
+            class Response:
+                def __enter__(self):return self
+                def __exit__(self,*args):pass
+                def read(self):return b'{"version":"fixture"}'
+            with patch("deploy_remote.HOME_BASE",base),patch("deploy_remote.prepare_database",side_effect=prepare),patch("deploy_remote.subprocess.check_output",return_value="fixture"),patch("deploy_remote.subprocess.run") as run,patch("deploy_remote.subprocess.Popen",side_effect=[failed,healthy]),patch("deploy_remote.urllib.request.urlopen",return_value=Response()),patch("deploy_remote.stop_owned"):
+                with self.assertRaisesRegex(RuntimeError,"exited"):deploy(manifest)
+                self.assertTrue(config.is_file())
+                self.assertTrue(json.loads((root/"admin.json").read_text())["bootstrapComplete"])
+                run.reset_mock();deploy(manifest)
+                run.assert_not_called()
+                self.assertEqual(json.loads(config.read_text())["url"],"postgresql:///same-target")
 
 
 if __name__=="__main__":

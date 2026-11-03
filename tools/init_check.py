@@ -1,4 +1,4 @@
-"""Verify init/reset and PetStore through an isolated real binary and API."""
+"""Verify PostgreSQL initialization and PetStore through an isolated real binary and API."""
 import argparse
 import json
 import os
@@ -16,7 +16,7 @@ from location_browser import verify_location
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
+def main(database_url=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     parser.add_argument("--browser", action="store_true")
@@ -30,7 +30,7 @@ def main():
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         endpoint = f"http://127.0.0.1:{port}"
-        database = args.database or str(folder / "installation.sqlite")
+        database = args.database or database_url
         environment = dict(os.environ, TELEPORT_DB=database, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
         process = None
         browser_name = f"teleport-init-{port}"
@@ -104,7 +104,7 @@ def main():
                     verify_location(browser, api, project)
                 browser("close")
                 project = api("listProjects")["items"][0]
-            tk("init", "-f", "-demo", fail=True)
+            tk("init", "-demo", fail=True)
             assert api("getSession")["installationId"] == first["installationId"]
             api("saveProject", {"id": project["id"], "expectedVersion": project["version"], "description": "Human-edited sample"})
             stop()
@@ -113,25 +113,8 @@ def main():
             assert again["installationId"] == first["installationId"]
             assert api("listProjects")["items"][0]["description"] == "Human-edited sample"
             stop()
-            if args.database:
-                assert "SQLite only" in tk("init", "-f", fail=True)
-                print("PASS: PostgreSQL demo bootstrap, idempotent human edits, API hierarchy, owned-init refusal and unsupported reset refusal", flush=True)
-                return
-            output = tk("init", "-f", "-demo")
-            backup = Path(next(line.removeprefix("Backup: ") for line in output.splitlines() if line.startswith("Backup: ")))
-            assert backup.is_file() and backup.stat().st_mode & 0o777 == 0o600
-            reset = start()
-            assert reset["installationId"] != first["installationId"]
-            assert api("listProjects")["items"][0]["description"] != "Human-edited sample"
-            stop()
-            restored = folder / "restored.sqlite"
-            shutil.copy2(backup, restored)
-            environment["TELEPORT_DB"] = str(restored)
-            recovery = start()
-            assert recovery["installationId"] == first["installationId"]
-            assert api("listProjects")["items"][0]["description"] == "Human-edited sample"
-            stop()
-            print("PASS: SQLite backed-up force reset, restored identity/data, private backup, demo hierarchy/Ideas, idempotent edits and owned-init refusal; zero model calls", flush=True)
+            assert "flag provided but not defined" in tk("init", "-f", fail=True)
+            print("PASS: PostgreSQL demo bootstrap, idempotent human edits, API hierarchy, owned-init refusal and removed reset refusal", flush=True)
         except Exception:
             if args.browser:
                 print(browser("eval", "JSON.stringify({trace:window.__ticketTrace,notice:document.querySelector('#notice')?.textContent,dialog:document.querySelector('#editor')?.open,calendar:typeof enhanceDate,fields:[...document.querySelectorAll('#editor input')].map(input=>({name:input.name,type:input.type,calendar:input.dataset.calendar}))})"), flush=True)
@@ -146,4 +129,5 @@ def main():
 
 if __name__ == "__main__":
     from tool_history import run
-    run(main)
+    from postgres import run_with_database
+    run(lambda: run_with_database(main))

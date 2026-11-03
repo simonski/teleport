@@ -21,7 +21,7 @@ Smoke stage and action-category timings append to ignored `tool_calls_stages.csv
 
 Read the authority and change-control rules in `SPECIFICATION.md` before proposing changes. Distinguish requirements, engineering-owned contracts, and open choices. Workflows are directed graphs with configurable outcome rules and backward routes; preserve finite attempts and human approval gates. Seed manual and agentic defaults. The specification alone does not authorize implementation, deployment, or destructive resets.
 
-Preserve the Goal → Epic → Task hierarchy. SQLite is the default database; PostgreSQL is also required. Only `tk init` may access the database directly as a client; other application operations use the server API.
+Preserve the Goal → Epic → Task hierarchy. PostgreSQL is the only application database. Only `tk init` may access the database directly as a client; other application operations use the server API. The ignored `.respec/` directory is an explicitly retained external-tool exception, not application storage.
 
 ## Build, Test, and Development Commands
 
@@ -32,7 +32,8 @@ Go 1.27.3+, Python 3 and Make are required to build; Node.js is also required fo
 - `make sbom`: generate `sbom.cdx.json` with Go and bundled browser dependencies, licenses and hashes.
 - `make browser-tools`: prepare a cached, pinned Python Playwright client and its matching headless Chromium for browser acceptance checks.
 - `make deploy`: detect Linux architecture over SSH, build a static target executable and SCP/start it below `/home/exedev/teleport`; strong first-run credentials are written to protected remote/local config files, never command arguments or tool history. Existing installations are never reset.
-- `go test ./...`: run Go tests.
+- `make db-up` / `make db-down`: explicitly start/stop the private local PostgreSQL service without deleting data.
+- `go test ./...`: run Go tests with `TELEPORT_TEST_POSTGRES` pointing at an isolated test-only PostgreSQL administration database. `make test` provisions a disposable socket-only cluster automatically.
 - `make check`: everyday formatting, vet, documentation, tooling and normal Go tests; no race instrumentation.
 - `make check-race` / `make race-check`: explicit full Go race suite, with nice +15, one package at a time and `GOMAXPROCS=2` by default. An explicit `GOMAXPROCS` overrides that default. Windows uses idle process priority.
 - `make check-full`: run everyday checks first, then the race suite; the full CI/release validation entry point.
@@ -45,7 +46,7 @@ Run `bin/tk init`, then `bin/tk serve`; neither build nor init starts services. 
 
 Every `tools/smoke.py` invocation has a 30-second wall-clock budget, including those launched by the PostgreSQL runner. Six seconds are reserved for owned-process/browser cleanup. Expiry exits with status 124 and records outcome `timeout` in the history CSV.
 
-The default SQLite browser suite runs isolated `core`, `shell` and `views` slices concurrently inside that single budget and owned process group. The shell slice retains profile, navigation, keyboard and project checks; core retains ticket delivery, workflows, supervised demonstration and Git; views retains Ideas, Graph, Goals and Calendar. `--browser-slice core|shell|views` selects one slice. The PostgreSQL runner creates a separate disposable database for each slice. `--browser-driver cli` retains the previous command driver for comparisons; `python3 -B tools/browser_benchmark.py` compares identical, successful fill/click/read actions with both drivers.
+The default PostgreSQL browser suite provisions a disposable socket-only cluster and runs isolated `core`, `shell` and `views` databases concurrently inside that single budget and owned process group. The shell slice retains profile, navigation, keyboard and project checks; core retains ticket delivery, workflows, supervised demonstration and Git; views retains Ideas, Graph, Goals and Calendar. `--browser-slice core|shell|views` selects one slice. `--browser-driver cli` retains the previous command driver for comparisons; `python3 -B tools/browser_benchmark.py` compares identical, successful fill/click/read actions with both drivers. `TELEPORT_POSTGRES_BIN` selects server binaries; Postgres.app and standard Linux installations are discovered automatically.
 
 `make build` always creates a new build identity. `python3 -B tools/build.py --reuse` reuses an artifact only when source and embedded bytes, module files/replacements, toolchain, target, flags, Git identity and binary hash match. PostgreSQL checks use this mode. Workspace/overlay builds disable reuse. `make sbom` caches the Go inventory with a content fingerprint, verifies browser assets and runtime licenses again, and refreshes source identity, timestamp and serial number. `python3 -B tools/sbom.py --refresh` forces inventory regeneration. Remove `.cache/tools` to clear these caches.
 

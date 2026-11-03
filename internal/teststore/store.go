@@ -8,19 +8,18 @@ import (
 	"encoding/hex"
 	"net/url"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"teleport/internal/store"
 )
 
-// Location uses SQLite unless the disposable-cluster runner supplies a PostgreSQL URL.
+// Location uses the disposable-cluster runner's PostgreSQL URL.
 // Every test receives a new database; never point this at an existing installation.
 func Location(t *testing.T) string {
 	t.Helper()
 	base := os.Getenv("TELEPORT_TEST_POSTGRES")
 	if base == "" {
-		return filepath.Join(t.TempDir(), "database.db")
+		t.Fatal("TELEPORT_TEST_POSTGRES is required; run make test to provision an isolated cluster")
 	}
 	u, err := url.Parse(base)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {

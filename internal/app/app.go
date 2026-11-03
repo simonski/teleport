@@ -69,7 +69,7 @@ func Initialize(ctx context.Context, db *store.Store) (*model.State, error) {
 }
 
 type InitializeOptions struct {
-	Force, Demo   bool
+	Demo          bool
 	AdminPassword string
 }
 
@@ -85,20 +85,6 @@ func freshInstallation(adminPassword string) model.State {
 func InitializeWithOptions(ctx context.Context, db *store.Store, options InitializeOptions) (*model.State, string, error) {
 	if options.AdminPassword != "" && (len(options.AdminPassword) < 12 || len(options.AdminPassword) > 1024) {
 		return nil, "", failure(422, "invalid_password", "Use an initial password between 12 and 1,024 bytes")
-	}
-	if options.Force {
-		st := freshInstallation(options.AdminPassword)
-		if options.Demo {
-			if _, err := seedPetStore(&st); err != nil {
-				return nil, "", err
-			}
-		}
-		st.Revision = 1
-		backup, err := db.Reset(ctx, &st)
-		if err != nil {
-			return nil, backup, err
-		}
-		return &st, backup, nil
 	}
 	err := db.Update(ctx, func(st *model.State) (bool, error) {
 		changed := st.Schema == 0

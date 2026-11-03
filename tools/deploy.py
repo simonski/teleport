@@ -75,6 +75,7 @@ def main():
     parser.add_argument("--public-hosts",default=os.environ.get("DEPLOY_PUBLIC_HOSTS",""),help="Additional comma-separated HTTPS hostnames")
     parser.add_argument("--build-only",action="store_true")
     parser.add_argument("--dry-run",action="store_true")
+    parser.add_argument("--migration-bridge",type=Path,help="Archived historical init bridge for an existing file-backed deployment")
     args=parser.parse_args()
     directory=validate_target(args.host,args.directory)
     primary=args.host.split("@",1)[1].lower()
@@ -106,10 +107,13 @@ def main():
     release=f"{int(time.time())}-{hashlib.sha256(binary.read_bytes()).hexdigest()[:12]}"
     remote=directory+"/releases/"+release
     subprocess.run([*ssh,shlex.join(["mkdir","-p","--",remote])],check=True,timeout=15)
-    for source,destination in ((binary,"tk"),(ROOT/"tools/deploy_remote.py","deploy_remote.py"),(ROOT/"tools/tool_history.py","tool_history.py")):
+    uploads=[(binary,"tk"),(ROOT/"tools/deploy_remote.py","deploy_remote.py"),(ROOT/"tools/tool_history.py","tool_history.py"),(ROOT/"tools/postgres.py","postgres.py"),(ROOT/"tools/migrate_storage.py","migrate_storage.py")]
+    if args.migration_bridge:uploads.append((args.migration_bridge,"migration-tk"))
+    for source,destination in uploads:
         subprocess.run(["scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=10",str(source),args.host+":"+shlex.quote(remote+"/"+destination)],check=True,timeout=120)
     manifest={"root":directory,"release":release,"version":version,"sha256":hashlib.sha256(binary.read_bytes()).hexdigest(),"addr":args.addr,"publicHost":primary,"publicHosts":public_hosts}
-    subprocess.run([*ssh,shlex.join(["env","TELEPORT_TOOL_HISTORY="+directory+"/tool_calls_history.csv","python3",remote+"/deploy_remote.py"])],input=json.dumps(manifest),text=True,check=True,timeout=45)
+    if args.migration_bridge:manifest["migrationBridgeSHA256"]=hashlib.sha256(args.migration_bridge.read_bytes()).hexdigest()
+    subprocess.run([*ssh,shlex.join(["env","TELEPORT_TOOL_HISTORY="+directory+"/tool_calls_history.csv","python3",remote+"/deploy_remote.py"])],input=json.dumps(manifest),text=True,check=True,timeout=120)
     credentials=ROOT/".deploy";credentials.mkdir(mode=0o700,exist_ok=True)
     if credentials.is_symlink():
         raise RuntimeError("Refusing a symlinked local deployment credential directory")

@@ -1,6 +1,6 @@
 """Run parity checks against a disposable, socket-only PostgreSQL installation.
 
-Requires local PostgreSQL 17+ binaries, including initdb, pg_ctl and createdb.
+Requires local PostgreSQL 16+ binaries, including initdb, pg_ctl and createdb.
 No existing database, configuration or running service is modified.
 See https://www.postgresql.org/docs/17/runtime-config-connection.html
 """
@@ -36,13 +36,10 @@ def main():
     args = parser.parse_args()
     if (args.shell_only or args.studio_only) and not args.browser:
         parser.error("--shell-only/--studio-only requires --browser")
-    candidates = [args.postgres_bin]
-    if shutil.which("initdb"):
-        candidates.append(Path(shutil.which("initdb")).parent)
-    candidates.append(Path("/Applications/Postgres.app/Contents/Versions/latest/bin"))
-    binary = next((p for p in candidates if p and (p / "initdb").is_file()), None)
-    if not binary:
-        parser.error("Install PostgreSQL 17+ or supply --postgres-bin; no checks were run")
+    from postgres import binaries
+    binary = args.postgres_bin or binaries()
+    if not (binary / "initdb").is_file():
+        parser.error("Install PostgreSQL 16+ or supply --postgres-bin; no checks were run")
     environment = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
     with tempfile.TemporaryDirectory(prefix="tkpg-", dir="/tmp") as temporary:
         folder = Path(temporary)

@@ -3,20 +3,16 @@ package app_test
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"teleport/internal/app"
-	"teleport/internal/store"
+	"teleport/internal/teststore"
 )
 
 func TestInitialAdminPasswordIsStrongRetrySafeAndNeverRotatesExistingCredentials(t *testing.T) {
 	ctx := context.Background()
-	db, err := store.Open(filepath.Join(t.TempDir(), "password.db"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := teststore.Open(t)
+	var err error
 	password := "fixture-strong-password-42"
 	if _, _, err = app.InitializeWithOptions(ctx, db, app.InitializeOptions{AdminPassword: password}); err != nil {
 		t.Fatal(err)
@@ -38,11 +34,8 @@ func TestInitialAdminPasswordIsStrongRetrySafeAndNeverRotatesExistingCredentials
 }
 
 func TestShortInitialAdminPasswordCannotInitializeStorage(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "empty.db"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := teststore.Open(t)
+	var err error
 	if _, _, err = app.InitializeWithOptions(context.Background(), db, app.InitializeOptions{AdminPassword: "short"}); err == nil {
 		t.Fatal("weak initial password accepted")
 	}

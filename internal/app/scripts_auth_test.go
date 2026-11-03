@@ -13,16 +13,13 @@ import (
 
 	"teleport/internal/localruntime"
 	"teleport/internal/model"
-	"teleport/internal/store"
+	"teleport/internal/teststore"
 )
 
 func TestScriptAdmissionAndAssentReauthenticateCapturedHuman(t *testing.T) {
 	ctx := context.Background()
-	db, err := store.Open(filepath.Join(t.TempDir(), "database.db"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := teststore.Open(t)
+	var err error
 	if _, err = Initialize(ctx, db); err != nil {
 		t.Fatal(err)
 	}

@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"teleport/internal/app"
 	"teleport/internal/store"
+	"teleport/internal/teststore"
 )
 
 func TestInitReadsStrongAdminPasswordFromStdin(t *testing.T) {
@@ -28,7 +28,7 @@ func TestInitReadsStrongAdminPasswordFromStdin(t *testing.T) {
 	previous := os.Stdin
 	os.Stdin = input
 	t.Cleanup(func() { os.Stdin = previous })
-	path := filepath.Join(folder, "database.db")
+	path := teststore.Location(t)
 	if err = run([]string{"init", "--db", path, "--admin-password-stdin"}); err != nil {
 		t.Fatal(err)
 	}

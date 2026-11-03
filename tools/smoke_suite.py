@@ -11,7 +11,7 @@ from smoke_timeout import DIRECTORY, WORKER
 def run_suite(script, folder):
     processes, logs = [], []
     driver = "cli" if "--browser-driver=cli" in sys.argv or any(sys.argv[i:i+2] == ["--browser-driver", "cli"] for i in range(len(sys.argv))) else "persistent"
-    profile = Profile("sqlite/full-suite-" + driver, folder)
+    profile = Profile("postgres/full-suite-" + driver, folder)
     profile.start("suite")
     try:
         for name in ("core", "shell", "views"):

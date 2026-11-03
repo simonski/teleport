@@ -40,14 +40,15 @@ def main(temporary_root=None):
     if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
-    with context as temporary:
+    from postgres import database
+    with context as temporary, database(args.database) as database_url:
         folder = Path(temporary)
         if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
         focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
-        profile = Profile(("postgres" if args.database else "sqlite") + "/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
+        profile = Profile("postgres/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -55,7 +56,7 @@ def main(temporary_root=None):
         if args.browser and args.browser_driver == "cli":
             (folder / "smoke-control.json").write_text(json.dumps({"browserSession": f"teleport-smoke-{port}"}))
         endpoint = f"http://127.0.0.1:{port}"
-        environment = dict(os.environ, TELEPORT_DB=args.database or str(folder / "database.db"), TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+        environment = dict(os.environ, TELEPORT_DB=database_url, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
         # Hidden test tabs must keep polling during long acceptance flows.
         # Chrome otherwise throttles chained timers after five minutes hidden.
         browser_environment = dict(os.environ, AGENT_BROWSER_ARGS=",".join(filter(None, [
@@ -604,4 +605,4 @@ if __name__ == "__main__":
         execute_worker(main, worker)
     else:
         from browser_setup import runtime_for_args
-        run(lambda: supervise(__file__, python_executable=runtime_for_args(sys.argv[1:])))
+        run(lambda: supervise(__file__, python_executable=runtime_for_args(sys.argv[1:]), provision_database=True))

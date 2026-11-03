@@ -50,6 +50,7 @@ class GoCheckTest(unittest.TestCase):
             history = folder / "history.csv"
             environment = dict(os.environ, PATH=str(folder) + os.pathsep + os.environ["PATH"], TELEPORT_TOOL_HISTORY=str(history))
             environment.pop("GOMAXPROCS", None)
+            environment["TELEPORT_TEST_POSTGRES"] = "postgresql:///unused-fixture"
             result = subprocess.run([sys.executable, "-B", str(ROOT / "tools/go_check.py"), "--race", "--run", "private-test-pattern"], env=environment, capture_output=True, text=True)
             self.assertEqual(result.returncode, 7)
             scheduling = json.loads(result.stdout.splitlines()[1])

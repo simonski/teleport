@@ -56,6 +56,17 @@ func main() {
 		tui(strings.TrimPrefix(os.Args[2], "unix://"))
 		return
 	}
+	if len(os.Args) == 1 {
+		fmt.Println("direct Codex fixture ready")
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			if scanner.Text() == "quit" {
+				return
+			}
+			fmt.Println("direct fixture received:", scanner.Text())
+		}
+		return
+	}
 	fmt.Fprintln(os.Stderr, "native fixture requires an explicit fixture role")
 	history.Exit(2)
 }

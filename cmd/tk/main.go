@@ -106,6 +106,15 @@ func run(args []string) error {
 		shell.Env = append(os.Environ(), "TERM=xterm-256color")
 		return shell.Run()
 	}
+	if command == "_codex-pty-session" {
+		if len(args) != 2 || !filepath.IsAbs(args[1]) {
+			return errors.New("codex wrapper requires an absolute executable path")
+		}
+		codex := exec.Command(args[1])
+		codex.Stdin, codex.Stdout, codex.Stderr = os.Stdin, os.Stdout, os.Stderr
+		codex.Env = append(os.Environ(), "TERM=xterm-256color")
+		return codex.Run()
+	}
 	if command == "_terminal-fixture" {
 		fmt.Println("teleport terminal fixture · no model")
 		scanner := bufio.NewScanner(os.Stdin)

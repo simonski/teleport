@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -120,7 +121,7 @@ func (s *Service) ConfigureLocalRuntime(root, executable string, fixture bool, e
 	}
 }
 func localOperation(op string) bool {
-	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "openShellSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "removeSessionReference", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
+	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "openShellSession", "openCodexTerminal", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "removeSessionReference", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
 }
 func sessionReference(row model.LocalSession) string {
 	return digest(row.ID + "\x00" + row.LaunchID + "\x00" + row.Generation)
@@ -306,12 +307,16 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	if operation == "getSessionRequests" || operation == "getSessionTurn" || operation == "respondToAgent" {
 		return s.nativeRequestCall(ctx, token, operation, raw)
 	}
-	if operation == "openShellSession" {
+	if operation == "openShellSession" || operation == "openCodexTerminal" {
 		var in OpenShellSessionInput
 		if err = parse(raw, &in); err != nil {
 			return nil, err
 		}
-		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: "shell"})
+		harness := "shell"
+		if operation == "openCodexTerminal" {
+			harness = "codex-pty"
+		}
+		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: harness})
 	}
 	if operation == "openConsoleSession" || operation == "startTicketSession" {
 		var in OpenLocalSessionInput
@@ -488,13 +493,19 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		if _, err := os.Stat("/bin/zsh"); err != nil {
 			return nil, failure(409, "shell_unavailable", "The local zsh executable /bin/zsh is unavailable")
 		}
+	} else if in.Harness == "codex-pty" && operation == "openCodexTerminal" {
+		var err error
+		nativePath, err = exec.LookPath("codex")
+		if err != nil || !filepath.IsAbs(nativePath) {
+			return nil, failure(409, "adapter_unavailable", "Codex executable is unavailable on the server PATH")
+		}
 	} else if !s.fixtureHarness || in.Harness != "fixture" {
 		return nil, failure(409, "adapter_unavailable", "Select an available supported harness")
 	}
 	if len(in.RequestID) < 1 || len(in.RequestID) > 100 || strings.ContainsRune(in.RequestID, 0) {
 		return nil, failure(422, "invalid_request_id", "Use a stable request ID of 1–100 bytes")
 	}
-	if (operation == "openConsoleSession" || operation == "openShellSession") && in.TicketID != 0 || operation == "startTicketSession" && in.TicketID == 0 {
+	if (operation == "openConsoleSession" || operation == "openShellSession" || operation == "openCodexTerminal") && in.TicketID != 0 || operation == "startTicketSession" && in.TicketID == 0 {
 		return nil, failure(422, "invalid_session_scope", "Select either a free console or its exact ticket")
 	}
 	st, a, _, err := s.localSnapshot(ctx, token, "")
@@ -508,7 +519,11 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "local_mode_required", "Use single-user local mode with demo execution off")
 	}
 	p := st.Projects[in.ProjectID]
-	if operation != "openShellSession" && !projectAllowsHarness(p, in.Harness) {
+	policyHarness := in.Harness
+	if in.Harness == "codex-pty" {
+		policyHarness = "codex"
+	}
+	if operation != "openShellSession" && !projectAllowsHarness(p, policyHarness) {
 		return nil, failure(403, "harness_not_permitted", "This harness is not permitted for the project")
 	}
 	if p.Simulation {
@@ -553,7 +568,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		if len(st.Accounts) > 1 || st.Settings.Agents || st.Settings.Handbrake || st.Projects[in.ProjectID].Handbrake {
 			return false, failure(409, "admission_blocked", "Local session admission is paused")
 		}
-		if operation != "openShellSession" && !projectAllowsHarness(st.Projects[in.ProjectID], in.Harness) {
+		if operation != "openShellSession" && !projectAllowsHarness(st.Projects[in.ProjectID], policyHarness) {
 			return false, failure(403, "harness_not_permitted", "This harness is not permitted for the project")
 		}
 		if operation != "openShellSession" {
@@ -562,7 +577,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			}
 		}
 		for _, other := range st.LocalSessions {
-			if activeLocal(other) && (in.TicketID != 0 && other.TicketID == in.TicketID || operation != "openShellSession" && in.TicketID == 0 && other.Creator == a.ID && other.TicketID == 0 && other.Harness != "shell" && other.CapacityReleasedAt == nil) {
+			if activeLocal(other) && (in.TicketID != 0 && other.TicketID == in.TicketID || operation == "openConsoleSession" && in.TicketID == 0 && other.Creator == a.ID && other.TicketID == 0 && other.Harness != "shell" && other.Harness != "codex-pty" && other.CapacityReleasedAt == nil) {
 				return false, failure(409, "session_exists", "Reconnect the existing running or unresolved harness")
 			}
 		}
@@ -762,6 +777,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		launch := &localruntime.Launch{ID: row.ID, LaunchID: row.LaunchID, Generation: row.Generation, Program: s.localClient.Executable, Args: []string{"_terminal-fixture"}, Cwd: row.Worktree.Path, Cols: 100, Rows: 28}
 		if operation == "openShellSession" {
 			launch.Args = []string{"_shell-session"}
+		}
+		if operation == "openCodexTerminal" {
+			launch.Args = []string{"_codex-pty-session", nativePath}
 		}
 		if in.Harness == "codex" {
 			role := "Console"

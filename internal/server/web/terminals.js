@@ -1,8 +1,8 @@
 "use strict";
-let localSessions=[],terminalView=null,terminalEpoch=0,rosterLoading=false,sessionAttention=new Map(),harnessStart=null,shellStart=null;
+let localSessions=[],terminalView=null,terminalEpoch=0,rosterLoading=false,sessionAttention=new Map(),harnessStart=null,shellStart=null,directCodexStart=null;
 const runningSession=s=>!['exited','failed'].includes(s.state);
 function robotMark(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M10 3h4M5 8h14v12H5zM2 12v5M22 12v5M8 16h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/></svg>';}
-function robotButton(row,extra=''){const attention=row.attention||row.errorCode,label=row.harness==='shell'?'Shell':row.ticketId?'#'+row.ticketId:row.activity==='idle'?'Idle':'Free',state=row.activity||row.state,mark=row.harness==='shell'?'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2" fill="none" stroke="currentColor"/><path d="m7 10 3 3-3 3M12 16h5" fill="none" stroke="currentColor"/></svg>':robotMark();return `<button type="button" class="robot-session secondary ${attention?'needs-attention':''} ${row.activity==='active'?'is-active':''} ${extra}" data-session="${escapeHTML(row.id)}" aria-label="${escapeHTML(row.id+' · '+label+' · '+(attention||state))}" title="${escapeHTML(row.id+' · '+label+' · '+(attention||state))}">${mark}<span class="robot-owner">${escapeHTML(label)}</span><span class="robot-id">${escapeHTML(row.id)}</span></button>`;}
+function robotButton(row,extra=''){const attention=row.attention||row.errorCode,label=row.harness==='shell'?'Shell':row.harness==='codex-pty'?'Codex':row.ticketId?'#'+row.ticketId:row.activity==='idle'?'Idle':'Free',state=row.activity||row.state,mark=row.harness==='shell'?'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2" fill="none" stroke="currentColor"/><path d="m7 10 3 3-3 3M12 16h5" fill="none" stroke="currentColor"/></svg>':robotMark();return `<button type="button" class="robot-session secondary ${attention?'needs-attention':''} ${row.activity==='active'?'is-active':''} ${extra}" data-session="${escapeHTML(row.id)}" aria-label="${escapeHTML(row.id+' · '+label+' · '+(attention||state))}" title="${escapeHTML(row.id+' · '+label+' · '+(attention||state))}">${mark}<span class="robot-owner">${escapeHTML(label)}</span><span class="robot-id">${escapeHTML(row.id)}</span></button>`;}
 function sessionProcess(row){return row.processId?' · session PID '+Number(row.processId):'';}
 function sessionIcons(){return localSessions.filter(runningSession).sort((a,b)=>Number(!!(b.attention||b.errorCode))-Number(!!(a.attention||a.errorCode))||a.id.localeCompare(b.id)).map(row=>robotButton(row)).join('');}
 function ticketRobot(t){return localSessions.filter(row=>row.ticketId===t.id&&runningSession(row)).map(row=>robotButton(row,'ticket-robot')).join('');}
@@ -35,7 +35,7 @@ async function startOrAttachHarness(ticket=null){
   const [choices,rows]=await Promise.all([api('getLocalHarnesses'),pages('listSessions')]);
   if(session?.account.id!==actor||detailEpoch!==epoch||terminalEpoch!==requestEpoch)return;
   localSessions=rows;
-  const existing=rows.find(row=>runningSession(row)&&row.harness!=='shell'&&!row.capacityReleased&&(ticket?row.ticketId===ticket.id:!row.ticketId));
+  const existing=rows.find(row=>runningSession(row)&&!['shell','codex-pty'].includes(row.harness)&&!row.capacityReleased&&(ticket?row.ticketId===ticket.id:!row.ticketId));
   if(existing){await openTerminal(existing.id);return;}
   if(!choices.available.some(h=>h.id==='codex'))throw new Error('No verified local Codex harness is available.');
   const available=projects.filter(p=>roleAllowsWrite(p.id)),selected=ticket?.projectId||projectId|| (available.length===1?available[0].id:0);
@@ -50,6 +50,13 @@ async function startShell(){
   if(!selected||!available.some(p=>p.id===selected))throw new Error('Select a project with permission to start a shell.');
   const pending=(async()=>{const row=await api('openShellSession',{projectId:selected,requestId:crypto.randomUUID()});await refreshSessionRoster();if(session?.account.id===actor&&detailEpoch===epoch&&terminalEpoch===requestEpoch)await openTerminal(row.id);})();shellStart=pending;
   try{return await pending;}finally{if(shellStart===pending)shellStart=null;}
+}
+async function startDirectCodex(){
+  if(directCodexStart)return directCodexStart;
+  const actor=session?.account.id,epoch=detailEpoch,requestEpoch=terminalEpoch,available=projects.filter(p=>roleAllowsWrite(p.id)),selected=projectId||(available.length===1?available[0].id:0);
+  if(!selected||!available.some(p=>p.id===selected))throw new Error('Select a project with permission to start Codex.');
+  const pending=(async()=>{const row=await api('openCodexTerminal',{projectId:selected,requestId:crypto.randomUUID()});await refreshSessionRoster();if(session?.account.id===actor&&detailEpoch===epoch&&terminalEpoch===requestEpoch)await openTerminal(row.id);})();directCodexStart=pending;
+  try{return await pending;}finally{if(directCodexStart===pending)directCodexStart=null;}
 }
 async function sessionSwitcher(){
   const actor=session?.account.id,epoch=detailEpoch;await refreshSessionRoster();if(!session||session.account.id!==actor||detailEpoch!==epoch||foregroundOpen())return;const recoveryRows=await pages('listSessions',{includeHidden:true});if(!session||session.account.id!==actor||detailEpoch!==epoch||foregroundOpen())return;
@@ -83,7 +90,7 @@ function confirmHostHarnessStop(row,force=false){
 
 function terminalBytes(data){const bytes=new Uint8Array(data.length);for(let i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i);return bytes;}
 function base64Bytes(bytes){let text='';for(const byte of bytes)text+=String.fromCharCode(byte);return btoa(text);}
-function closeShellAfterExit(initial,current){return initial.harness==='shell'&&initial.state!=='exited'&&current.state==='exited';}
+function closeDirectTerminalAfterExit(initial,current){return ['shell','codex-pty'].includes(initial.harness)&&initial.state!=='exited'&&current.state==='exited';}
 async function openTerminal(id){
   disconnectTerminal();const epoch=terminalEpoch,actor=session?.account.id,foregroundEpoch=detailEpoch;
   const first=await api('attachSession',{id,cursor:0});
@@ -96,7 +103,7 @@ async function openTerminal(id){
   const viewer={id,terminal,fit,cursor:0,timer:null,resize:null,stopped:false,queue:[],sending:false,epoch,actor};terminalView=viewer;
   const current=()=>terminalView===viewer&&session?.account.id===actor&&epoch===terminalEpoch&&dialog.open;
   const error=message=>{if(current())byId('terminal-error').textContent=message;};
-  function write(out){if(!current())return;if(out.gap&&(!viewer.gapAnnounced||viewer.cursor!==out.cursor)){terminal.reset();terminal.writeln('[Retained output is incomplete]');viewer.gapAnnounced=true;}terminal.options.disableStdin=out.session.state!=='running';viewer.cursor=out.next;if(out.data)terminal.write(terminalBytes(atob(out.data)));byId('terminal-state').textContent=out.session.attention||out.session.state;if(closeShellAfterExit(first.session,out.session)){dialog.close();refreshSessionRoster().catch(()=>{});}}
+  function write(out){if(!current())return;if(out.gap&&(!viewer.gapAnnounced||viewer.cursor!==out.cursor)){terminal.reset();terminal.writeln('[Retained output is incomplete]');viewer.gapAnnounced=true;}terminal.options.disableStdin=out.session.state!=='running';viewer.cursor=out.next;if(out.data)terminal.write(terminalBytes(atob(out.data)));byId('terminal-state').textContent=out.session.attention||out.session.state;if(closeDirectTerminalAfterExit(first.session,out.session)){dialog.close();refreshSessionRoster().catch(()=>{});}}
   async function read(){if(!current())return;try{const out=await api('attachSession',{id,cursor:viewer.cursor});if(!current())return;write(out);if(current())viewer.timer=setTimeout(read,out.data&&out.data.length>60000?10:180);}catch(e){if(current()){error(e.message);viewer.timer=setTimeout(read,1500);}}}
   async function send(){if(viewer.sending||viewer.stopped||!current()||!viewer.queue.length)return;viewer.sending=true;
     try{while(viewer.queue.length&&current()){const item=viewer.queue[0],result=await api('sendSessionInput',{id,requestId:item.id,data:base64Bytes(item.bytes)});if(result.state!=='delivered'){viewer.stopped=true;error('Input delivery '+result.state+'; further input is paused. Operation '+item.id);break;}viewer.queue.shift();}}

@@ -5,6 +5,15 @@ const path=require('node:path');
 const route=import('data:text/javascript;base64,'+fs.readFileSync(path.join(__dirname,'../web/landing_route.js')).toString('base64'));
 const at=(plan,name,fraction=.5)=>{const stage=plan.stages.find(stage=>stage.name===name);return stage.start+stage.duration*fraction;};
 
+test('interrupted flight refuels and sputters without leaving the pad',async()=>{
+  const {interruptedFlight,LANDING_HOME}=await route;
+  const frames=Array.from({length:102},(_,index)=>interruptedFlight(index*100));
+  assert.ok(frames.some(frame=>frame.phase==='refuel'&&frame.hose>0&&frame.steam>0));
+  assert.ok(frames.some(frame=>frame.phase==='sputter'&&frame.engine>0));
+  assert.ok(frames.every(frame=>frame.y===LANDING_HOME.y));
+  assert.equal(interruptedFlight(10200).phase,interruptedFlight(0).phase);
+});
+
 test('attitude turns gradually across angle wrap and uses smooth, seeded variation',async()=>{
   const {turnAttitude}=await route;
   let angle=179;

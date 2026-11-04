@@ -29,6 +29,12 @@ test('a newer remote preference snapshot still applies',async()=>{
   assert.equal(f.run('preferences.mode'),'dark');
 });
 
+test('a transport failure during refresh retains the signed-in workspace',async()=>{
+  const f=fixture();f.run("api=async()=>{throw new TypeError('Network unavailable')};login=()=>{throw new Error('unexpected login')}");
+  await f.poll();
+  assert.equal(f.run('session.account.id'),'one');
+});
+
 test('a poll cannot replace a foreground backlog reload while its cards retain hover ownership',async()=>{
   const f=fixture();f.run("windowRefreshes=0;root.querySelector=selector=>selector.includes('.backlog-row:hover')?{}:null;workspace=async()=>{windowRefreshes++;}");
   const pending=f.poll();f.release(2,2);await pending;

@@ -11,5 +11,5 @@ async function api(operation,data={}){
 }
 let noticeTimer;function notice(message){clearTimeout(noticeTimer);document.querySelector('#notice').textContent=message;if(message)noticeTimer=setTimeout(()=>{document.querySelector('#notice').textContent='';},5000);}
 function login(){loadGeneration++;detailEpoch++;clearPresentation();session=null;projects=[];tickets=[];ideas=[];root.innerHTML='<section class="login">'+landingBrand()+'<form id="login"><label>Username<input name="username" autocomplete="username" required autofocus></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form></section>';root.querySelector('input').focus();if(typeof startLandingFlight==='function')startLandingFlight().catch(()=>{});root.querySelector('form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;const button=form.querySelector('button');button.disabled=true;try{await api('login',Object.fromEntries(new FormData(form)));notice('');await start();}catch(error){notice(error.message);}finally{button.disabled=false;}};}
-async function start(){try{await workspace();}catch{login();}}
+async function start(){try{await workspace();}catch(error){if(error.status===401||error.status===403)login();else{connectionInitialRetry=true;showConnectionInterrupted();probeConnection();}}}
 start();

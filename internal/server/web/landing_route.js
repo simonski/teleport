@@ -62,6 +62,21 @@ export function flightPlan(cycle=0){
     ['recovery-arrive',1700],['recovery-load',1400],['recovery-exit',1800],['replacement-arrive',2400],['replacement-unload',1100],['replacement-exit',1400]];
   let at=0;return {orbits,replacement,damaged,duration:stages.reduce((sum,stage)=>sum+stage[1],0),stages:stages.map(([name,duration])=>{const stage={name,start:at,duration};at+=duration;return stage;})};
 }
+// Refuel, then attempt ignition without leaving the pad while disconnected.
+export function interruptedFlight(milliseconds){
+  const time=((milliseconds%10200)+10200)%10200,plan=flightPlan(0);
+  const stages=['tanker-arrive','connect','refuel','disconnect','tanker-back','tanker-exit'];
+  let cursor=0;
+  for(const name of stages){
+    const stage=plan.stages.find(item=>item.name===name);
+    if(time<cursor+stage.duration)return sampleFlight(stage.start+time-cursor,0);
+    cursor+=stage.duration;
+  }
+  const t=(time-cursor)/(10200-cursor),frame=sampleFlight(plan.stages.find(item=>item.name==='ignite').start+Math.min(.99,t)*1000,0);
+  const pulse=Math.max(0,Math.sin(t*Math.PI*8))*(1-t);
+  frame.phase='sputter';frame.engine=pulse*.8;frame.exhaust=pulse*.35;frame.arms=1;frame.x=LANDING_HOME.x+Math.sin(t*60)*pulse*.6;frame.y=LANDING_HOME.y;frame.angle=-90+Math.sin(t*45)*pulse*2;
+  return frame;
+}
 function routePoint(stage,t,moon,cycle){
   const home=LANDING_HOME,top={x:home.x,y:home.y-LIFT_HEIGHT},entry={x:moon.x-ORBIT_RADIUS,y:moon.y};
   const start=stage==='outbound'?top:entry,end=stage==='outbound'?entry:top;

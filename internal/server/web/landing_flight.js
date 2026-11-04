@@ -1,9 +1,11 @@
 "use strict";
 let landingFlight=null,landingFlightGeneration=0;
+// Load the route while connected so the interruption animation works offline.
+const landingRouteReady=import('/landing_route.js').catch(()=>null);
 function stopLandingFlight(){landingFlightGeneration++;landingFlight?.dispose();landingFlight=null;}
-async function startLandingFlight(){
-  stopLandingFlight();const generation=landingFlightGeneration,svg=document.querySelector('.login-scene');if(!svg)return;
-  const route=await import('/landing_route.js');if(generation!==landingFlightGeneration||!svg.isConnected)return;
+async function startLandingFlight(svg=document.querySelector('.login-scene'),interrupted=false){
+  stopLandingFlight();const generation=landingFlightGeneration;if(!svg)return;
+  const route=await landingRouteReady||await import('/landing_route.js');if(generation!==landingFlightGeneration||!svg.isConnected)return;
   const ship=svg.querySelector('.flight-rocket'),engine=svg.querySelector('.rocket-engine'),flame=svg.querySelector('.rocket-flame'),moonElement=svg.querySelector('.login-moon'),arms=svg.querySelectorAll('.catch-arm'),smoke=svg.querySelectorAll('.landing-smoke circle'),media=window.matchMedia('(prefers-reduced-motion: reduce)');
   const variants=[...svg.querySelectorAll('.rocket-variant')],fins=svg.querySelectorAll('.rocket-fins'),panels=svg.querySelectorAll('.rocket-panel'),vehicle=svg.querySelector('.ground-vehicle'),vehicles=svg.querySelectorAll('[data-vehicle]'),wheels=svg.querySelectorAll('.ground-wheel'),hose=svg.querySelector('.fuel-hose'),steam=svg.querySelectorAll('.fuel-steam circle'),debris=svg.querySelector('.rocket-debris'),level=svg.querySelector('.tank-level');
   const destinations=[{name:'moon',point:()=>moon},...[...svg.querySelectorAll('[data-planet]')].map(node=>({name:node.dataset.planet,point:()=>({x:Number(node.dataset.x),y:Number(node.dataset.y)})}))];
@@ -111,8 +113,9 @@ async function startLandingFlight(){
     moonElement.setAttribute('transform',`translate(${moon.x-route.DEFAULT_MOON.x} ${moon.y-route.DEFAULT_MOON.y})`);
     svg.dataset.flightPhase=frame.phase;svg.dataset.engine=String(frame.engine);svg.dataset.orbits=String(frame.orbits);svg.dataset.rocket=route.ROCKETS[frame.variant].id;svg.dataset.exhaust=String(frame.exhaust);svg.dataset.steam=String(frame.steam);svg.dataset.hose=String(frame.hose);
   }
-  function sample(){return route.sampleFlight(media.matches?route.flightPlan(cycle).stages.find(stage=>stage.name==='rest').start:elapsed,cycle,destination.point());}
+  function sample(){return interrupted?route.interruptedFlight(media.matches?0:elapsed):route.sampleFlight(media.matches?route.flightPlan(cycle).stages.find(stage=>stage.name==='rest').start:elapsed,cycle,destination.point());}
   function advance(dt,now){
+    if(interrupted){elapsed=(elapsed+dt)%10200;paint(sample(),false,dt);return;}
     const plan=route.flightPlan(cycle),outboundAt=stageStart(plan,'outbound'),orbitAt=stageStart(plan,'orbit'),returnAt=stageStart(plan,'return'),descendAt=stageStart(plan,'descend'),next=elapsed+dt,holding=elapsed<returnAt&&next>=returnAt&&!!padOwner,entry=route.sampleFlight(orbitAt,cycle,destination.point()),approach=route.sampleFlight(descendAt,cycle,destination.point());
     const clearingTower=elapsed<outboundAt&&next>=outboundAt&&smoothed&&smoothed.y>route.LANDING_HOME.y-route.LIFT_HEIGHT+1;
     const approachingOrbit=elapsed<orbitAt&&next>=orbitAt&&smoothed&&Math.hypot(smoothed.x-entry.x,smoothed.y-entry.y)>2;

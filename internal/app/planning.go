@@ -35,7 +35,8 @@ func textMatches(text, query string) bool {
 	return true
 }
 func searchRank(t model.Ticket, query string) (int, []string) {
-	query = strings.Join(strings.Fields(folded(query)), " ")
+	original := strings.Join(strings.Fields(query), " ")
+	query = folded(original)
 	title := folded(t.Title)
 	id := strconv.FormatInt(t.ID, 10)
 	if query == id || query == "#"+id {
@@ -51,9 +52,12 @@ func searchRank(t model.Ticket, query string) (int, []string) {
 	case strings.HasPrefix(title, query):
 		base = 7000
 	case strings.Contains(title, query):
-		base = 5000
+		base = 5000 + max(0, 200-strings.Index(title, query))
 	case textMatches(title, query):
 		base = 3000
+	}
+	if strings.Contains(t.Title, original) {
+		base += 30
 	}
 	fields := []string{}
 	for _, field := range []struct{ name, text string }{{"title", t.Title}, {"description", t.Description}, {"labels", strings.Join(t.Labels, " ")}, {"metadata", t.Kind + " " + t.Priority + " " + id}} {
@@ -73,7 +77,7 @@ func searchRank(t model.Ticket, query string) (int, []string) {
 }
 func searchTickets(st *model.State, a model.Account, in ListInput) (Page[SearchHit], error) {
 	result := Page[SearchHit]{Items: []SearchHit{}}
-	in.Query = strings.Join(strings.Fields(folded(in.Query)), " ")
+	in.Query = strings.Join(strings.Fields(in.Query), " ")
 	if in.Query == "" || len(in.Query) > 500 || len(strings.Fields(in.Query)) > 20 {
 		return result, failure(422, "invalid_query", "Use 1–20 search tokens within 500 bytes")
 	}

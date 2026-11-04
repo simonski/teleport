@@ -11,7 +11,7 @@ import tempfile
 import time
 import urllib.request
 from navigation_browser import verify_navigation
-from ticket_browser import verify_ticket_keyboard, verify_shortcut_project
+from ticket_browser import verify_ticket_keyboard, verify_shortcut_project, verify_todo_menu
 from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
@@ -69,7 +69,7 @@ def verify_legal_controls(browser):
     browser("eval", "if(Object.keys(localStorage).some(k=>k.startsWith('teleport-location:')))throw new Error('Withdrawal did not delete optional storage')")
     browser("eval", "Promise.all(['/privacy.html','/terms.html'].map(async path=>{const response=await fetch(path);const text=await response.text();if(!response.ok||!text.includes('Draft')||!text.includes('privacy@teleport.engineering'))throw new Error('Legal draft unavailable')}))")
 
-def verify_finder(browser, project_id, ticket):
+def verify_finder(browser, project_id, ticket, epic):
     browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
     browser("wait", "#project + .choice-button")
     browser("select", "#project", str(project_id))
@@ -79,7 +79,7 @@ def verify_finder(browser, project_id, ticket):
     browser("wait", "#finder-query")
     browser("eval", "if(document.querySelector('#editor select,#finder-project,#finder-preview,#finder-more')||!document.querySelector('#finder-dropdown').hidden||getComputedStyle(document.querySelector('#editor .dialog-heading')).display!=='none'||getComputedStyle(document.querySelector('#editor .dialog-actions')).display!=='none')throw new Error('Finder contains extra controls')")
     browser("fill", "#finder-query", "finder no matching result xyz")
-    browser("wait", "--fn", "document.querySelector('#finder-status')?.textContent==='No matching work.'")
+    browser("wait", "--fn", "document.querySelector('#finder-status')?.textContent==='No matching results.'")
     browser("fill", "#finder-query", "")
     browser("eval", "if(!document.querySelector('#finder-dropdown').hidden||document.querySelector('#finder-query').getAttribute('aria-expanded')!=='false')throw new Error('Empty finder showed results')")
     browser("fill", "#finder-query", "Across project finder proof")
@@ -100,6 +100,24 @@ def verify_finder(browser, project_id, ticket):
     browser("wait", "--fn", "document.querySelector('tk-dialog[open] [name=title]')?.value==='Across project finder proof'")
     browser("eval", "if(projectId!==" + str(project_id) + ")throw new Error('Finder changed the selected project')")
     browser("press", "Escape")
+    browser("eval", "document.activeElement?.blur()")
+    browser("press", "Shift"); browser("press", "Shift")
+    browser("fill", "#finder-query", "EPIC:uX")
+    browser("wait", "--fn", "document.querySelector('#finder-results')?.textContent.includes('UX finder epic')")
+    browser("eval", "if(document.querySelector('#finder-results').textContent.includes('UX finder task')||document.querySelector('#finder-results').textContent.includes('Actions'))throw new Error('Epic prefix did not filter results')")
+    browser("fill", "#finder-query", f'EpIc:{epic["id"]}')
+    browser("wait", "--fn", "document.querySelector('#finder-results')?.textContent.includes('UX finder epic')")
+    browser("fill", "#finder-query", "project")
+    browser("wait", "--fn", "document.querySelector('#finder-results')?.textContent.includes('Ticket project onboarding')&&document.querySelector('#finder-results')?.textContent.includes('Create project')")
+    browser("eval", "if([...document.querySelectorAll('.finder-section')].map(x=>x.textContent).join(',')!=='Tickets,Actions'||document.querySelector('#finder-results [aria-selected=true]')?.id!=='finder-option-0')throw new Error('Finder did not group or select the first result')")
+    browser("fill", "#finder-query", "Project alpha")
+    browser("wait", "--fn", "document.querySelectorAll('#finder-results [role=option]').length===2")
+    browser("eval", "if(document.querySelector('#finder-results [role=option] strong')?.textContent!=='Project alpha')throw new Error('Finder did not prefer matching case')")
+    browser("fill", "#finder-query", "action:create project")
+    browser("wait", "--fn", "document.querySelector('#finder-results [role=option] strong')?.textContent==='Create project'")
+    browser("press", "Enter")
+    browser("wait", "--fn", "document.querySelector('tk-dialog[open] h2')?.textContent==='New project'")
+    browser("press", "Escape")
 
 def main(temporary_root=None):
     parser = argparse.ArgumentParser(description=__doc__, epilog=f"Total wall-clock budget: {TIMEOUT_SECONDS} seconds, including cleanup.")
@@ -112,6 +130,7 @@ def main(temporary_root=None):
     parser.add_argument("--legal-only", action="store_true", help="Verify draft legal pages and optional browser-storage controls; requires --browser")
     parser.add_argument("--finder-only", action="store_true", help="Verify double-Shift finder across projects; requires --browser")
     parser.add_argument("--ticket-project-only", action="store_true", help="Verify shortcut creation uses the selected project; requires --browser")
+    parser.add_argument("--todo-menu-only", action="store_true", help="Verify Todos context menu actions; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
@@ -120,17 +139,17 @@ def main(temporary_root=None):
     parser.add_argument("--overview-only", action="store_true", help="Verify Home, Tickets, Attention and workflow assembly; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.browser_slice or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
+    if (args.browser_slice or args.todo_menu_only or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     from postgres import database
     with context as temporary, database(args.database) as database_url:
         folder = Path(temporary)
-        if args.browser and not args.browser_slice and not args.database and not any((args.ticket_project_only,args.finder_only,args.legal_only,args.connection_only,args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
+        if args.browser and not args.browser_slice and not args.database and not any((args.todo_menu_only,args.ticket_project_only,args.finder_only,args.legal_only,args.connection_only,args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
-        focus = next((name for name in ("ticket_project", "finder", "legal", "connection", "console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        focus = next((name for name in ("todo_menu", "ticket_project", "finder", "legal", "connection", "console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
         profile = Profile("postgres/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
@@ -186,8 +205,13 @@ def main(temporary_root=None):
                 other = json.loads(tk("createProject", "--data", json.dumps({"name": "Finder project", "key": "finder-project", "requestId": "finder-project"})))
                 finder_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Across project finder proof", "agent": False, "requestId": "finder-ticket"})))
                 tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Across project finder proof second", "agent": False, "requestId": "finder-ticket-second"}))
+                finder_epic = json.loads(tk("createTicket", "--data", json.dumps({"projectId": other["id"], "kind": "epic", "title": "UX finder epic", "agent": False, "requestId": "finder-epic"})))
+                tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "UX finder task", "agent": False, "requestId": "finder-task"}))
+                tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Ticket project onboarding", "agent": False, "requestId": "finder-mixed"}))
+                tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Project alpha", "agent": False, "requestId": "finder-case-upper"}))
+                tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "project alpha", "agent": False, "requestId": "finder-case-lower"}))
             if args.browser:
-                seeded_browser = args.browser_slice in ("core", "views") or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.studio_only or args.overview_only
+                seeded_browser = args.browser_slice in ("core", "views") or args.todo_menu_only or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.studio_only or args.overview_only
                 if seeded_browser:
                     setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
                     assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
@@ -199,9 +223,9 @@ def main(temporary_root=None):
                     if arguments[0] == "select":
                         browser("click", arguments[1] + " + .choice-button")
                         return browser("click", ".choice-list [data-value=" + json.dumps(arguments[2]) + "]")
-                    if len(arguments)>=6 and arguments[:5] == ("find", "role", "button", "click", "--name") and arguments[5] in ("Settings", "System", "Project settings"):
+                    if len(arguments)>=6 and arguments[:5] == ("find", "role", "button", "click", "--name") and arguments[5] in ("Settings", "System", "Project"):
                         browser("click", "#account")
-                        return browser("click", {"Settings":"#account-settings", "System":"#account-system", "Project settings":"#account-project-settings"}[arguments[5]])
+                        return browser("click", {"Settings":"#account-settings", "System":"#account-system", "Project":"#account-project-settings"}[arguments[5]])
                     if driver is not None:
                         return profile.call("browser." + arguments[0], lambda: driver(*arguments))
                     if arguments[0] == "click" and len(arguments) == 2:
@@ -224,13 +248,17 @@ def main(temporary_root=None):
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                    if args.todo_menu_only:
+                        verify_todo_menu(browser, project["id"], ticket)
+                        print("PASS: Todos context menu moves, status, priority and confirmed delete")
+                        return
                     if args.ticket_project_only:
                         verify_shortcut_project(browser, tk, project["id"])
                         print("PASS: ticket shortcut uses the selected project and checks write access")
                         return
                     if args.finder_only:
-                        verify_finder(browser, project["id"], finder_ticket)
-                        print("PASS: double-Shift finder searches across projects and opens the matching ticket")
+                        verify_finder(browser, project["id"], finder_ticket, finder_epic)
+                        print("PASS: finder groups tickets and actions, filters prefixes, and opens selections")
                         return
                     if args.legal_only:
                         browser("wait", "#javascript-console")
@@ -390,7 +418,7 @@ def main(temporary_root=None):
                         draft = json.loads(tk("copyWorkflow", "--data", json.dumps({"sourceKey": "human@1", "projectId": project["id"], "title": "Flight workflow", "requestId": "smoke-flow"})))
                         profile.start("workflow")
                         browser("select", "#project", str(project["id"]))
-                        browser("find", "role", "button", "click", "--name", "Project settings", "--exact")
+                        browser("find", "role", "button", "click", "--name", "Project", "--exact")
                         browser("find", "role", "button", "click", "--name", "Workflow editor", "--exact")
                         browser("wait", "#flow-select")
                         browser("eval", "if(view!=='Workflows'||!document.querySelector('main #workflow-editor')||document.querySelector('tk-dialog[open]'))throw new Error('Workflow editor is not in its own view')")
@@ -592,7 +620,7 @@ def main(temporary_root=None):
                     assert prefs["style"] == "instrument" and prefs["mode"] == "dark"
                     browser("eval", "if(document.querySelector('#save-appearance,#save-navigation,#save-execution-mode')||document.querySelector('#notice').textContent.includes('appearance saved'))throw new Error('Obsolete preference save UI')")
                     browser("press", "Escape")
-                    browser("find", "role", "button", "click", "--name", "Project settings", "--exact")
+                    browser("find", "role", "button", "click", "--name", "Project", "--exact")
                     browser("click", "#inspect-native")
                     browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.innerText.includes('fresh server authorization')")
                     browser("click", '#editor button[type="submit"]')

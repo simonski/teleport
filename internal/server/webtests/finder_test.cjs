@@ -29,6 +29,24 @@ test('Finder never steals foreground, composing, hidden or repeated input',()=>{
   for(const reason of ['foreground','hidden','repeat','composition']){const k=keyboard();if(reason==='foreground')k.foreground(true);if(reason==='hidden')k.document.hidden=true;k.event('keydown',0,{repeat:reason==='repeat',isComposing:reason==='composition'});k.event('keyup',20,{isComposing:reason==='composition'});k.tap(40,60);assert.equal(k.count(),0,reason);}
 });
 
+test('finder recognises case-insensitive type prefixes and preserves search casing',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},window:{addEventListener(){}}});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/planning.js'),'utf8'),context);
+  for(const [query,kind,term,actionOnly] of [['EPIC:101','epic','101',false],['epic:UX','epic','UX',false],['story:design','task','design',false],['action:Project','','Project',true],['project','','project',false]]){
+    context.query=query;const result=vm.runInContext('finderQuery(query)',context);
+    assert.equal(result.kind,kind);assert.equal(result.query,term);assert.equal(!!result.actionOnly,actionOnly);
+  }
+});
+
+test('actions match keywords case-insensitively and prefer closer and exact-case labels',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},window:{addEventListener(){}},projectId:1,supportedNavigation:[]});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/planning.js'),'utf8'),context);
+  assert.ok(vm.runInContext('finderActions("HARNESS").some(row=>row.title==="Harness sessions")',context));
+  assert.ok(vm.runInContext('finderActions("project").some(row=>row.title==="Create project")',context));
+  assert.ok(vm.runInContext('finderActionRank({title:"Project settings",keywords:""},"Project")>finderActionRank({title:"project settings",keywords:""},"Project")',context));
+  assert.ok(vm.runInContext('finderActionRank({title:"Ticket settings",keywords:""},"ticket")>finderActionRank({title:"Edit ticket settings",keywords:""},"ticket")',context));
+});
+
 test('an old planned span is omitted while its current deadline stays visible',()=>{
   const k=keyboard(); // Calendar renderer shares the same source fixture.
   const context=vm.createContext({document:{addEventListener(){}},window:{addEventListener(){}},escapeHTML:String});

@@ -50,7 +50,7 @@ def verify_landing(browser):
 
 def verify_profile_dialogs(browser):
     browser("eval", "window.popupUnderlying=document.querySelector('main');window.popupView=view;window.modalKeyLeaks=0;window.modalLeakedKey=()=>window.modalKeyLeaks++;['keydown','keyup','keypress'].forEach(type=>document.addEventListener(type,window.modalLeakedKey));")
-    for name in ("Settings", "System", "Project settings"):
+    for name in ("Settings", "System", "Project"):
         browser("find", "role", "button", "click", "--name", name, "--exact")
         browser("eval", "{const dialog=document.querySelector('tk-dialog[open]'),shade=dialog?.closest('.modal-shade');if(!shade||!document.querySelector('#app').inert||document.querySelector('main')!==window.popupUnderlying||view!==window.popupView||getComputedStyle(shade).backdropFilter!=='blur(6px)')throw new Error('Profile selection is not a blurred popup over the existing view');window.modalKeyLeaks=0;}")
         for key in ("q", "n", "e", "/", "`", "ArrowDown", "Shift", "Shift"):

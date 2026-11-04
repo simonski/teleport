@@ -28,19 +28,51 @@ async function mountCalendar() {
   }catch(error){if(epoch===calendarEpoch&&view==='Calendar')byId('calendar-status').textContent=error.message;}
 }
 
+function finderQuery(value){
+  const text=value.trim(),match=/^(goal|epic|task|story|ticket|action|actions)\s*:\s*(.*)$/i.exec(text);
+  if(!match)return {query:text,kind:'',actions:true};
+  const prefix=match[1].toLowerCase(),kind=({story:'task',ticket:'',action:'',actions:''})[prefix]??prefix;
+  return {query:match[2].trim(),kind,actions:prefix==='action'||prefix==='actions',actionOnly:prefix==='action'||prefix==='actions'};
+}
+function finderActionRank(action,query){
+  const tokens=query.toLocaleLowerCase().split(/\s+/u).filter(Boolean),label=action.title.toLocaleLowerCase(),haystack=(action.title+' '+action.keywords).toLocaleLowerCase();
+  if(!tokens.length||!tokens.every(token=>haystack.includes(token)))return 0;
+  const term=query.toLocaleLowerCase(),position=label.indexOf(term);
+  let score=label===term?9000:position===0?7000:position>=0?5000+Math.max(0,200-position):tokens.every(token=>label.includes(token))?3000:1000;
+  if(action.title.includes(query))score+=30;
+  return score;
+}
+function finderActions(query){
+  const actions=[
+    {title:'Create ticket',keywords:'new task story work add',run:()=>newTicketForm('task')},
+    {title:'Create epic',keywords:'new epic ticket work add',run:()=>newTicketForm('epic')},
+    {title:'Create goal',keywords:'new goal ticket work add',run:()=>newTicketForm('goal')},
+    {title:'Create project',keywords:'new project add',run:()=>projectForm()},
+    {title:'Browse projects',keywords:'project directory manage list',run:()=>openProjectDirectory()},
+    {title:'Harness sessions',keywords:'agent terminal session inspect list manage',run:()=>sessionSwitcher()},
+    {title:'Start or attach default harness',keywords:'agent codex claude copilot terminal session run',run:()=>chooseHarness()},
+    {title:'Open tk console',keywords:'command terminal cli',run:()=>openScriptConsole()},
+    {title:'Settings',keywords:'account appearance harness preferences',run:()=>openPersonalSettings()},
+    {title:'System settings',keywords:'execution agent harness mode',run:()=>openSystemSettings()},
+    ...(projectId?[{title:'Project settings',keywords:'project harness execution agent configuration',run:()=>openProjectSettings()}]:[]),
+    ...supportedNavigation.map(name=>({title:'Open '+name,keywords:name+' view navigate',run:()=>navigateView(name)})),
+  ];
+  return actions.map(action=>({...action,score:finderActionRank(action,query)})).filter(action=>action.score>0).sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title));
+}
+
 function openFinder(explicit=false) {
   if(!session||document.querySelector('tk-dialog[open]')||!explicit&&foregroundOpen())return;
   const dialog=openDialog('Find work',`<label class="sr-only" for="finder-query">Search work or ticket ID</label><input id="finder-query" role="combobox" aria-autocomplete="list" aria-controls="finder-results" aria-expanded="false" autocomplete="off" maxlength="500" placeholder="Search work or #ID"><div id="finder-dropdown" class="finder-dropdown" hidden><div id="finder-results" role="listbox" aria-label="Matching work"></div><p id="finder-status" role="status" aria-live="polite"></p></div>`);
   dialog.classList.add('finder-dialog');
-  const completion=captureDialogCompletion(dialog),input=byId('finder-query'),dropdown=byId('finder-dropdown');let generation=0,timer=null,items=[],index=-1,cursor='',loading=false;
+  const completion=captureDialogCompletion(dialog),input=byId('finder-query'),dropdown=byId('finder-dropdown');let generation=0,timer=null,items=[],tickets=[],actions=[],index=-1,cursor='',loading=false,selectionTouched=false;
   const valid=()=>completion.current();
-  function select(n,scroll=true){index=n;if(index<0||index>=items.length)return;input.setAttribute('aria-activedescendant','finder-option-'+index);const options=byId('finder-results').querySelectorAll('[role=option]');options.forEach((option,n)=>option.setAttribute('aria-selected',String(n===index)));if(scroll)options[index]?.scrollIntoView({block:'nearest'});}
-  function draw(){byId('finder-results').innerHTML=items.map((hit,n)=>`<div role="option" id="finder-option-${n}" aria-selected="false" data-result="${n}"><span class="number">#${hit.ticket.id}</span><strong>${escapeHTML(hit.ticket.title)}</strong><small>${escapeHTML(projectName(hit.ticket.projectId))} · ${escapeHTML(hit.ticket.kind)}</small></div>`).join('');byId('finder-results').querySelectorAll('[data-result]').forEach(option=>{option.onclick=()=>{select(Number(option.dataset.result),false);openSelected();};});select(index>=0&&index<items.length?index:items.length?0:-1,false);}
-  async function search(more=false,advance=false){if(more&&(!cursor||loading))return;const request=++generation,current=input.value.trim(),oldLength=items.length;if(!more){items=[];cursor='';}if(!current)return;loading=true;byId('finder-status').textContent='Searching…';try{const page=await api('searchTickets',{projectId:0,query:current,limit:50,cursor:more?cursor:''});if(!valid()||request!==generation||current!==input.value.trim())return;items=more?[...items,...page.items]:page.items;cursor=page.nextCursor;draw();if(advance&&items.length>oldLength)select(oldLength);byId('finder-status').textContent=items.length?'':'No matching work.';}catch(error){if(valid()&&request===generation)byId('finder-status').textContent=error.message;}finally{if(request===generation)loading=false;}}
-  function schedule(){generation++;loading=false;items=[];index=-1;cursor='';byId('finder-results').innerHTML='';input.removeAttribute('aria-activedescendant');clearTimeout(timer);const hasQuery=!!input.value.trim();dropdown.hidden=!hasQuery;input.setAttribute('aria-expanded',String(hasQuery));byId('finder-status').textContent=hasQuery?'Searching…':'';if(hasQuery)timer=setTimeout(()=>{if(valid())search();},160);}
-  async function openSelected(){if(!valid()||index<0||!items[index])return;const id=items[index].ticket.id;dialog.classList.remove('finder-dialog');dialog.close();await editTicket(id);}
+  function select(n,scroll=true,touched=false){index=n;if(index<0||index>=items.length)return;if(touched)selectionTouched=true;input.setAttribute('aria-activedescendant','finder-option-'+index);const options=byId('finder-results').querySelectorAll('[role=option]');options.forEach((option,n)=>option.setAttribute('aria-selected',String(n===index)));if(scroll)options[index]?.scrollIntoView({block:'nearest'});}
+  function draw(){const selected=items[index],key=selectionTouched?selected?.key:null;items=[...tickets.map(hit=>({key:'ticket:'+hit.ticket.id,ticket:hit.ticket})),...actions.map(action=>({key:'action:'+action.title,action}))];index=key?items.findIndex(item=>item.key===key):-1;if(index<0&&items.length)index=0;let section='';byId('finder-results').innerHTML=items.map((item,n)=>{const group=item.ticket?'Tickets':'Actions',heading=group!==section?`<div class="finder-section" role="presentation">${group}</div>`:'';section=group;return item.ticket?`${heading}<div role="option" id="finder-option-${n}" aria-selected="false" data-result="${n}"><span class="number">#${item.ticket.id}</span><strong>${escapeHTML(item.ticket.title)}</strong><small>${escapeHTML(projectName(item.ticket.projectId))} · ${escapeHTML(item.ticket.kind)}</small></div>`:`${heading}<div role="option" id="finder-option-${n}" aria-selected="false" data-result="${n}"><span class="finder-action-icon" aria-hidden="true">↗</span><strong>${escapeHTML(item.action.title)}</strong><small>Action</small></div>`;}).join('');byId('finder-results').querySelectorAll('[data-result]').forEach(option=>{option.onclick=()=>{select(Number(option.dataset.result),false,true);openSelected();};});select(index,false);}
+  async function search(more=false,advance=false){if(more&&(!cursor||loading))return;const request=++generation,current=input.value.trim(),parsed=finderQuery(current),oldLength=tickets.length;if(!more){tickets=[];cursor='';actions=parsed.actions&&parsed.query?finderActions(parsed.query):[];draw();}if(!parsed.query){byId('finder-status').textContent='Enter a search term.';return;}if(parsed.actionOnly){byId('finder-status').textContent=items.length?'':'No matching actions.';return;}loading=true;byId('finder-status').textContent='Searching…';try{const page=await api('searchTickets',{projectId:0,query:parsed.query,...(parsed.kind?{kind:parsed.kind}:{}),limit:50,cursor:more?cursor:''});if(!valid()||request!==generation||current!==input.value.trim())return;tickets=more?[...tickets,...page.items]:page.items;cursor=page.nextCursor;draw();if(advance&&tickets.length>oldLength)select(oldLength,true,true);byId('finder-status').textContent=items.length?'':'No matching results.';}catch(error){if(valid()&&request===generation)byId('finder-status').textContent=error.message;}finally{if(request===generation)loading=false;}}
+  function schedule(){generation++;loading=false;items=[];tickets=[];actions=[];index=-1;cursor='';selectionTouched=false;byId('finder-results').innerHTML='';input.removeAttribute('aria-activedescendant');clearTimeout(timer);const hasQuery=!!input.value.trim();dropdown.hidden=!hasQuery;input.setAttribute('aria-expanded',String(hasQuery));byId('finder-status').textContent=hasQuery?'Searching…':'';if(hasQuery)timer=setTimeout(()=>{if(valid())search();},160);}
+  async function openSelected(){if(!valid()||index<0||!items[index])return;const item=items[index];dialog.classList.remove('finder-dialog');dialog.close();try{if(item.ticket)await editTicket(item.ticket.id);else await item.action.run();}catch(error){showError(error);}}
   on('finder-query','input',schedule);dropdown.onscroll=()=>{if(dropdown.scrollHeight-dropdown.scrollTop-dropdown.clientHeight<30)search(true);};
-  input.onkeydown=e=>{if(e.isComposing)return;if(e.key==='Enter'){e.preventDefault();openSelected();return;}if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if(items.length){if(e.key==='ArrowDown'&&index===items.length-1&&cursor)search(true,true);else select((index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length);}}};
+  input.onkeydown=e=>{if(e.isComposing)return;if(e.key==='Enter'){e.preventDefault();openSelected();return;}if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if(items.length){if(e.key==='ArrowDown'&&index===items.length-1&&cursor)search(true,true);else select((index+(e.key==='ArrowDown'?1:-1)+items.length)%items.length,true,true);}}};
   byId('editor-form').onsubmit=e=>{e.preventDefault();openSelected();};
   dialog.addEventListener('close',()=>{generation++;clearTimeout(timer);dialog.classList.remove('finder-dialog');},{once:true});input.focus();
 }

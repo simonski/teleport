@@ -118,7 +118,7 @@ function bindShell() {
     const system=document.createElement('button');system.type='button';system.id='account-system';system.setAttribute('role','menuitem');system.textContent='System';settings.after(system);
     on('account-system','click',()=>{closeAccountMenu();openSystemSettings();});
     if(currentProject()){
-      const project=document.createElement('button');project.type='button';project.id='account-project-settings';project.setAttribute('role','menuitem');project.textContent='Project settings';system.after(project);
+      const project=document.createElement('button');project.type='button';project.id='account-project-settings';project.setAttribute('role','menuitem');project.textContent='Project';system.after(project);
       on('account-project-settings','click',()=>{closeAccountMenu();openProjectSettings();});
     }
   }

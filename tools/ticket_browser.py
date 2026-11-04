@@ -1,6 +1,49 @@
 """Real-browser checks for view-aware creation and ticket keyboard ownership."""
 import json
 
+def verify_todo_menu(browser, project_id, ticket):
+    browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
+    browser("wait", "#project + .choice-button")
+    browser("select", "#project", str(project_id))
+    browser("wait", "--fn", "document.querySelector('#account-project-settings')?.textContent==='Project'")
+    browser("click", "#account")
+    browser("eval", "if(document.querySelector('#account-project-settings')?.textContent!=='Project')throw new Error('Profile project action has the wrong label')")
+    browser("click", "#account-project-settings")
+    browser("wait", "--fn", "document.querySelector('#editor h2')?.textContent==='Project · Smoke flight'")
+    browser("press", "Escape")
+    browser("click", '#nav-views [data-view="Todos"]')
+    card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
+    browser("wait", card)
+    def menu():
+        browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
+        browser("press", "Shift+F10")
+        browser("wait", '[data-ticket-menu="open"]')
+    def lane(role):
+        browser("wait", "--fn", f'document.querySelector({json.dumps(card)})?.closest(".lane")?.querySelector("h2")?.textContent==={json.dumps(role)}')
+    lane('Doing')
+    menu()
+    browser("eval", "if(!['ahead','behind','status','priority','open','delete'].every(id=>document.querySelector('[data-ticket-menu='+id+']')))throw new Error('Missing Todos menu item')")
+    browser("click", '[data-ticket-menu="behind"]')
+    lane('Todo')
+    menu()
+    browser("click", '[data-ticket-menu="ahead"]')
+    lane('Doing')
+    menu()
+    browser("click", '[data-ticket-menu="priority"]')
+    browser("click", '[data-ticket-priority="high"]')
+    browser("wait", "--fn", f'tickets.some(t=>t.id==={ticket["id"]}&&t.priority==="high")')
+    menu()
+    browser("click", '[data-ticket-menu="status"]')
+    browser("find", "role", "menuitem", "click", "--name", "Done", "--exact")
+    browser("wait", '#agreement')
+    browser("press", "Escape")
+    lane('Doing')
+    menu()
+    browser("click", '[data-ticket-menu="delete"]')
+    browser("wait", "--fn", "document.querySelector('#editor h2')?.textContent==='Delete ticket'")
+    browser("click", '#editor button[type="submit"]')
+    browser("wait", "--fn", f'!document.querySelector({json.dumps(card)})')
+
 def verify_shortcut_project(browser, tk, project_id):
     browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
     browser("wait", "#project + .choice-button")

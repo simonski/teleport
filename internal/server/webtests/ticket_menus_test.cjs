@@ -18,6 +18,18 @@ test('Teleport is offered only for the exact running ticket attachment',()=>{
   assert.equal(f.run("ticketMenuEntries(ticket,rows,true).some(entry=>entry.id==='questions')"),true);
 });
 
+test('Todos menu exposes adjacent valid moves, status, priority, open and guarded delete',()=>{
+  const f=fixture();f.context.roleAllowsWrite=()=>true;f.context.roleAllowsMaintain=()=>true;
+  f.context.humanMoves=()=>[{target:'lane:todo',role:'Todo'},{target:'lane:done',role:'Done'}];
+  f.run("view='Todos';ticket={id:7,projectId:2,kind:'task',agent:false,status:'Doing',priority:'medium'}");
+  assert.deepEqual(Array.from(f.run('ticketMenuEntries(ticket,[]).map(entry=>entry.id)')),['ahead','behind','status','priority','open','delete']);
+  assert.equal(f.run("ticketMenuEntries(ticket,[])[0].target"),'lane:done');
+  assert.equal(f.run("ticketMenuEntries(ticket,[])[1].target"),'lane:todo');
+  f.context.roleAllowsWrite=()=>false;f.context.roleAllowsMaintain=()=>false;
+  assert.equal(f.run('ticketMenuEntries(ticket,[]).filter(entry=>entry.disabled).length'),5);
+  assert.equal(f.run('ticketMenuEntries(ticket,[]).find(entry=>entry.id==="open").disabled'),undefined);
+});
+
 test('a delayed menu read cannot replace a newer foreground interaction',async()=>{
   const f=fixture();f.context.source={isConnected:true};const request=f.run('showTicketMenu(7,source)');
   f.run('detailEpoch++');f.release({id:7});await request;

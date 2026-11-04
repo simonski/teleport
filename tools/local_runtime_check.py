@@ -182,11 +182,10 @@ def main(database_url=None):
                 card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
                 browser("wait", card)
                 browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
-                browser("press", "Shift+F10"); browser("wait", '[data-ticket-menu="agents"]'); browser("click", '[data-ticket-menu="agents"]')
-                browser("wait", '[data-agent-usage]'); browser("click", '[data-agent-usage]')
+                browser("press", "Shift+F10"); browser("wait", '[data-agent-usage]')
+                browser("click", '[data-agent-usage]')
                 first = wait_for(lambda: (items[-1] if len(items := tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 1 and items[-1]["ready"] else None))
                 session_id = first["sessionId"]
-                browser("wait", '#terminal-review'); browser("click", '#terminal-review')
                 browser("wait", '.proposal-targets li button'); browser("click", '.proposal-targets li button')
                 browser("fill", '#editor [name="feedback"]', "Split the epic")
                 browser("click", '#editor button[type="submit"]')
@@ -195,7 +194,6 @@ def main(database_url=None):
                 browser("find", "role", "button", "click", "--name", "Revise with feedback", "--exact")
                 second = wait_for(lambda: (items[-1] if len(items := tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 2 and items[-1]["ready"] else None))
                 session_id = second["sessionId"]
-                browser("wait", '#terminal-review'); browser("click", '#terminal-review')
                 browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.textContent.includes('Revised epic')")
                 browser("screenshot", "/tmp/teleport-proposal-review.png")
                 browser("click", '[data-proposal-accept]')
@@ -217,11 +215,23 @@ def main(database_url=None):
             assert totals["invocations"] == 2 and totals["succeeded"] == 2 and totals["tokens"] == 300
             failing = tk("saveAgentDefinition", {"name":"Failing planner","goal":"fixture-failure","prompt":"","skills":[],"harness":args.proposal_harness,"requestId":"failing-planner"})
             failing_usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Fail","agentId":failing["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"failing-usage"})
-            failed = tk("openAgentSession", {"projectId":project["id"],"agentId":failing["id"],"expectedVersion":failing["version"],"ticketId":ticket["id"],"usageId":failing_usage["id"],"usageVersion":failing_usage["version"],"requestId":"failing-run"})
-            session_id = failed["id"]
-            wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == failed["id"] and item["state"] == "exited"), None))
+            if args.browser:
+                browser("press", "Escape")
+                browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
+                browser("press", "Shift+F10")
+                browser("wait", '[data-ticket-menu="proposals"]')
+                assert "available" in browser("eval", 'document.querySelector(\'[data-ticket-menu="proposals"]\').textContent')
+                browser("click", '[data-agent-usage="' + failing_usage["id"] + '"]')
+                browser("wait", '#terminal-retry')
+                browser("click", '#terminal-retry')
+                browser("wait", '#terminal-retry')
+                wait_for(lambda: next((window for window in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if window["name"] == "all" and window["failed"] == 2), None))
+            else:
+                failed = tk("openAgentSession", {"projectId":project["id"],"agentId":failing["id"],"expectedVersion":failing["version"],"ticketId":ticket["id"],"usageId":failing_usage["id"],"usageVersion":failing_usage["version"],"requestId":"failing-run"})
+                session_id = failed["id"]
+                wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == failed["id"] and item["state"] == "exited"), None))
             totals = next(window for window in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if window["name"] == "all")
-            assert totals["invocations"] == 3 and totals["failed"] == 1 and totals["tokens"] == 450
+            assert totals["invocations"] == (4 if args.browser else 3) and totals["failed"] == (2 if args.browser else 1) and totals["tokens"] == (600 if args.browser else 450)
             assert len(tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 2
             tk("shutdownLocalRuntime", {"confirm":True})
             clean = True

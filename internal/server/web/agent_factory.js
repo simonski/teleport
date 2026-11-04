@@ -41,7 +41,7 @@ async function startAgentConversation(agent,project,ticket=0,usage=null,previous
   if(agentLaunch?.pending)return;
   if(!agentLaunch||agentLaunch.key!==key)agentLaunch={key,requestId:crypto.randomUUID(),pending:false};
   const launch=agentLaunch;launch.pending=true;
-  try{const row=await api('openAgentSession',{projectId:project,agentId:agent.id,expectedVersion:agent.version,...(ticket?{ticketId:ticket}:{}),...(usage?{usageId:usage.id,usageVersion:usage.version}:{}),...(previousId?{proposalPreviousId:previousId}:{}),requestId:launch.requestId});if(agentLaunch===launch)agentLaunch=null;await refreshSessionRoster();if(row.state==='failed')throw new Error('Agent session could not start: '+(row.errorCode||'launch failed'));if(session?.account.id===actor&&detailEpoch===epoch)await openTerminal(row.id);}
+  try{const row=await api('openAgentSession',{projectId:project,agentId:agent.id,expectedVersion:agent.version,...(ticket?{ticketId:ticket}:{}),...(usage?{usageId:usage.id,usageVersion:usage.version}:{}),...(previousId?{proposalPreviousId:previousId}:{}),requestId:launch.requestId});if(agentLaunch===launch)agentLaunch=null;await refreshSessionRoster();if(row.state==='failed')throw new Error('Agent session could not start: '+(row.errorCode||'launch failed'));if(session?.account.id===actor&&detailEpoch===epoch)await openTerminal(row.id,usage?.kind==='todo-proposal'?{autoReview:true,retry:()=>startAgentConversation(agent,project,ticket,usage,previousId)}:undefined);}
   catch(error){if(error.status&&error.status<500&&agentLaunch===launch)agentLaunch=null;throw error;}
   finally{launch.pending=false;}
 }

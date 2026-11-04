@@ -30,6 +30,23 @@ test('Todos menu exposes adjacent valid moves, status, priority, open and guarde
   assert.equal(f.run('ticketMenuEntries(ticket,[]).find(entry=>entry.id==="open").disabled'),undefined);
 });
 
+test('configured proposal actions appear directly by their configured name in the matching lane',()=>{
+  const f=fixture();f.context.roleAllowsWrite=()=>true;f.context.roleAllowsMaintain=()=>true;f.context.humanMoves=()=>[];
+  f.run("view='Todos';ticket={id:7,projectId:2,kind:'task',agent:false,status:'Todo',workflow:'human@1',phase:'todo'};agents=[{id:'planner'}];usages=[{id:'plan',agentId:'planner',name:'Idea Composer',kind:'todo-proposal',enabled:true,view:'Todos',workflow:'human@1',phase:'todo'},{id:'other',agentId:'planner',name:'Other',kind:'todo-proposal',enabled:true,view:'Todos',workflow:'human@1',phase:'doing'}]");
+  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).find(entry=>entry.usageId==='plan').label"),'Idea Composer');
+  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).some(entry=>entry.usageId==='other')"),false);
+  assert.match(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).find(entry=>entry.id==='proposals').label"),/available/);
+  f.run('agents=[]');assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages).find(entry=>entry.usageId==='plan').disabled"),true);
+});
+
+test('a late proposal review cannot replace a newer dialog',async()=>{
+  const f=fixture();let resolveTicket,closed=false,form={};
+  f.context.api=()=>new Promise(resolve=>{resolveTicket=resolve});f.context.pages=async()=>[];
+  f.context.dialog={open:true,querySelector:()=>form,close(){closed=true;}};
+  const pending=f.run('openTicketProposalReview(7,dialog)');form={};resolveTicket({id:7});await pending;
+  assert.equal(closed,false);
+});
+
 test('a delayed menu read cannot replace a newer foreground interaction',async()=>{
   const f=fixture();f.context.source={isConnected:true};const request=f.run('showTicketMenu(7,source)');
   f.run('detailEpoch++');f.release({id:7});await request;

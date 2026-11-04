@@ -22,7 +22,8 @@ test('Todos menu exposes adjacent valid moves, status, priority, open and guarde
   const f=fixture();f.context.roleAllowsWrite=()=>true;f.context.roleAllowsMaintain=()=>true;
   f.context.humanMoves=()=>[{target:'lane:todo',role:'Todo'},{target:'lane:done',role:'Done'}];
   f.run("view='Todos';ticket={id:7,projectId:2,kind:'task',agent:false,status:'Doing',priority:'medium'}");
-  assert.deepEqual(Array.from(f.run('ticketMenuEntries(ticket,[]).map(entry=>entry.id)')),['ahead','behind','status','priority','prompt','agents','proposals','open','delete']);
+  assert.deepEqual(Array.from(f.run('ticketMenuEntries(ticket,[]).map(entry=>entry.id)')),['ahead','behind','status','priority','prompt','agents','open','delete']);
+  assert.equal(f.run("ticketMenuEntries(ticket,[]).find(entry=>entry.id==='prompt').label"),'Show Prompt');
   assert.equal(f.run("ticketMenuEntries(ticket,[])[0].target"),'lane:done');
   assert.equal(f.run("ticketMenuEntries(ticket,[])[1].target"),'lane:todo');
   f.context.roleAllowsWrite=()=>false;f.context.roleAllowsMaintain=()=>false;
@@ -30,13 +31,13 @@ test('Todos menu exposes adjacent valid moves, status, priority, open and guarde
   assert.equal(f.run('ticketMenuEntries(ticket,[]).find(entry=>entry.id==="open").disabled'),undefined);
 });
 
-test('configured proposal actions appear directly by their configured name in the matching lane',()=>{
+test('proposal review appears only for active proposals and history is labelled separately',()=>{
   const f=fixture();f.context.roleAllowsWrite=()=>true;f.context.roleAllowsMaintain=()=>true;f.context.humanMoves=()=>[];
   f.run("view='Todos';ticket={id:7,projectId:2,kind:'task',agent:false,status:'Todo',workflow:'human@1',phase:'todo'};agents=[{id:'planner'}];usages=[{id:'plan',agentId:'planner',name:'Idea Composer',kind:'todo-proposal',enabled:true,view:'Todos',workflow:'human@1',phase:'todo'},{id:'other',agentId:'planner',name:'Other',kind:'todo-proposal',enabled:true,view:'Todos',workflow:'human@1',phase:'doing'}]");
-  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).find(entry=>entry.usageId==='plan').label"),'Idea Composer');
-  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).some(entry=>entry.usageId==='other')"),false);
-  assert.match(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).find(entry=>entry.id==='proposals').label"),/available/);
-  f.run('agents=[]');assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages).find(entry=>entry.usageId==='plan').disabled"),true);
+  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages).some(entry=>entry.id==='proposals')"),false);
+  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).find(entry=>entry.id==='proposals').label"),'Proposal history');
+  f.run('ticket.proposalAttention=true');assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages,true).find(entry=>entry.id==='proposals').label"),'Review proposals');
+  assert.equal(f.run("ticketMenuEntries(ticket,[],false,agents,usages).some(entry=>entry.usageId==='plan')"),false);
 });
 
 test('a late proposal review cannot replace a newer dialog',async()=>{

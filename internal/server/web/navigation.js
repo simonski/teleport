@@ -1,6 +1,7 @@
 "use strict";
-const canonicalNavigation=['Home','Backlog','Board','Todos','Calendar','Graph','Workflows','Evolution','Cost'];
-const supportedNavigation=['Home','Backlog','Board','Todos','Calendar','Graph','Workflows','Cost'];
+const canonicalNavigation=['Home','Backlog','Board','Todos','Calendar','Graph','Workflows','Agents','Evolution','Cost'];
+const supportedNavigation=['Home','Backlog','Board','Todos','Calendar','Graph','Workflows','Agents','Cost'];
+function availableNavigation(name){return supportedNavigation.includes(name)&&(name!=='Agents'||!!session?.account?.administrator);}
 function canonicalView(name){return ['Ideas','Goals','Epics','Tickets'].includes(name)?'Backlog':name==='Projects'?'Home':name;}
 function viewLabel(name){return name==='Todos'?'todo':name.toLowerCase();}
 let navigationGesture=null,navigationDeferred=false,navigationSuppressClick=0,navigationApplied=null;
@@ -17,7 +18,7 @@ function navigationIcon(name){
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]||'M3 12h18M12 3v18'}"/></svg>`;
 }
 function navigationHTML(){
-  const names=navigationOrder().filter(name=>supportedNavigation.includes(name));
+  const names=navigationOrder().filter(availableNavigation);
   return `<nav id="workspace-nav" class="tabs" aria-label="Workspace views"><div id="nav-views" class="nav-views">${names.map(name=>`<button type="button" data-view="${name}" class="tab ${name===view?'selected':''}" ${name===view?'aria-current="page"':''} aria-label="${viewLabel(name)}" title="${viewLabel(name)} · Alt+Shift+Arrow to reorder" aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight Alt+Shift+ArrowUp Alt+Shift+ArrowDown"><span class="nav-grip" aria-hidden="true">⠿</span>${navigationIcon(name)}<span class="tab-label">${viewLabel(name)}</span></button>`).join('')}</div><span class="header-space"></span><div class="nav-save"><span id="nav-save-status" role="status"></span><button type="button" class="secondary" id="nav-retry" hidden>Retry</button></div><button type="button" class="secondary" id="nav-collapse" aria-controls="nav-views">${navigationIcon('Board')}<span class="tab-label">Collapse header</span></button></nav>`;
 }
 function navigationBusy(){return !!navigationGesture;}

@@ -4,10 +4,10 @@ function resetLocationWriter(){locationEpoch++;locationOwner='';locationKnown=''
 function locationCacheKey(account){return 'teleport-location:'+account.installationId+':'+account.account.id;}
 function readLocationCache(account){if(typeof browserLocationAllowed!=='function'||!browserLocationAllowed())return null;try{return JSON.parse(localStorage.getItem(locationCacheKey(account))||'null');}catch{return null;}}
 function writeLocationCache(account,value){if(typeof browserLocationAllowed!=='function'||!browserLocationAllowed())return;try{localStorage.setItem(locationCacheKey(account),JSON.stringify(value));}catch{/* Server persistence remains available when browser storage is disabled. */}}
-function validLocation(context,available){return context&&supportedNavigation.includes(context.view)&&Number.isSafeInteger(context.projectId)&&context.projectId>=0&&(context.projectId===0||available.some(project=>project.id===context.projectId));}
+function validLocation(context,available,account=session){return context&&supportedNavigation.includes(context.view)&&(context.view!=='Agents'||!!account?.account?.administrator)&&Number.isSafeInteger(context.projectId)&&context.projectId>=0&&(context.projectId===0||available.some(project=>project.id===context.projectId));}
 function chooseInitialLocation(account,available){
   const cache=readLocationCache(account),fallback={view:account.preferences.defaultView,projectId:account.preferences.defaultProject};
-  return [cache?.pending?cache:null,account.lastLocation,cache,fallback,{view:'Home',projectId:0}].map(context=>context?{...context,view:typeof canonicalView==='function'?canonicalView(context.view):context.view}:context).find(context=>validLocation(context,available));
+  return [cache?.pending?cache:null,account.lastLocation,cache,fallback,{view:'Home',projectId:0}].map(context=>context?{...context,view:typeof canonicalView==='function'?canonicalView(context.view):context.view}:context).find(context=>validLocation(context,available,account));
 }
 function rememberCurrentLocation(force=false){
   if(!session||!validLocation({view,projectId},projects))return;

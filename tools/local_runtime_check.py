@@ -21,11 +21,14 @@ def main(database_url=None):
     parser.add_argument("--native-large-frame", action="store_true", help="Exercise a large native protocol frame with the fixture")
     parser.add_argument("--shell-pty", action="store_true", help="Exercise a real local zsh PTY without an agent")
     parser.add_argument("--codex-pty", action="store_true", help="Exercise direct Codex PTY with a zero-model fixture")
+    parser.add_argument("--persona-pty", action="store_true", help="Exercise an agent persona through the zero-model Codex PTY fixture; requires --codex-pty")
     parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY with a zero-model fixture")
     parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
     parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
     args = parser.parse_args()
+    if args.persona_pty and not args.codex_pty:
+        parser.error("--persona-pty requires --codex-pty")
     folder = Path(tempfile.mkdtemp(prefix="teleport-terminal-proof-"))
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -36,6 +39,11 @@ def main(database_url=None):
         isolated_home = folder / "home"
         isolated_home.mkdir(mode=0o700)
         environment["HOME"] = str(isolated_home)
+        if args.persona_pty:
+            skill = isolated_home / ".agents/skills/sample"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("---\nname: sample\ndescription: Fixture skill\n---\nFixture skill.\n")
+            environment["TK_PERSONA_EXPECT"] = "review-role-marker"
     if args.shell_pty:
         shell_home = folder / "shell-config"
         shell_home.mkdir(mode=0o700)
@@ -126,11 +134,18 @@ def main(database_url=None):
             git("checkout", "-b", "console-feature")
         operation = "openShellSession" if args.shell_pty else "openCodexTerminal" if args.codex_pty else "open" + args.harness_pty.title() + "Terminal" if args.harness_pty else "openConsoleSession"
         start = {"projectId": project["id"], "requestId": "terminal-start"}
+        if args.persona_pty:
+            definition = tk("saveAgentDefinition", {"name":"Fixture reviewer","goal":"review-role-marker","prompt":"Ask before changing anything","skills":["sample"],"harness":"codex","model":"fixture-model","thinking":"high","requestId":"persona-create"})
+            operation = "openAgentSession"
+            start.update({"agentId":definition["id"],"expectedVersion":definition["version"]})
         if not args.shell_pty and not args.codex_pty and not args.harness_pty:
             start["harness"] = harness
         row = tk(operation, start)
         session_id = row["id"]
         assert row["state"] == "running" and row["ticketId"] == 0
+        if args.persona_pty:
+            updated = tk("saveAgentDefinition", {"id":definition["id"],"expectedVersion":definition["version"],"name":"Fixture reviewer","goal":"review-role-marker","prompt":"Updated instructions","skills":["sample"],"harness":"codex","model":"fixture-model","thinking":"high","requestId":"persona-update"})
+            assert updated["version"] == definition["version"] + 1
         assert tk(operation, start)["id"] == session_id
         import base64
         def read():
@@ -147,10 +162,42 @@ def main(database_url=None):
             manifest = json.loads((folder / "runtime/sessions.json").read_text())[session_id]
             assert not manifest.get("native") and not (folder / "runtime" / (session_id + ".client.json")).exists()
             wait_for(lambda: "direct Codex fixture ready" in read())
+            if args.persona_pty:
+                assert row["personaId"] == definition["id"] and row["personaName"] == "Fixture reviewer"
+                assert "persona configuration verified" in read()
             data = base64.b64encode(b"hello\n").decode()
             assert tk("sendSessionInput", {"id": session_id, "requestId": "direct-input", "data": data})["state"] == "delivered"
             wait_for(lambda: "direct fixture received: hello" in read())
             tk("resizeSession", {"id": session_id, "cols": 120, "rows": 35})
+            if args.persona_pty and args.browser:
+                browser("open", endpoint)
+                browser_open = True
+                browser("find", "label", "Username", "fill", "admin")
+                browser("find", "label", "Password", "fill", "password")
+                browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                browser("wait", "#welcome-status")
+                browser("press", "Escape")
+                browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
+                browser("click", "#project + .choice-button")
+                browser("click", '.choice-list [data-value="' + str(project["id"]) + '"]')
+                browser("wait", "--fn", "document.querySelector('#account-project-settings')")
+                browser("click", '[data-view="Agents"]')
+                browser("wait", "[data-agent-start]")
+                browser("click", "[data-agent-start]")
+                browser("wait", ".xterm-screen")
+                second = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] != session_id and item.get("personaId") == definition["id"]), None))
+                wait_for(lambda: "persona configuration verified" in base64.b64decode(tk("attachSession", {"id": second["id"]}).get("data", "")).decode(errors="replace"))
+                for key in "quit":
+                    browser("press", key)
+                browser("press", "Enter")
+                browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == second["id"] and item["state"] == "exited"), None))
+                tk("stopSession", {"id": session_id, "confirm": True})
+                wait_for(lambda: all(item["state"] in ("exited", "failed") for item in tk("listSessions")["items"]))
+                tk("shutdownLocalRuntime", {"confirm": True})
+                clean = True
+                print("PASS: agent factory launches a configured persona PTY, accepts input and closes on exit; no model calls")
+                return
             if args.browser:
                 fixture_dir = folder / "host-fixture"
                 fixture_dir.mkdir()

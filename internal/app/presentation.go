@@ -216,6 +216,9 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 		p.DefaultView = "Home"
 	}
 	p.DefaultView = canonicalView(p.DefaultView)
+	if p.DefaultView == "Agents" && !a.Administrator {
+		p.DefaultView = "Home"
+	}
 	p.NavigationOrder = normalizeNavigationOrder(p.NavigationOrder)
 	if !contains([]string{"top", "left", "right"}, p.NavigationPosition) {
 		p.NavigationPosition = "top"
@@ -234,7 +237,7 @@ func personalPreferences(st *model.State, a model.Account) model.Preferences {
 	return p
 }
 func validRecent(st *model.State, a model.Account, c model.RecentContext) error {
-	if !contains([]string{"Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Cost"}, canonicalView(c.View)) {
+	if !contains([]string{"Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Agents", "Cost"}, canonicalView(c.View)) || canonicalView(c.View) == "Agents" && !a.Administrator {
 		return failure(422, "invalid_view", "Choose a shipped workspace view")
 	}
 	if c.ProjectID != 0 {

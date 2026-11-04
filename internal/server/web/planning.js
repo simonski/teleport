@@ -55,7 +55,7 @@ function finderActions(query){
     {title:'Settings',keywords:'account appearance harness preferences',run:()=>openPersonalSettings()},
     {title:'System settings',keywords:'execution agent harness mode',run:()=>openSystemSettings()},
     ...(projectId?[{title:'Project settings',keywords:'project harness execution agent configuration',run:()=>openProjectSettings()}]:[]),
-    ...supportedNavigation.map(name=>({title:'Open '+name,keywords:name+' view navigate',run:()=>navigateView(name)})),
+    ...supportedNavigation.filter(availableNavigation).map(name=>({title:'Open '+name,keywords:name+' view navigate',run:()=>navigateView(name)})),
   ];
   return actions.map(action=>({...action,score:finderActionRank(action,query)})).filter(action=>action.score>0).sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title));
 }

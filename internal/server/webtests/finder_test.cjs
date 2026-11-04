@@ -39,7 +39,7 @@ test('finder recognises case-insensitive type prefixes and preserves search casi
 });
 
 test('actions match keywords case-insensitively and prefer closer and exact-case labels',()=>{
-  const context=vm.createContext({document:{addEventListener(){}},window:{addEventListener(){}},projectId:1,supportedNavigation:[]});
+  const context=vm.createContext({document:{addEventListener(){}},window:{addEventListener(){}},projectId:1,supportedNavigation:[],availableNavigation:()=>true});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/planning.js'),'utf8'),context);
   assert.ok(vm.runInContext('finderActions("HARNESS").some(row=>row.title==="Harness sessions")',context));
   assert.ok(vm.runInContext('finderActions("project").some(row=>row.title==="Create project")',context));

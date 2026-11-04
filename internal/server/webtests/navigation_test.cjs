@@ -16,7 +16,7 @@ test('reordering stable view IDs preserves hidden target views and the input ord
   const value=f.run(`(()=>{const before=[...canonicalNavigation],after=moveNavigation(before,'Backlog','Graph',true);return {before,after};})()`);
   assert.equal(value.before[1],'Backlog');
   assert.equal(value.after[value.after.indexOf('Graph')+1],'Backlog');
-  assert.equal(new Set(value.after).size,9);
+  assert.equal(new Set(value.after).size,10);
   assert.ok(value.after.includes('Workflows')&&value.after.includes('Evolution'));
 });
 
@@ -30,6 +30,11 @@ test('visible tab names are lowercase while persisted view identifiers remain st
   ]);
   for(const match of buttons)assert.ok(match[3].includes(`<span class="tab-label">${match[2]}</span>`));
   assert.match(html,/data-view="Todos"[^>]*aria-current="page"/);
+});
+
+test('Agents navigation is shown only to an installation administrator',()=>{
+  const f=fixture();assert.equal(f.run('navigationHTML().includes(\'data-view="Agents"\')'),false);
+  f.run('session.account.administrator=true');assert.equal(f.run('navigationHTML().includes(\'data-view="Agents"\')'),true);
 });
 
 test('remote layout changes defer for foreground ownership and reset without actor leakage',()=>{

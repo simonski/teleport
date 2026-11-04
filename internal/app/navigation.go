@@ -1,7 +1,7 @@
 package app
 
 func canonicalNavigationOrder() []string {
-	return []string{"Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost"}
+	return []string{"Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Agents", "Evolution", "Cost"}
 }
 
 func canonicalView(name string) string {
@@ -29,6 +29,9 @@ func normalizeNavigationOrder(saved []string) []string {
 
 func validNavigationOrder(order []string) bool {
 	allowed := canonicalNavigationOrder()
+	if len(order) == 9 {
+		allowed = []string{"Home", "Backlog", "Board", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost"}
+	}
 	if len(order) == 12 || len(order) == 13 {
 		allowed = []string{"Home", "Ideas", "Goals", "Epics", "Board", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost", "Projects"}
 		if len(order) == 13 {

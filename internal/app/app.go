@@ -228,6 +228,10 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			delete(st.Sessions, digest(token))
 			result = map[string]bool{"signedOut": true}
 			return true, nil
+		case "listAgentDefinitions", "listInstalledAgentSkills", "saveAgentDefinition", "listProjectAgents":
+			var changed bool
+			result, changed, err = agentFactoryCall(st, a, operation, raw)
+			return changed, err
 		default:
 			var changed bool
 			result, changed, err = projectOperations(st, a, operation, raw)

@@ -90,6 +90,7 @@ def verify_finder(browser, project_id, ticket, epic):
     browser("press", "Enter")
     browser("wait", "--fn", "document.querySelector('tk-dialog[open] [name=title]')?.value===window.finderSelectedTitle")
     browser("press", "Escape")
+
     browser("eval", "document.activeElement?.blur()")
     browser("press", "Shift")
     browser("press", "Shift")
@@ -119,6 +120,32 @@ def verify_finder(browser, project_id, ticket, epic):
     browser("wait", "--fn", "document.querySelector('tk-dialog[open] h2')?.textContent==='New project'")
     browser("press", "Escape")
 
+def verify_agent_factory(browser, project_id, ticket):
+    browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
+    browser("wait", "#project + .choice-button")
+    browser("select", "#project", str(project_id))
+    browser("wait", "--fn", "document.querySelector('#account-project-settings')")
+    browser("click", '#nav-views [data-view="Agents"]')
+    browser("wait", "#new-agent")
+    browser("click", "#new-agent")
+    browser("wait", "--fn", "!document.querySelector('#agent-skills')?.textContent.includes('Loading')")
+    browser("fill", '#editor [name="name"]', "Fixture reviewer")
+    browser("fill", '#editor [name="goal"]', "Review project work")
+    browser("fill", '#editor [name="prompt"]', "Ask before changing files")
+    browser("click", '#editor button[type="submit"]')
+    browser("wait", "--fn", "document.querySelector('.agent-factory-card h2')?.textContent==='Fixture reviewer'")
+    browser("screenshot", "/tmp/teleport-agent-factory.png")
+    browser("eval", "if(localSessions.length)throw new Error('Saving an agent started a session');window.agentFactoryProofStart=startAgentConversation;window.agentFactoryProof=null;startAgentConversation=async(agent,project,ticket)=>{window.agentFactoryProof={agent,project,ticket}}")
+    browser("click", '#nav-views [data-view="Todos"]')
+    card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
+    browser("wait", card)
+    browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
+    browser("press", "Shift+F10")
+    browser("click", '[data-ticket-menu="agents"]')
+    browser("wait", '[data-ticket-persona]')
+    browser("click", '[data-ticket-persona]')
+    browser("eval", f'if(window.agentFactoryProof?.agent.name!=="Fixture reviewer"||window.agentFactoryProof.project!=={project_id}||window.agentFactoryProof.ticket!=={ticket["id"]})throw new Error("Ticket agent action lost its context");startAgentConversation=window.agentFactoryProofStart')
+
 def main(temporary_root=None):
     parser = argparse.ArgumentParser(description=__doc__, epilog=f"Total wall-clock budget: {TIMEOUT_SECONDS} seconds, including cleanup.")
     parser.add_argument("--browser", action="store_true")
@@ -131,6 +158,7 @@ def main(temporary_root=None):
     parser.add_argument("--finder-only", action="store_true", help="Verify double-Shift finder across projects; requires --browser")
     parser.add_argument("--ticket-project-only", action="store_true", help="Verify shortcut creation uses the selected project; requires --browser")
     parser.add_argument("--todo-menu-only", action="store_true", help="Verify Todos context menu actions; requires --browser")
+    parser.add_argument("--agent-factory-only", action="store_true", help="Verify agent definitions and ticket action discovery; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
@@ -139,17 +167,17 @@ def main(temporary_root=None):
     parser.add_argument("--overview-only", action="store_true", help="Verify Home, Tickets, Attention and workflow assembly; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.browser_slice or args.todo_menu_only or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
+    if (args.browser_slice or args.agent_factory_only or args.todo_menu_only or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     from postgres import database
     with context as temporary, database(args.database) as database_url:
         folder = Path(temporary)
-        if args.browser and not args.browser_slice and not args.database and not any((args.todo_menu_only,args.ticket_project_only,args.finder_only,args.legal_only,args.connection_only,args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
+        if args.browser and not args.browser_slice and not args.database and not any((args.agent_factory_only,args.todo_menu_only,args.ticket_project_only,args.finder_only,args.legal_only,args.connection_only,args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
-        focus = next((name for name in ("todo_menu", "ticket_project", "finder", "legal", "connection", "console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        focus = next((name for name in ("agent_factory", "todo_menu", "ticket_project", "finder", "legal", "connection", "console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
         profile = Profile("postgres/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
@@ -213,7 +241,7 @@ def main(temporary_root=None):
                 tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Project alpha", "agent": False, "requestId": "finder-case-upper"}))
                 tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "project alpha", "agent": False, "requestId": "finder-case-lower"}))
             if args.browser:
-                seeded_browser = args.browser_slice in ("core", "views") or args.todo_menu_only or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.studio_only or args.overview_only
+                seeded_browser = args.browser_slice in ("core", "views") or args.agent_factory_only or args.todo_menu_only or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.studio_only or args.overview_only
                 if seeded_browser:
                     setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
                     assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
@@ -250,6 +278,10 @@ def main(temporary_root=None):
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                    if args.agent_factory_only:
+                        verify_agent_factory(browser, project["id"], ticket)
+                        print("PASS: administrator agent factory and ticket menu discovery without model calls")
+                        return
                     if args.todo_menu_only:
                         verify_todo_menu(browser, project["id"], ticket, refine_ticket)
                         print("PASS: Todos context menu prompt, refinement, moves, priority and confirmed delete")

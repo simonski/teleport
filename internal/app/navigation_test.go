@@ -13,7 +13,7 @@ import (
 func TestNavigationLayoutPreservesOldClientsAndVersionFences(t *testing.T) {
 	svc, token := fixture(t)
 	p := call(t, svc, token, "getViewPreferences", struct{}{}).(model.Preferences)
-	if len(p.NavigationOrder) != 9 || p.NavigationOrder[2] != "Board" || p.NavigationPosition != "top" || p.NavigationCollapsed {
+	if len(p.NavigationOrder) != 10 || p.NavigationOrder[2] != "Board" || p.NavigationPosition != "top" || p.NavigationCollapsed {
 		t.Fatal("invalid new-account layout", p)
 	}
 	order := append([]string{}, p.NavigationOrder...)
@@ -58,7 +58,7 @@ func TestNavigationAcceptsPreviousViewSetAndPersistsTicketsLocation(t *testing.T
 	p := call(t, svc, token, "getViewPreferences", struct{}{}).(model.Preferences)
 	legacy := []string{"Home", "Ideas", "Goals", "Epics", "Board", "Todos", "Calendar", "Graph", "Workflows", "Evolution", "Cost", "Projects"}
 	saved := call(t, svc, token, "saveViewPreferences", app.ViewPreferencesInput{ExpectedVersion: p.Version, DefaultView: "Tickets", NavigationOrder: &legacy}).(model.Preferences)
-	if len(saved.NavigationOrder) != 9 || saved.NavigationOrder[1] != "Backlog" || saved.DefaultView != "Backlog" {
+	if len(saved.NavigationOrder) != 10 || saved.NavigationOrder[1] != "Backlog" || saved.DefaultView != "Backlog" {
 		t.Fatal("legacy view set did not migrate", saved)
 	}
 	call(t, svc, token, "saveCurrentLocation", map[string]any{"view": "Tickets", "projectId": 0})

@@ -21,6 +21,9 @@ import (
 )
 
 type LocalSessionInfo struct {
+	PersonaName      string     `json:"personaName,omitempty"`
+	PersonaID        string     `json:"personaId,omitempty"`
+	ContextTicketID  int64      `json:"contextTicketId,omitempty"`
 	ProcessID        int        `json:"processId,omitempty"`
 	ReferenceRemoved bool       `json:"referenceRemoved,omitempty"`
 	CapacityReleased bool       `json:"capacityReleased,omitempty"`
@@ -49,10 +52,20 @@ type LocalHarnesses struct {
 	Available []HarnessChoice `json:"available"`
 }
 type OpenLocalSessionInput struct {
+	PersonaID       string `json:"personaId,omitempty"`
+	PersonaVersion  int64  `json:"personaVersion,omitempty"`
+	ContextTicketID int64  `json:"contextTicketId,omitempty"`
 	ProjectID       int64  `json:"projectId"`
 	TicketID        int64  `json:"ticketId,omitempty"`
 	ExpectedVersion int64  `json:"expectedVersion,omitempty"`
 	Harness         string `json:"harness"`
+	RequestID       string `json:"requestId"`
+}
+type OpenAgentSessionInput struct {
+	ProjectID       int64  `json:"projectId"`
+	AgentID         string `json:"agentId"`
+	ExpectedVersion int64  `json:"expectedVersion"`
+	TicketID        int64  `json:"ticketId,omitempty"`
 	RequestID       string `json:"requestId"`
 }
 type OpenShellSessionInput struct {
@@ -122,13 +135,18 @@ func (s *Service) ConfigureLocalRuntime(root, executable string, fixture bool, e
 	}
 }
 func localOperation(op string) bool {
-	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "openShellSession", "openCodexTerminal", "openClaudeTerminal", "openCopilotTerminal", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "removeSessionReference", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
+	return contains([]string{"getLocalHarnesses", "listSessions", "openConsoleSession", "openShellSession", "openCodexTerminal", "openClaudeTerminal", "openCopilotTerminal", "openAgentSession", "startTicketSession", "attachSession", "sendSessionInput", "resizeSession", "stopSession", "removeSessionReference", "shutdownLocalRuntime", "listSessionInterventions", "getSessionRequests", "getSessionTurn", "respondToAgent"}, op)
 }
 func sessionReference(row model.LocalSession) string {
 	return digest(row.ID + "\x00" + row.LaunchID + "\x00" + row.Generation)
 }
 func localInfo(row model.LocalSession) LocalSessionInfo {
 	info := LocalSessionInfo{ProcessID: row.ProcessID, ReferenceRemoved: row.ReferenceRemovedAt != nil, CapacityReleased: row.CapacityReleasedAt != nil, StopRequested: row.StopRequested, ID: row.ID, Creator: row.Creator, ProjectID: row.ProjectID, TicketID: row.TicketID, Harness: row.Harness, State: row.State, Attention: row.Attention, ErrorCode: row.ErrorCode, Directory: row.Worktree.Path, CreatedAt: row.CreatedAt, ExitedAt: row.ExitedAt, ExitCode: row.ExitCode}
+	if row.Persona != nil {
+		info.PersonaID = row.Persona.ID
+		info.PersonaName = row.Persona.Name
+		info.ContextTicketID = row.ContextTicketID
+	}
 	if row.State == "unknown" && row.TicketID == 0 && row.Managed == nil {
 		info.Reference = sessionReference(row)
 	}
@@ -314,6 +332,49 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	}
 	if operation == "getSessionRequests" || operation == "getSessionTurn" || operation == "respondToAgent" {
 		return s.nativeRequestCall(ctx, token, operation, raw)
+	}
+	if operation == "openAgentSession" {
+		var in OpenAgentSessionInput
+		if err = parse(raw, &in); err != nil {
+			return nil, err
+		}
+		if err = require(st, a, in.ProjectID, "Contributor"); err != nil {
+			return nil, err
+		}
+		if saved, ok := st.Receipts[a.ID+":"+operation+":"+in.RequestID]; ok {
+			var id string
+			if json.Unmarshal(saved.Result, &id) != nil {
+				return nil, failure(500, "invalid_receipt", "Saved session receipt is invalid")
+			}
+			row, exists := st.LocalSessions[id]
+			if !exists || row.Persona == nil {
+				return nil, failure(409, "session_ownership_unknown", "Saved agent session is unavailable")
+			}
+			if row.ProjectID != in.ProjectID || row.Persona.ID != in.AgentID || row.Persona.Version != in.ExpectedVersion || row.ContextTicketID != in.TicketID {
+				return nil, failure(409, "request_conflict", "Session request identity was reused with different fields")
+			}
+			if err = localAllowed(st, a, row); err != nil {
+				return nil, err
+			}
+			if row.State != "preparing" {
+				return localInfo(row), nil
+			}
+			return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: row.Harness, PersonaID: row.Persona.ID, PersonaVersion: row.Persona.Version, ContextTicketID: in.TicketID})
+		}
+		agent, ok := st.AgentDefinitions[in.AgentID]
+		if !ok || agent.Archived {
+			return nil, failure(404, "agent_not_found", "Agent is unavailable")
+		}
+		if agent.Version != in.ExpectedVersion {
+			return nil, failure(409, "version_conflict", "Agent changed; refresh before starting")
+		}
+		installed := installedAgentSkills()
+		for _, name := range agent.Skills {
+			if installed[name] == "" {
+				return nil, failure(409, "skill_unavailable", "A selected agent skill is no longer installed")
+			}
+		}
+		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: agent.Harness + "-pty", PersonaID: agent.ID, PersonaVersion: agent.Version, ContextTicketID: in.TicketID})
 	}
 	if operation == "openShellSession" || operation == "openCodexTerminal" || operation == "openClaudeTerminal" || operation == "openCopilotTerminal" {
 		var in OpenShellSessionInput
@@ -505,7 +566,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		if _, err := os.Stat("/bin/zsh"); err != nil {
 			return nil, failure(409, "shell_unavailable", "The local zsh executable /bin/zsh is unavailable")
 		}
-	} else if in.Harness == "codex-pty" && operation == "openCodexTerminal" || in.Harness == "claude-pty" && operation == "openClaudeTerminal" || in.Harness == "copilot-pty" && operation == "openCopilotTerminal" {
+	} else if in.Harness == "codex-pty" && (operation == "openCodexTerminal" || operation == "openAgentSession") || in.Harness == "claude-pty" && (operation == "openClaudeTerminal" || operation == "openAgentSession") || in.Harness == "copilot-pty" && operation == "openCopilotTerminal" {
 		var err error
 		name := strings.TrimSuffix(in.Harness, "-pty")
 		nativePath, err = exec.LookPath(name)
@@ -518,7 +579,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	if len(in.RequestID) < 1 || len(in.RequestID) > 100 || strings.ContainsRune(in.RequestID, 0) {
 		return nil, failure(422, "invalid_request_id", "Use a stable request ID of 1–100 bytes")
 	}
-	if (operation == "openConsoleSession" || operation == "openShellSession" || operation == "openCodexTerminal" || operation == "openClaudeTerminal" || operation == "openCopilotTerminal") && in.TicketID != 0 || operation == "startTicketSession" && in.TicketID == 0 {
+	if (operation == "openConsoleSession" || operation == "openShellSession" || operation == "openCodexTerminal" || operation == "openClaudeTerminal" || operation == "openCopilotTerminal" || operation == "openAgentSession") && in.TicketID != 0 || operation == "startTicketSession" && in.TicketID == 0 {
 		return nil, failure(422, "invalid_session_scope", "Select either a free console or its exact ticket")
 	}
 	st, a, _, err := s.localSnapshot(ctx, token, "")
@@ -545,7 +606,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	if p.Repository == nil {
 		return nil, failure(409, "binding_required", "Grant this project's local repository in Settings")
 	}
-	if operation == "openCodexTerminal" {
+	if operation == "openCodexTerminal" || operation == "openAgentSession" && in.Harness == "codex-pty" {
 		home, homeErr := os.UserHomeDir()
 		if homeErr != nil {
 			return nil, failure(409, "teleport_skill_unavailable", "Cannot locate the user's home for the Teleport skill")
@@ -561,7 +622,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	if err != nil {
 		return nil, err
 	}
-	fingerprint := digest(fmt.Sprintf("%s:%d:%d:%d:%s", operation, in.ProjectID, in.TicketID, in.ExpectedVersion, in.Harness))
+	fingerprint := digest(fmt.Sprintf("%s:%d:%d:%d:%s:%s:%d:%d", operation, in.ProjectID, in.TicketID, in.ExpectedVersion, in.Harness, in.PersonaID, in.PersonaVersion, in.ContextTicketID))
 	var row model.LocalSession
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
 		a, err := executionActor(ctx, st, token)
@@ -608,6 +669,30 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		}
 		st.NextLocalSessionID++
 		row = model.LocalSession{ID: "H" + strconv.FormatInt(st.NextLocalSessionID, 10), Number: st.NextLocalSessionID, Creator: a.ID, ProjectID: in.ProjectID, TicketID: in.TicketID, Harness: in.Harness, LaunchID: randomID(), Generation: ping.Generation, Fingerprint: fingerprint, State: "preparing", BindingVersion: st.Projects[in.ProjectID].Repository.Version, CreatedAt: time.Now().UTC()}
+		if operation == "openAgentSession" {
+			agent, ok := st.AgentDefinitions[in.PersonaID]
+			if !ok || agent.Archived || agent.Version != in.PersonaVersion || agent.Harness+"-pty" != in.Harness {
+				return false, failure(409, "agent_changed", "Agent changed; refresh before starting")
+			}
+			if in.ContextTicketID != 0 {
+				ticket, err := ticketFor(st, a, in.ContextTicketID, "Viewer")
+				if err != nil {
+					return false, err
+				}
+				if ticket.ProjectID != in.ProjectID {
+					return false, failure(422, "invalid_session_scope", "Ticket must belong to the selected project")
+				}
+				data, _ := json.Marshal(struct {
+					ID          int64  `json:"id"`
+					Title       string `json:"title"`
+					Description string `json:"description"`
+					Criteria    string `json:"criteria"`
+				}{ticket.ID, ticket.Title, ticket.Description, ticket.Criteria})
+				row.ContextTicketID = ticket.ID
+				row.ContextTicket = string(data)
+			}
+			row.Persona = &agent
+		}
 		if in.TicketID != 0 {
 			t, err := ticketFor(st, a, in.TicketID, "Contributor")
 			if err != nil {
@@ -805,6 +890,36 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		}
 		if operation == "openClaudeTerminal" || operation == "openCopilotTerminal" {
 			launch.Args = []string{"_harness-pty-session", nativePath}
+		}
+		if operation == "openAgentSession" {
+			skills := installedAgentSkills()
+			paths := []string{}
+			for _, name := range row.Persona.Skills {
+				path := skills[name]
+				if path == "" {
+					current.State, current.ErrorCode = "failed", "skill_unavailable"
+					st.LocalSessions[row.ID] = current
+					row = current
+					return true, nil
+				}
+				paths = append(paths, path)
+			}
+			payload, err := json.Marshal(struct {
+				Agent  model.AgentDefinition `json:"agent"`
+				Skills []string              `json:"skillPaths"`
+				Ticket string                `json:"ticket"`
+			}{*row.Persona, paths, row.ContextTicket})
+			if err != nil {
+				return false, err
+			}
+			if len(payload) > 96<<10 {
+				current.State, current.ErrorCode = "failed", "persona_configuration_too_large"
+				st.LocalSessions[row.ID] = current
+				row = current
+				return true, nil
+			}
+			launch.Args = []string{"_persona-pty-session", nativePath}
+			launch.Env = map[string]string{"TELEPORT_AGENT_PERSONA": string(payload)}
 		}
 		if in.Harness == "codex" {
 			role := "Console"

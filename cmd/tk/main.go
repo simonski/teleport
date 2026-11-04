@@ -134,6 +134,24 @@ func run(args []string) error {
 		harness.Env = append(os.Environ(), "TERM=xterm-256color")
 		return harness.Run()
 	}
+	if command == "_persona-pty-session" {
+		if len(args) != 2 || !filepath.IsAbs(args[1]) {
+			return errors.New("persona wrapper requires an absolute executable path")
+		}
+		parameters, err := personaArguments(os.Getenv("TELEPORT_AGENT_PERSONA"))
+		if err != nil {
+			return err
+		}
+		harness := exec.Command(args[1], parameters...)
+		harness.Stdin, harness.Stdout, harness.Stderr = os.Stdin, os.Stdout, os.Stderr
+		for _, value := range os.Environ() {
+			if !strings.HasPrefix(value, "TELEPORT_AGENT_PERSONA=") {
+				harness.Env = append(harness.Env, value)
+			}
+		}
+		harness.Env = append(harness.Env, "TERM=xterm-256color")
+		return harness.Run()
+	}
 	if command == "_terminal-fixture" {
 		fmt.Println("teleport terminal fixture · no model")
 		scanner := bufio.NewScanner(os.Stdin)

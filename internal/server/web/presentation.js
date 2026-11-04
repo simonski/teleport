@@ -85,7 +85,7 @@ async function flushPreferenceSave() {
   }
 }
 function bindPresentation() {
-  const defaults=byId('preference-view');if(defaults&&typeof supportedNavigation!=='undefined')defaults.innerHTML=supportedNavigation.map(name=>`<option ${(preferenceDraft.defaultView??preferences?.defaultView)===name?'selected':''}>${name}</option>`).join('');
+  const defaults=byId('preference-view');if(defaults&&typeof supportedNavigation!=='undefined')defaults.innerHTML=supportedNavigation.filter(availableNavigation).map(name=>`<option ${(preferenceDraft.defaultView??preferences?.defaultView)===name?'selected':''}>${name}</option>`).join('');
   for(const [id,field] of [['appearance-style','style'],['appearance-mode','mode'],['preference-view','defaultView'],['preference-project','defaultProject'],['navigation-position','navigationPosition']])on(id,'change',e=>queuePreferenceSave(field,field==='defaultProject'?Number(e.target.value):e.target.value));
   on('preference-retry','click',retryPreferenceSave);
   on('navigation-reset','click',()=>{queuePreferenceSave('navigationOrder',[...canonicalNavigation]);queuePreferenceSave('navigationPosition','top');queuePreferenceSave('navigationCollapsed',false);if(byId('navigation-position'))byId('navigation-position').value='top';});

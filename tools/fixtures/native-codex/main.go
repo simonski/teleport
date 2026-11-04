@@ -56,7 +56,15 @@ func main() {
 		tui(strings.TrimPrefix(os.Args[2], "unix://"))
 		return
 	}
-	if len(os.Args) == 1 {
+	if len(os.Args) > 2 && os.Args[1] == "-c" && strings.HasPrefix(os.Args[2], "developer_instructions=") && os.Getenv("TK_PERSONA_EXPECT") != "" {
+		joined := strings.Join(os.Args[1:], " ")
+		if !strings.Contains(joined, os.Getenv("TK_PERSONA_EXPECT")) || !strings.Contains(joined, "SKILL.md") || !strings.Contains(joined, "model_reasoning_effort=high") {
+			fmt.Fprintln(os.Stderr, "persona fixture configuration missing")
+			history.Exit(2)
+		}
+		fmt.Println("persona configuration verified")
+	}
+	if len(os.Args) == 1 || os.Getenv("TK_PERSONA_EXPECT") != "" && len(os.Args) > 2 && os.Args[1] == "-c" {
 		fmt.Println("direct Codex fixture ready")
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {

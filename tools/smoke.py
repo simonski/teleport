@@ -11,7 +11,7 @@ import tempfile
 import time
 import urllib.request
 from navigation_browser import verify_navigation
-from ticket_browser import verify_ticket_keyboard
+from ticket_browser import verify_ticket_keyboard, verify_shortcut_project
 from project_browser import verify_project_directory
 from workflow_lanes_browser import verify_workflow_lanes
 from shell_polish_browser import verify_landing, verify_profile_dialogs
@@ -99,6 +99,7 @@ def main(temporary_root=None):
     parser.add_argument("--connection-only", action="store_true", help="Verify connection loss and recovery with an open draft; requires --browser")
     parser.add_argument("--legal-only", action="store_true", help="Verify draft legal pages and optional browser-storage controls; requires --browser")
     parser.add_argument("--finder-only", action="store_true", help="Verify double-Shift finder across projects; requires --browser")
+    parser.add_argument("--ticket-project-only", action="store_true", help="Verify shortcut creation uses the selected project; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
@@ -107,17 +108,17 @@ def main(temporary_root=None):
     parser.add_argument("--overview-only", action="store_true", help="Verify Home, Tickets, Attention and workflow assembly; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.browser_slice or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
+    if (args.browser_slice or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     from postgres import database
     with context as temporary, database(args.database) as database_url:
         folder = Path(temporary)
-        if args.browser and not args.browser_slice and not args.database and not any((args.finder_only,args.legal_only,args.connection_only,args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
+        if args.browser and not args.browser_slice and not args.database and not any((args.ticket_project_only,args.finder_only,args.legal_only,args.connection_only,args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
-        focus = next((name for name in ("finder", "legal", "connection", "console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        focus = next((name for name in ("ticket_project", "finder", "legal", "connection", "console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
         profile = Profile("postgres/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
@@ -173,7 +174,7 @@ def main(temporary_root=None):
                 other = json.loads(tk("createProject", "--data", json.dumps({"name": "Finder project", "key": "finder-project", "requestId": "finder-project"})))
                 finder_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Across project finder proof", "agent": False, "requestId": "finder-ticket"})))
             if args.browser:
-                seeded_browser = args.browser_slice in ("core", "views") or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.studio_only or args.overview_only
+                seeded_browser = args.browser_slice in ("core", "views") or args.ticket_project_only or args.finder_only or args.legal_only or args.connection_only or args.console_only or args.studio_only or args.overview_only
                 if seeded_browser:
                     setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
                     assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
@@ -210,6 +211,10 @@ def main(temporary_root=None):
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                    if args.ticket_project_only:
+                        verify_shortcut_project(browser, tk, project["id"])
+                        print("PASS: ticket shortcut uses the selected project and checks write access")
+                        return
                     if args.finder_only:
                         verify_finder(browser, project["id"], finder_ticket)
                         print("PASS: double-Shift finder searches across projects and opens the matching ticket")

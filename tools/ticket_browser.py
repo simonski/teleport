@@ -1,6 +1,31 @@
 """Real-browser checks for view-aware creation and ticket keyboard ownership."""
 import json
 
+def verify_shortcut_project(browser, tk, project_id):
+    browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
+    browser("wait", "#project + .choice-button")
+    browser("select", "#project", str(project_id))
+    browser("eval", "document.activeElement?.blur()")
+    browser("press", "n")
+    browser("wait", '#editor [name="title"]')
+    browser("eval", "if(document.querySelector('#editor [name=projectId]')||!document.querySelector('#editor').textContent.includes('Smoke flight'))throw new Error('Selected project was not used directly')")
+    browser("fill", '#editor [name="title"]', "Shortcut project proof")
+    browser("click", '#editor button[type="submit"]')
+    browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+    browser("wait", "--fn", "document.querySelector('#notice')?.textContent==='Ticket created'")
+    items = json.loads(tk("listTickets", "--data", json.dumps({"projectId": project_id})))['items']
+    assert any(item['title'] == 'Shortcut project proof' and item['projectId'] == project_id for item in items)
+    browser("select", "#project", "0")
+    browser("eval", "document.activeElement?.blur()")
+    browser("press", "n")
+    browser("wait", '#editor [name="projectId"]')
+    browser("eval", "if(!document.querySelector('#editor [name=projectId]').required||document.querySelector('#editor [name=projectId]').value!=='')throw new Error('All projects did not require a project choice')")
+    browser("press", "Escape")
+    browser("select", "#project", str(project_id))
+    browser("eval", "document.activeElement?.blur();window.ticketProofRole=roleAllowsWrite;roleAllowsWrite=()=>false")
+    browser("press", "n")
+    browser("eval", "roleAllowsWrite=window.ticketProofRole;if(document.querySelector('tk-dialog[open]')||!document.querySelector('#notice').textContent.includes('does not permit'))throw new Error('Read-only project did not refuse creation')")
+
 
 def verify_ticket_keyboard(browser, tk, project_id):
     def call(operation, data):

@@ -28,6 +28,8 @@ func init() {
 		{"getSpellcheckRun", "Inspect an owned spellcheck run", app.SpellcheckStatusInput{}, app.SpellcheckView{}},
 		{"getTicketSpellchecks", "Inspect spellcheck completion marks", app.IDInput{}, app.SpellcheckMarks{}},
 		{"getUsageSummary", "Summarize authorized agent usage", app.UsageSummaryInput{}, app.UsageSummary{}},
+		{"listUsageBreakdown", "Group authorized historical agent usage", app.UsageBreakdownInput{}, app.UsageBreakdownPage{}},
+		{"getUsageAttribution", "Inspect an owned execution's attribution", app.SessionIDInput{}, model.ExecutionAttribution{}},
 		{"listUsagePrices", "List published model prices", struct{}{}, app.UsagePriceList{}},
 		{"listUsagePriceHistory", "List model price revisions", app.UsagePriceHistoryInput{}, app.Page[model.UsagePrice]{}},
 		{"listUsageValuations", "List an owned run's valuation history", app.UsageValuationHistoryInput{}, app.Page[model.UsageValuation]{}},
@@ -44,7 +46,7 @@ func init() {
 		if entry.name == "startSpellcheck" || entry.name == "getSpellcheckRun" || entry.name == "getTicketSpellchecks" {
 			action = "ACT-1518"
 		}
-		if entry.name == "getUsageSummary" {
+		if entry.name == "getUsageSummary" || entry.name == "listUsageBreakdown" || entry.name == "getUsageAttribution" {
 			action = "ACT-1109"
 		}
 		if entry.name == "listUsagePrices" || entry.name == "listUsagePriceHistory" || entry.name == "listUsageValuations" {

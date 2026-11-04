@@ -253,6 +253,7 @@ func (s *Service) spellcheckCall(ctx context.Context, token, operation string, r
 			}
 			st.NextLocalSessionID++
 			row = model.LocalSession{ID: "H" + strconv.FormatInt(st.NextLocalSessionID, 10), Number: st.NextLocalSessionID, Creator: current.ID, ProjectID: t.ProjectID, Harness: agent.Harness + "-pty", LaunchID: randomID(), Generation: ping.Generation, State: "preparing", BindingVersion: p.Repository.Version, Worktree: model.Worktree{Path: p.Repository.Repository}, CreatedAt: time.Now().UTC(), Persona: &agent, ContextTicketID: t.ID, Spellcheck: &model.SpellcheckRun{UsageID: u.ID, UsageVersion: u.Version, TicketID: t.ID, TicketVersion: t.Version, RequestID: in.RequestID, Payload: string(payload), State: "running"}}
+			row.Attribution = freezeAttribution(st, current, t2.ProjectID, t2.ID, &agent2, u2.ID, false)
 			st.LocalSessions[row.ID] = row
 			remember(st, key, hash, row.ID)
 			return true, nil

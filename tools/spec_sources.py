@@ -23,7 +23,7 @@ def verify(root, document=None):
         failures.append("Missing action definitions")
     if len(actual_actions) != len(set(actual_actions)):
         failures.append("Duplicate action definitions")
-    for prefix, expected in (("A", 185), ("D", 55), ("C", 9)):
+    for prefix, expected in (("A", 186), ("D", 56), ("C", 9)):
         defined = definitions(specification, prefix)
         required = {f"{prefix}{number:02d}" for number in range(1, expected + 1)}
         if set(defined) != required or len(defined) != expected:
@@ -100,7 +100,7 @@ def verify(root, document=None):
     if failures:
         raise SystemExit("FAILED:\n" + "\n".join(failures))
     print(f"PASS: {len(actual_actions)} unique action definitions with valid references")
-    print("PASS: A01–A185, D01–D55, and C01–C09 defined with valid references")
+    print("PASS: A01–A186, D01–D56, and C01–C09 defined with valid references")
     print("PASS: current document references exist; planned/API documents are explicit")
     print("PASS: directed workflow graph, GUI editor, seeded defaults and review-role wording")
     print("PASS: standalone product specification contains no ticket/source provenance")

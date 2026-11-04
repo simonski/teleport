@@ -3,37 +3,61 @@ package model
 import "time"
 
 type LocalSession struct {
-	Spellcheck         *SpellcheckRun   `json:"spellcheck,omitempty"`
-	Persona            *AgentDefinition `json:"persona,omitempty"`
-	ContextTicketID    int64            `json:"contextTicketId,omitempty"`
-	ContextTicket      string           `json:"contextTicket,omitempty"`
-	ProcessID          int              `json:"processId,omitempty"`
-	ReferenceRemovedBy string           `json:"referenceRemovedBy,omitempty"`
-	ReferenceRemovedAt *time.Time       `json:"referenceRemovedAt,omitempty"`
-	CapacityReleasedAt *time.Time       `json:"capacityReleasedAt,omitempty"`
-	CapacityReleasedBy string           `json:"capacityReleasedBy,omitempty"`
-	Managed            *ManagedLaunch   `json:"managed,omitempty"`
-	CredentialHash     string           `json:"credentialHash,omitempty"`
-	CredentialExpires  time.Time        `json:"credentialExpires,omitempty"`
-	StopRequested      bool             `json:"stopRequested"`
-	Number             int64            `json:"number"`
-	ID                 string           `json:"id"`
-	Creator            string           `json:"creator"`
-	ProjectID          int64            `json:"projectId"`
-	TicketID           int64            `json:"ticketId"`
-	Harness            string           `json:"harness"`
-	LaunchID           string           `json:"launchId"`
-	Generation         string           `json:"generation"`
-	Fingerprint        string           `json:"fingerprint"`
-	State              string           `json:"state"`
-	ErrorCode          string           `json:"errorCode,omitempty"`
-	Attention          string           `json:"attention,omitempty"`
-	Worktree           Worktree         `json:"worktree"`
-	BindingVersion     int64            `json:"bindingVersion"`
-	InputSequence      int64            `json:"inputSequence"`
-	CreatedAt          time.Time        `json:"createdAt"`
-	ExitedAt           *time.Time       `json:"exitedAt,omitempty"`
-	ExitCode           *int             `json:"exitCode,omitempty"`
+	Attribution        *ExecutionAttribution `json:"attribution,omitempty"`
+	Spellcheck         *SpellcheckRun        `json:"spellcheck,omitempty"`
+	Persona            *AgentDefinition      `json:"persona,omitempty"`
+	ContextTicketID    int64                 `json:"contextTicketId,omitempty"`
+	ContextTicket      string                `json:"contextTicket,omitempty"`
+	ProcessID          int                   `json:"processId,omitempty"`
+	ReferenceRemovedBy string                `json:"referenceRemovedBy,omitempty"`
+	ReferenceRemovedAt *time.Time            `json:"referenceRemovedAt,omitempty"`
+	CapacityReleasedAt *time.Time            `json:"capacityReleasedAt,omitempty"`
+	CapacityReleasedBy string                `json:"capacityReleasedBy,omitempty"`
+	Managed            *ManagedLaunch        `json:"managed,omitempty"`
+	CredentialHash     string                `json:"credentialHash,omitempty"`
+	CredentialExpires  time.Time             `json:"credentialExpires,omitempty"`
+	StopRequested      bool                  `json:"stopRequested"`
+	Number             int64                 `json:"number"`
+	ID                 string                `json:"id"`
+	Creator            string                `json:"creator"`
+	ProjectID          int64                 `json:"projectId"`
+	TicketID           int64                 `json:"ticketId"`
+	Harness            string                `json:"harness"`
+	LaunchID           string                `json:"launchId"`
+	Generation         string                `json:"generation"`
+	Fingerprint        string                `json:"fingerprint"`
+	State              string                `json:"state"`
+	ErrorCode          string                `json:"errorCode,omitempty"`
+	Attention          string                `json:"attention,omitempty"`
+	Worktree           Worktree              `json:"worktree"`
+	BindingVersion     int64                 `json:"bindingVersion"`
+	InputSequence      int64                 `json:"inputSequence"`
+	CreatedAt          time.Time             `json:"createdAt"`
+	ExitedAt           *time.Time            `json:"exitedAt,omitempty"`
+	ExitCode           *int                  `json:"exitCode,omitempty"`
+}
+
+// ExecutionAttribution records admission-time identity and hierarchy, without
+// inferring delegation from an account that merely hosts a supervisor.
+type ExecutionAttribution struct {
+	ProjectID       int64  `json:"projectId"`
+	ProjectVersion  int64  `json:"projectVersion"`
+	CallerKind      string `json:"callerKind"`
+	CallerID        string `json:"callerId,omitempty"`
+	CallerCallID    string `json:"callerCallId,omitempty"`
+	InitiatorID     string `json:"initiatorId,omitempty"`
+	ParentSessionID string `json:"parentSessionId,omitempty"`
+	AgentID         string `json:"agentId,omitempty"`
+	AgentName       string `json:"agentName,omitempty"`
+	AgentVersion    int64  `json:"agentVersion,omitempty"`
+	UsageID         string `json:"usageId,omitempty"`
+	TicketID        int64  `json:"ticketId,omitempty"`
+	TicketVersion   int64  `json:"ticketVersion,omitempty"`
+	EpicID          int64  `json:"epicId,omitempty"`
+	EpicVersion     int64  `json:"epicVersion,omitempty"`
+	GoalID          int64  `json:"goalId,omitempty"`
+	GoalVersion     int64  `json:"goalVersion,omitempty"`
+	HierarchyStatus string `json:"hierarchyStatus"`
 }
 
 type SpellcheckRun struct {

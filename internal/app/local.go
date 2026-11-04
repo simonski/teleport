@@ -696,6 +696,11 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			}
 			row.Persona = &agent
 		}
+		attributionTicket := in.TicketID
+		if attributionTicket == 0 {
+			attributionTicket = in.ContextTicketID
+		}
+		row.Attribution = freezeAttribution(st, a, in.ProjectID, attributionTicket, row.Persona, "", managed)
 		if in.TicketID != 0 {
 			t, err := ticketFor(st, a, in.TicketID, "Contributor")
 			if err != nil {

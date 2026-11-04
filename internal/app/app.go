@@ -185,6 +185,12 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	if operation == "getUsageSummary" {
 		return s.usageSummary(ctx, token, raw)
 	}
+	if operation == "listUsageBreakdown" {
+		return s.usageBreakdown(ctx, token, raw)
+	}
+	if operation == "getUsageAttribution" {
+		return s.usageAttribution(ctx, token, raw)
+	}
 	if operation == "listUsagePrices" || operation == "publishUsagePrice" || operation == "listUsagePriceHistory" || operation == "listUsageValuations" {
 		return s.usagePriceCall(ctx, token, operation, raw)
 	}

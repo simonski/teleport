@@ -154,6 +154,9 @@ def main(database_url=None):
             request = {"ticketId":ticket["id"],"expectedVersion":ticket["version"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":"spell-run"}
             run = tk("startSpellcheck", request)
             assert tk("startSpellcheck", request)["id"] == run["id"]
+            attribution = tk("getUsageAttribution", {"id":run["id"]})
+            assert attribution["callerKind"] == "human" and attribution["initiatorId"] and attribution["agentId"] == agent["id"]
+            assert attribution["projectId"] == project["id"] and attribution["ticketId"] == ticket["id"] and attribution["epicId"] == ticket["parentId"] and attribution["goalId"] == project["unassignedGoal"] and attribution["hierarchyStatus"] == "complete"
             done = wait_for(lambda: (value if (value:=tk("getSpellcheckRun", {"id":run["id"]}))["state"] != "running" else None))
             assert done["state"] == "completed", done
             result = tk("getTicket", {"id":ticket["id"]})
@@ -162,6 +165,10 @@ def main(database_url=None):
             usage_summary = tk("getUsageSummary", {"projectId":project["id"]})
             usage_hour = next(item for item in usage_summary["windows"] if item["name"] == "hour")
             assert usage_hour["invocations"] == 1 and usage_hour["succeeded"] == 1 and usage_hour["tokens"] == 150 and usage_hour["cached"] == 20
+            user_agent = tk("listUsageBreakdown", {"projectId":project["id"],"groupBy":"user_agent","window":"hour"})["items"]
+            assert len(user_agent)==1 and "Fixture spellchecker" in user_agent[0]["label"] and user_agent[0]["usage"]["tokens"]==150
+            epic_usage = tk("listUsageBreakdown", {"projectId":project["id"],"groupBy":"epic","window":"hour"})["items"]
+            assert len(epic_usage)==1 and epic_usage[0]["label"].startswith("#"+str(ticket["parentId"])+" · ") and epic_usage[0]["usage"]["tokens"]==150
             price = tk("publishUsagePrice", {"model":"fixture-model","expectedVersion":0,"requestId":"price-1","effective":"2099-01-01","source":"fixture rates","input":"1","cached":"0.5","output":"2"})
             assert price["version"] == 1
             assert tk("publishUsagePrice", {"model":"fixture-model","expectedVersion":0,"requestId":"price-1","effective":"2099-01-01","source":"fixture rates","input":"1","cached":"0.5","output":"2"})["version"] == 1
@@ -193,6 +200,10 @@ def main(database_url=None):
                 browser("wait", "--fn", "document.querySelector('#home-content')?.textContent.includes('150 tokens')")
                 browser("click", '[data-view="Cost"]')
                 browser("wait", "--fn", "document.querySelector('#usage-content')?.textContent.includes('150')")
+                browser("wait", "--fn", "document.querySelector('#usage-breakdown')?.textContent.includes('admin')")
+                browser("click", "#usage-group + .choice-button")
+                browser("click", '.choice-list [data-value="user_agent"]')
+                browser("wait", "--fn", "document.querySelector('#usage-breakdown')?.textContent.includes('Fixture spellchecker')")
                 browser("screenshot", "/tmp/teleport-cost-usage.png")
                 browser("eval", "if(!document.querySelector('#usage-content').textContent.includes('revised'))throw new Error('Revised estimate was not labelled')")
                 browser("click", "#usage-prices"); browser("wait", '[data-price-edit="fixture-model"]')
@@ -236,6 +247,13 @@ def main(database_url=None):
                 browser("wait", "--fn", "document.querySelector('[data-ticket=" + json.dumps(str(browser_ticket["id"])) + "]')?.textContent.includes('browser the action')")
                 browser("eval", f'document.querySelector({json.dumps(browser_card)}).focus()');browser("press", "Shift+F10");browser("wait", '[data-ticket-menu="agents"]');browser("click", '[data-ticket-menu="agents"]')
                 browser("wait", "--fn", "document.querySelector('[data-spellcheck-usage]')?.textContent.startsWith('✓ Spellcheck')")
+            destination = tk("createProject", {"name":"Attribution destination","requestId":"attribution-project"})
+            latest_ticket = tk("getTicket", {"id":ticket["id"]})
+            moved = tk("transferTicket", {"id":ticket["id"],"expectedVersion":latest_ticket["version"],"destinationProjectId":destination["id"]})
+            assert moved["projectId"] == destination["id"]
+            after_move = tk("getUsageAttribution", {"id":run["id"]})
+            assert after_move["projectId"] == project["id"] and after_move["epicId"] == ticket["parentId"] and after_move["ticketVersion"] == ticket["version"]
+            assert next(item for item in tk("getUsageSummary", {"projectId":destination["id"]})["windows"] if item["name"]=="hour")["invocations"] == 0
             tk("shutdownLocalRuntime", {"confirm":True});clean=True
             print("PASS: spellcheck usage, price revisions, failure accounting, browser views and concurrent edits using zero-model fixture")
             return

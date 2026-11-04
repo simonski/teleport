@@ -101,6 +101,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, "persona fixture configuration missing")
 			history.Exit(2)
 		}
+		if expected := os.Getenv("TK_PERSONA_EXPECT_TICKET"); expected != "" && !strings.Contains(joined, expected) {
+			fmt.Fprintln(os.Stderr, "persona ticket context missing")
+			history.Exit(2)
+		}
 		fmt.Println("persona configuration verified")
 	}
 	if len(os.Args) == 1 || os.Getenv("TK_PERSONA_EXPECT") != "" && len(os.Args) > 2 && os.Args[1] == "-c" {

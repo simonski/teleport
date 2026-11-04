@@ -22,12 +22,15 @@ def main(database_url=None):
     parser.add_argument("--shell-pty", action="store_true", help="Exercise a real local zsh PTY without an agent")
     parser.add_argument("--codex-pty", action="store_true", help="Exercise direct Codex PTY with a zero-model fixture")
     parser.add_argument("--persona-pty", action="store_true", help="Exercise an agent persona through the zero-model Codex PTY fixture; requires --codex-pty")
+    parser.add_argument("--usage-pty", action="store_true", help="Exercise a configured Todo conversation action; requires --codex-pty")
     parser.add_argument("--spellcheck", action="store_true", help="Exercise a zero-model spellcheck run; requires --codex-pty")
     parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY with a zero-model fixture")
     parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
     parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
     args = parser.parse_args()
+    if args.usage_pty:
+        args.persona_pty = True
     if args.persona_pty and not args.codex_pty:
         parser.error("--persona-pty requires --codex-pty")
     if args.spellcheck and not args.codex_pty:
@@ -47,6 +50,8 @@ def main(database_url=None):
             skill.mkdir(parents=True)
             (skill / "SKILL.md").write_text("---\nname: sample\ndescription: Fixture skill\n---\nFixture skill.\n")
             environment["TK_PERSONA_EXPECT"] = "review-role-marker"
+            if args.usage_pty:
+                environment["TK_PERSONA_EXPECT_TICKET"] = "Configured agent task"
     if args.shell_pty:
         shell_home = folder / "shell-config"
         shell_home.mkdir(mode=0o700)
@@ -263,11 +268,30 @@ def main(database_url=None):
             definition = tk("saveAgentDefinition", {"name":"Fixture reviewer","goal":"review-role-marker","prompt":"Ask before changing anything","skills":["sample"],"harness":"codex","model":"fixture-model","thinking":"high","requestId":"persona-create"})
             operation = "openAgentSession"
             start.update({"agentId":definition["id"],"expectedVersion":definition["version"]})
+            if args.usage_pty:
+                ticket = tk("createTicket", {"projectId":project["id"],"title":"Configured agent task","agent":False,"requestId":"usage-ticket"})
+                usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Review","agentId":definition["id"],"kind":"todo-conversation","enabled":True,"requestId":"usage-create"})
+                start.update({"ticketId":ticket["id"],"usageId":usage["id"],"usageVersion":usage["version"]})
+                try:
+                    tk(operation, {**start,"usageVersion":usage["version"]+1,"requestId":"stale-usage-start"})
+                    raise AssertionError("stale action started a session")
+                except RuntimeError as error:
+                    assert "action" in str(error).lower() or "usage" in str(error).lower()
         if not args.shell_pty and not args.codex_pty and not args.harness_pty:
             start["harness"] = harness
         row = tk(operation, start)
         session_id = row["id"]
         assert row["state"] == "running" and row["ticketId"] == 0
+        if args.usage_pty:
+            attribution = tk("getUsageAttribution", {"id":session_id})
+            assert attribution["usageId"] == usage["id"] and attribution["usageVersion"] == usage["version"] and attribution["ticketId"] == ticket["id"]
+            tk("removeAgentUsage", {"id":usage["id"],"projectId":project["id"],"expectedVersion":usage["version"],"requestId":"usage-remove"})
+            assert not tk("listAgentUsages", {"projectId":project["id"]})["items"]
+            try:
+                tk(operation, {**start,"requestId":"removed-usage-start"})
+                raise AssertionError("removed action started a new session")
+            except RuntimeError as error:
+                assert "action" in str(error).lower() or "usage" in str(error).lower()
         if args.persona_pty:
             updated = tk("saveAgentDefinition", {"id":definition["id"],"expectedVersion":definition["version"],"name":"Fixture reviewer","goal":"review-role-marker","prompt":"Updated instructions","skills":["sample"],"harness":"codex","model":"fixture-model","thinking":"high","requestId":"persona-update"})
             assert updated["version"] == definition["version"] + 1

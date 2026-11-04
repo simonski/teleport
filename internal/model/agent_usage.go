@@ -11,6 +11,7 @@ type AgentUsage struct {
 	AgentID   string    `json:"agentId"`
 	Kind      string    `json:"kind"`
 	Enabled   bool      `json:"enabled"`
+	Removed   bool      `json:"removed,omitempty"`
 	UpdatedBy string    `json:"updatedBy"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

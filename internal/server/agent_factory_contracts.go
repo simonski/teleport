@@ -24,6 +24,7 @@ func init() {
 			ProjectID int64 `json:"projectId"`
 		}{}, app.AgentUsageList{}},
 		{"saveAgentUsage", "Configure a project agent usage", app.AgentUsageInput{}, model.AgentUsage{}},
+		{"removeAgentUsage", "Remove a project agent usage", app.RemoveAgentUsageInput{}, model.AgentUsage{}},
 		{"startSpellcheck", "Start a scoped Todo spellcheck", app.SpellcheckInput{}, app.SpellcheckView{}},
 		{"getSpellcheckRun", "Inspect an owned spellcheck run", app.SpellcheckStatusInput{}, app.SpellcheckView{}},
 		{"getTicketSpellchecks", "Inspect spellcheck completion marks", app.IDInput{}, app.SpellcheckMarks{}},
@@ -40,7 +41,7 @@ func init() {
 		if entry.name == "openAgentSession" {
 			action = "ACT-1516"
 		}
-		if entry.name == "listAgentUsages" || entry.name == "saveAgentUsage" {
+		if entry.name == "listAgentUsages" || entry.name == "saveAgentUsage" || entry.name == "removeAgentUsage" {
 			action = "ACT-1517"
 		}
 		if entry.name == "startSpellcheck" || entry.name == "getSpellcheckRun" || entry.name == "getTicketSpellchecks" {

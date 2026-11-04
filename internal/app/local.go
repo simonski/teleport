@@ -52,6 +52,8 @@ type LocalHarnesses struct {
 	Available []HarnessChoice `json:"available"`
 }
 type OpenLocalSessionInput struct {
+	UsageID         string `json:"usageId,omitempty"`
+	UsageVersion    int64  `json:"usageVersion,omitempty"`
 	PersonaID       string `json:"personaId,omitempty"`
 	PersonaVersion  int64  `json:"personaVersion,omitempty"`
 	ContextTicketID int64  `json:"contextTicketId,omitempty"`
@@ -62,6 +64,8 @@ type OpenLocalSessionInput struct {
 	RequestID       string `json:"requestId"`
 }
 type OpenAgentSessionInput struct {
+	UsageID         string `json:"usageId,omitempty"`
+	UsageVersion    int64  `json:"usageVersion,omitempty"`
 	ProjectID       int64  `json:"projectId"`
 	AgentID         string `json:"agentId"`
 	ExpectedVersion int64  `json:"expectedVersion"`
@@ -341,6 +345,9 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		if err = require(st, a, in.ProjectID, "Contributor"); err != nil {
 			return nil, err
 		}
+		if (in.UsageID == "") != (in.UsageVersion == 0) || in.UsageID != "" && in.TicketID == 0 {
+			return nil, failure(422, "invalid_usage", "A configured action requires its version and ticket")
+		}
 		if saved, ok := st.Receipts[a.ID+":"+operation+":"+in.RequestID]; ok {
 			var id string
 			if json.Unmarshal(saved.Result, &id) != nil {
@@ -350,7 +357,13 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 			if !exists || row.Persona == nil {
 				return nil, failure(409, "session_ownership_unknown", "Saved agent session is unavailable")
 			}
-			if row.ProjectID != in.ProjectID || row.Persona.ID != in.AgentID || row.Persona.Version != in.ExpectedVersion || row.ContextTicketID != in.TicketID {
+			usageID := ""
+			usageVersion := int64(0)
+			if row.Attribution != nil {
+				usageID = row.Attribution.UsageID
+				usageVersion = row.Attribution.UsageVersion
+			}
+			if row.ProjectID != in.ProjectID || row.Persona.ID != in.AgentID || row.Persona.Version != in.ExpectedVersion || row.ContextTicketID != in.TicketID || usageID != in.UsageID || usageVersion != in.UsageVersion {
 				return nil, failure(409, "request_conflict", "Session request identity was reused with different fields")
 			}
 			if err = localAllowed(st, a, row); err != nil {
@@ -359,7 +372,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 			if row.State != "preparing" {
 				return localInfo(row), nil
 			}
-			return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: row.Harness, PersonaID: row.Persona.ID, PersonaVersion: row.Persona.Version, ContextTicketID: in.TicketID})
+			return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: row.Harness, PersonaID: row.Persona.ID, PersonaVersion: row.Persona.Version, ContextTicketID: in.TicketID, UsageID: in.UsageID, UsageVersion: in.UsageVersion})
 		}
 		agent, ok := st.AgentDefinitions[in.AgentID]
 		if !ok || agent.Archived {
@@ -374,7 +387,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 				return nil, failure(409, "skill_unavailable", "A selected agent skill is no longer installed")
 			}
 		}
-		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: agent.Harness + "-pty", PersonaID: agent.ID, PersonaVersion: agent.Version, ContextTicketID: in.TicketID})
+		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: agent.Harness + "-pty", PersonaID: agent.ID, PersonaVersion: agent.Version, ContextTicketID: in.TicketID, UsageID: in.UsageID, UsageVersion: in.UsageVersion})
 	}
 	if operation == "openShellSession" || operation == "openCodexTerminal" || operation == "openClaudeTerminal" || operation == "openCopilotTerminal" {
 		var in OpenShellSessionInput
@@ -625,7 +638,11 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	if err != nil {
 		return nil, err
 	}
-	fingerprint := digest(fmt.Sprintf("%s:%d:%d:%d:%s:%s:%d:%d", operation, in.ProjectID, in.TicketID, in.ExpectedVersion, in.Harness, in.PersonaID, in.PersonaVersion, in.ContextTicketID))
+	fingerprintText := fmt.Sprintf("%s:%d:%d:%d:%s:%s:%d:%d", operation, in.ProjectID, in.TicketID, in.ExpectedVersion, in.Harness, in.PersonaID, in.PersonaVersion, in.ContextTicketID)
+	if in.UsageID != "" {
+		fingerprintText += fmt.Sprintf(":%s:%d", in.UsageID, in.UsageVersion)
+	}
+	fingerprint := digest(fingerprintText)
 	var row model.LocalSession
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
 		a, err := executionActor(ctx, st, token)
@@ -677,6 +694,12 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			if !ok || agent.Archived || agent.Version != in.PersonaVersion || agent.Harness+"-pty" != in.Harness {
 				return false, failure(409, "agent_changed", "Agent changed; refresh before starting")
 			}
+			if in.UsageID != "" {
+				usage, exists := st.AgentUsages[in.UsageID]
+				if !exists || usage.Removed || !usage.Enabled || usage.Kind != "todo-conversation" || usage.ProjectID != in.ProjectID || usage.AgentID != agent.ID || usage.Version != in.UsageVersion {
+					return false, failure(409, "usage_unavailable", "The configured agent action changed or is unavailable")
+				}
+			}
 			if in.ContextTicketID != 0 {
 				ticket, err := ticketFor(st, a, in.ContextTicketID, "Viewer")
 				if err != nil {
@@ -684,6 +707,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 				}
 				if ticket.ProjectID != in.ProjectID {
 					return false, failure(422, "invalid_session_scope", "Ticket must belong to the selected project")
+				}
+				if in.UsageID != "" && (ticket.Kind != "task" || ticket.Agent || ticket.Deleted || ticket.Archived || ticket.Protected) {
+					return false, failure(409, "usage_unavailable", "This action requires a visible human Todo ticket")
 				}
 				data, _ := json.Marshal(struct {
 					ID          int64  `json:"id"`
@@ -700,7 +726,8 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		if attributionTicket == 0 {
 			attributionTicket = in.ContextTicketID
 		}
-		row.Attribution = freezeAttribution(st, a, in.ProjectID, attributionTicket, row.Persona, "", managed)
+		row.Attribution = freezeAttribution(st, a, in.ProjectID, attributionTicket, row.Persona, in.UsageID, managed)
+		row.Attribution.UsageVersion = in.UsageVersion
 		if in.TicketID != 0 {
 			t, err := ticketFor(st, a, in.TicketID, "Contributor")
 			if err != nil {

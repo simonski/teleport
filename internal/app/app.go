@@ -251,7 +251,7 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			var changed bool
 			result, changed, err = agentFactoryCall(st, a, operation, raw)
 			return changed, err
-		case "listAgentUsages", "saveAgentUsage":
+		case "listAgentUsages", "saveAgentUsage", "removeAgentUsage":
 			var changed bool
 			result, changed, err = agentUsageCall(st, a, operation, raw)
 			return changed, err

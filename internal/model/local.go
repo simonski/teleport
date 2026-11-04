@@ -51,6 +51,7 @@ type ExecutionAttribution struct {
 	AgentName       string `json:"agentName,omitempty"`
 	AgentVersion    int64  `json:"agentVersion,omitempty"`
 	UsageID         string `json:"usageId,omitempty"`
+	UsageVersion    int64  `json:"usageVersion,omitempty"`
 	TicketID        int64  `json:"ticketId,omitempty"`
 	TicketVersion   int64  `json:"ticketVersion,omitempty"`
 	EpicID          int64  `json:"epicId,omitempty"`

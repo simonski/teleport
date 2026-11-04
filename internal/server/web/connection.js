@@ -1,9 +1,13 @@
 "use strict";
-let connectionInterrupted=false,connectionScene=null,connectionProbeBusy=false,connectionCloseTimer=0,connectionInitialRetry=false;
+let connectionInterrupted=false,connectionRestoring=false,connectionScene=null,connectionProbeBusy=false,connectionCloseTimer=0,connectionInitialRetry=false;
 
 function showConnectionInterrupted(){
   connectionInterrupted=true;
-  if(connectionScene){clearTimeout(connectionCloseTimer);connectionScene.classList.add('visible');return;}
+  if(connectionScene){
+    clearTimeout(connectionCloseTimer);connectionScene.classList.add('visible');
+    if(connectionRestoring){connectionRestoring=false;connectionScene.connectionSequence++;connectionScene.querySelector('.connection-status').textContent='connection interrupted';connectionScene.connectionFlightReady=startLandingFlight(connectionScene.querySelector('.login-scene'),true).catch(()=>{});}
+    return;
+  }
   const previousFocus=document.activeElement,background=[...document.body.children].map(element=>({element,inert:element.inert}));
   const scene=document.createElement('section');scene.className='connection-scene';scene.setAttribute('role','status');scene.setAttribute('aria-live','assertive');scene.tabIndex=-1;
   scene.innerHTML=landingBrand()+'<p class="connection-status">connection interrupted</p>';
@@ -13,21 +17,29 @@ function showConnectionInterrupted(){
   background.forEach(({element})=>{element.inert=true;});
   scene.focus({preventScroll:true});
   requestAnimationFrame(()=>{if(connectionScene===scene&&connectionInterrupted)scene.classList.add('visible');});
-  startLandingFlight(scene.querySelector('.login-scene'),true).catch(()=>{});
+  scene.connectionSequence=0;scene.connectionFlightReady=startLandingFlight(scene.querySelector('.login-scene'),true).catch(()=>{});
 }
 function restoreConnection(){
-  if(!connectionInterrupted)return;
-  connectionInterrupted=false;const scene=connectionScene;if(!scene)return;
-  scene.classList.remove('visible');
+  if(!connectionInterrupted||connectionRestoring)return;
+  const scene=connectionScene;if(!scene)return;
+  connectionRestoring=true;const sequence=++scene.connectionSequence;
+  scene.querySelector('.connection-status').textContent='connection restoring…';
+  const current=()=>connectionRestoring&&connectionScene===scene&&scene.connectionSequence===sequence;
   const finish=()=>{
-    if(connectionInterrupted||connectionScene!==scene)return;
+    if(!current())return;
+    connectionInterrupted=false;connectionRestoring=false;
     stopLandingFlight();scene.remove();connectionScene=null;
     scene.connectionBackground.forEach(({element,inert})=>{element.inert=inert;});
     if(scene.connectionFocus?.isConnected)scene.connectionFocus.focus({preventScroll:true});
     const oldScene=document.querySelector('.login-scene');if(oldScene)startLandingFlight(oldScene).catch(()=>{});
     if(connectionInitialRetry){connectionInitialRetry=false;start();}
   };
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches)finish();else connectionCloseTimer=setTimeout(finish,450);
+  const fade=()=>{if(!current())return;scene.classList.remove('visible');connectionCloseTimer=setTimeout(finish,450);};
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){finish();return;}
+  scene.connectionFlightReady.then(()=>{
+    if(!current())return;
+    if(landingFlight){landingFlight.launch();connectionCloseTimer=setTimeout(fade,4500);}else fade();
+  });
 }
 async function probeConnection(){
   if(connectionProbeBusy)return;connectionProbeBusy=true;

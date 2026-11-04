@@ -83,6 +83,25 @@ func TestWelcomeCompletionRequiresCurrentBasisAndIsRetrySafe(t *testing.T) {
 	}
 }
 
+func TestDefaultHarnessRemainsEditableAfterWelcome(t *testing.T) {
+	svc, token, _ := fixtureWithStore(t)
+	initial := call(t, svc, token, "getWelcomeSetup", struct{}{}).(app.WelcomeSetupResult)
+	if len(initial.Harnesses) != 3 || initial.Setup.Harness != "codex" {
+		t.Fatal("default harness choices missing", initial)
+	}
+	in := app.SaveWelcomeSetupInput{Step: 5, ProjectName: "Defaults", ProjectKey: "defaults", Harness: "claude", Attention: "questions"}
+	draft := call(t, svc, token, "saveWelcomeSetup", in).(model.WelcomeSetup)
+	finished := call(t, svc, token, "completeWelcomeSetup", app.CompleteWelcomeSetupInput{ExpectedVersion: draft.Version, Confirm: true}).(model.WelcomeSetup)
+	updated := call(t, svc, token, "setDefaultHarness", app.DefaultHarnessInput{ExpectedVersion: finished.Version, Harness: "copilot"}).(model.WelcomeSetup)
+	if !updated.Completed || updated.Harness != "copilot" || updated.ProjectID != finished.ProjectID || updated.Version != finished.Version+1 {
+		t.Fatal("default change damaged completed setup", updated)
+	}
+	raw, _ := json.Marshal(app.DefaultHarnessInput{ExpectedVersion: finished.Version, Harness: "codex"})
+	if _, err := svc.Call(context.Background(), token, "setDefaultHarness", raw); err == nil || app.ErrorResponse(err).Code != "welcome_conflict" {
+		t.Fatal("stale default change was accepted", err)
+	}
+}
+
 func TestWelcomeCreatesOnlyAtFinalCompletionAndRechecksName(t *testing.T) {
 	svc, token, db := fixtureWithStore(t)
 	in := app.SaveWelcomeSetupInput{Step: 5, ProjectName: "Teleport", ProjectKey: "tele", Harness: "codex", Attention: "questions"}

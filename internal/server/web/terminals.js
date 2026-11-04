@@ -32,6 +32,21 @@ async function chooseHarness(ticket=null){
 }
 async function startOrAttachHarness(ticket=null){
   const actor=session?.account.id,epoch=detailEpoch,requestEpoch=terminalEpoch;
+  if(!ticket){
+    const kind=session?.welcomeSetup?.harness??'codex',operations={codex:'openCodexTerminal',claude:'openClaudeTerminal',copilot:'openCopilotTerminal'},operation=operations[kind];
+    if(!operation)throw new Error('Select a default harness in Settings before starting an agent terminal.');
+    const available=projects.filter(p=>roleAllowsWrite(p.id)),selected=projectId||(available.length===1?available[0].id:0);
+    if(!selected||!available.some(p=>p.id===selected))throw new Error('Select a project with permission to start a harness.');
+    const rows=await pages('listSessions');
+    if(session?.account.id!==actor||detailEpoch!==epoch||terminalEpoch!==requestEpoch||(session?.welcomeSetup?.harness??'codex')!==kind)return;
+    localSessions=rows;
+    const existing=rows.find(row=>runningSession(row)&&!row.capacityReleased&&!row.ticketId&&row.projectId===selected&&(row.harness===kind+'-pty'||kind==='codex'&&row.harness==='codex'));
+    if(existing){await openTerminal(existing.id);return;}
+    const row=await api(operation,{projectId:selected,requestId:crypto.randomUUID()});
+    await refreshSessionRoster();
+    if(session?.account.id===actor&&detailEpoch===epoch&&terminalEpoch===requestEpoch&&(session?.welcomeSetup?.harness??'codex')===kind)await openTerminal(row.id);
+    return;
+  }
   const [choices,rows]=await Promise.all([api('getLocalHarnesses'),pages('listSessions')]);
   if(session?.account.id!==actor||detailEpoch!==epoch||terminalEpoch!==requestEpoch)return;
   localSessions=rows;

@@ -13,10 +13,15 @@ func init() {
 		{"getWelcomeSetup", "Read private Welcome progress and local setup capabilities", struct{}{}, app.WelcomeSetupResult{}},
 		{"checkProjectAvailability", "Check project name/prefix availability without disclosing projects", app.ProjectAvailabilityInput{}, app.ProjectAvailability{}},
 		{"saveWelcomeSetup", "Save bounded private Welcome progress without starting execution", app.SaveWelcomeSetupInput{}, model.WelcomeSetup{}},
+		{"setDefaultHarness", "Set the private default interactive harness", app.DefaultHarnessInput{}, model.WelcomeSetup{}},
 		{"completeWelcomeSetup", "Complete the reviewed setup without enabling execution", app.CompleteWelcomeSetupInput{}, model.WelcomeSetup{}},
 	}
 	for _, e := range entries {
-		Operations = append(Operations, Operation{e.name, "ACT-1220", e.summary})
+		action := "ACT-1220"
+		if e.name == "setDefaultHarness" {
+			action = "ACT-1025"
+		}
+		Operations = append(Operations, Operation{e.name, action, e.summary})
 		contracts[e.name] = contract{e.input, e.output}
 	}
 }

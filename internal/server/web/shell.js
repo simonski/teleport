@@ -16,8 +16,10 @@ function closeOnlyDialog(title,body) {
 }
 
 function openPersonalSettings() {
-  closeOnlyDialog('Settings',`<div class="settings-list">${appearanceHTML()}<section><h2>Account</h2><p>${escapeHTML(session.account.username)}</p><button type="button" class="secondary" id="change-password">Change password</button></section></div>`);
+  const current=session.welcomeSetup?.harness||'';
+  const dialog=closeOnlyDialog('Settings',`<div class="settings-list">${appearanceHTML()}<section><h2>Agent terminal</h2><label>Default harness<select id="default-harness"><option value="" disabled ${current?'':'selected'}>Select a harness</option>${[['codex','Codex'],['claude','Claude'],['copilot','Copilot']].map(([id,title])=>`<option value="${id}" ${current===id?'selected':''}>${title}</option>`).join('')}</select></label><p class="form-help">The harness uses its own saved model and thinking defaults.</p><button type="button" class="secondary" id="save-default-harness">Save default harness</button><p id="default-harness-status" class="save-status" role="status"></p></section><section><h2>Account</h2><p>${escapeHTML(session.account.username)}</p><button type="button" class="secondary" id="change-password">Change password</button></section></div>`);
   bindPresentation();on('change-password','click',passwordForm);
+  const guard=captureDialogCompletion(dialog);on('save-default-harness','click',async()=>{const button=byId('save-default-harness'),status=byId('default-harness-status'),harness=byId('default-harness').value;if(!harness){status.textContent='Select a harness.';return;}button.disabled=true;try{const result=await api('setDefaultHarness',{harness,expectedVersion:session.welcomeSetup?.version||0});if(!guard.current())return;session.welcomeSetup=result;status.textContent='Default harness saved.';}catch(error){if(guard.current())status.textContent=error.message||'Could not save the default harness.';}finally{if(guard.current())button.disabled=false;}});
 }
 
 function openSystemSettings() {

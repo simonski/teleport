@@ -36,6 +36,10 @@ type CompleteWelcomeSetupInput struct {
 	ExpectedVersion int64 `json:"expectedVersion"`
 	Confirm         bool  `json:"confirm"`
 }
+type DefaultHarnessInput struct {
+	ExpectedVersion int64  `json:"expectedVersion"`
+	Harness         string `json:"harness"`
+}
 
 func welcomeSetup(st *model.State, a model.Account) model.WelcomeSetup {
 	w, ok := st.WelcomeSetups[a.ID]
@@ -66,8 +70,31 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 		if err := parse(raw, &struct{}{}); err != nil {
 			return nil, false, err
 		}
-		_, err := exec.LookPath("codex")
-		return WelcomeSetupResult{Setup: w, CanCreateProject: true, Harnesses: []HarnessChoice{{ID: "codex", Title: "Codex", Available: err == nil}}}, false, nil
+		choices := []HarnessChoice{}
+		for _, item := range []struct{ id, title string }{{"codex", "Codex"}, {"claude", "Claude"}, {"copilot", "Copilot"}} {
+			_, err := exec.LookPath(item.id)
+			choices = append(choices, HarnessChoice{ID: item.id, Title: item.title, Available: err == nil})
+		}
+		return WelcomeSetupResult{Setup: w, CanCreateProject: true, Harnesses: choices}, false, nil
+	case "setDefaultHarness":
+		var in DefaultHarnessInput
+		if err := parse(raw, &in); err != nil {
+			return nil, false, err
+		}
+		if a.ServiceSessionID != "" || a.ServiceRunID != "" {
+			return nil, false, failure(403, "service_scope", "Only a human can change the default harness")
+		}
+		if in.ExpectedVersion != w.Version {
+			return nil, false, failure(409, "welcome_conflict", "Settings changed; reload before saving")
+		}
+		if !contains([]string{"codex", "claude", "copilot"}, in.Harness) {
+			return nil, false, failure(422, "invalid_setup", "Choose Codex, Claude or Copilot")
+		}
+		if w.ID == "" {
+			w.ID = randomID()[:32]
+		}
+		w.Harness = in.Harness
+		w.Version++
 	case "saveWelcomeSetup":
 		var in SaveWelcomeSetupInput
 		if err := parse(raw, &in); err != nil {
@@ -76,7 +103,7 @@ func welcomeOperations(st *model.State, a model.Account, operation string, raw j
 		if w.Completed || in.ExpectedVersion != w.Version {
 			return nil, false, failure(409, "welcome_conflict", "Setup changed; reopen to load the current progress")
 		}
-		if in.Step < 0 || in.Step > 5 || len(in.ProjectName) > 200 || len(in.ProjectKey) > 80 || len(in.ProjectRoot) > 4096 || len(in.Repository) > 4096 || len(in.StorageRoot) > 4096 || !contains([]string{"", "codex"}, in.Harness) || !contains([]string{"questions", "all", "quiet"}, in.Attention) {
+		if in.Step < 0 || in.Step > 5 || len(in.ProjectName) > 200 || len(in.ProjectKey) > 80 || len(in.ProjectRoot) > 4096 || len(in.Repository) > 4096 || len(in.StorageRoot) > 4096 || !contains([]string{"", "codex", "claude", "copilot"}, in.Harness) || !contains([]string{"questions", "all", "quiet"}, in.Attention) {
 			return nil, false, failure(422, "invalid_setup", "Choose supported setup values within the field limits")
 		}
 		for _, v := range []string{in.ProjectName, in.ProjectKey, in.ProjectRoot, in.Repository, in.StorageRoot} {

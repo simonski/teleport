@@ -5,14 +5,20 @@ const path=require('node:path');
 const vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'../web/terminals.js'),'utf8');
 
-test('harness action attaches an existing session or starts Codex in the selected project',async()=>{
-  let rows=[{id:'H1',state:'running',ticketId:0}],calls=[],opened=[];
+test('agent control attaches its existing PTY or starts the default Codex terminal',async()=>{
+  let rows=[{id:'H1',state:'running',ticketId:0,projectId:4,harness:'codex-pty'}],calls=[],opened=[];
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'}},detailEpoch:1,projectId:4,projects:[{id:4}],roleAllowsWrite:()=>true,crypto:{randomUUID:()=> 'request'},pages:async()=>rows,api:async(op,input)=>{calls.push([op,input]);return op==='getLocalHarnesses'?{available:[{id:'codex'}]}:{id:'H2'};}});
   vm.runInContext(source,context);vm.runInContext('openTerminal=async id=>opened.push(id);refreshSessionRoster=async()=>{}',context);
   context.opened=opened;
-  await vm.runInContext('chooseHarness()',context);assert.deepEqual(opened,['H1']);assert.equal(calls.length,1);
+  await vm.runInContext('chooseHarness()',context);assert.deepEqual(opened,['H1']);assert.equal(calls.length,0);
   rows=[];await vm.runInContext('chooseHarness()',context);assert.deepEqual(opened,['H1','H2']);
-  assert.equal(calls[2][0],'openConsoleSession');assert.equal(calls[2][1].projectId,4);assert.equal(calls[2][1].harness,'codex');
+  assert.equal(calls[0][0],'openCodexTerminal');assert.equal(calls[0][1].projectId,4);assert.equal(calls[0][1].requestId,'request');assert.equal(calls[0][1].model,undefined);
+});
+
+for(const [kind,operation] of [['claude','openClaudeTerminal'],['copilot','openCopilotTerminal']])test(`agent control selects saved ${kind} default`,async()=>{
+  let call;const opened=[];const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'},welcomeSetup:{harness:kind}},detailEpoch:1,projectId:4,projects:[{id:4}],roleAllowsWrite:()=>true,crypto:{randomUUID:()=> 'request'},pages:async()=>[{id:'other',state:'running',projectId:5,harness:kind+'-pty'}],api:async(op,input)=>{call=[op,input];return {id:'new'}}});
+  context.opened=opened;vm.runInContext(source,context);vm.runInContext('openTerminal=async id=>opened.push(id);refreshSessionRoster=async()=>{}',context);
+  await vm.runInContext('chooseHarness()',context);assert.equal(call[0],operation);assert.equal(call[1].projectId,4);assert.deepEqual(opened,['new']);
 });
 
 test('shell control starts a distinct shell and opens its terminal',async()=>{
@@ -30,7 +36,7 @@ test('direct Codex control starts its own terminal',async()=>{
 test('structured Codex start rejects a direct-only discovery result',async()=>{
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){},session:{account:{id:'one'}},detailEpoch:1,pages:async()=>[],api:async()=>({available:[{id:'codex',directOnly:true}]})});
   vm.runInContext(source,context);
-  await assert.rejects(vm.runInContext('chooseHarness()',context),/direct Codex terminal/);
+  await assert.rejects(vm.runInContext('chooseHarness({id:7,projectId:4})',context),/direct Codex terminal/);
 });
 
 for(const [kind,operation] of [['claude','openClaudeTerminal'],['copilot','openCopilotTerminal']])test(`${kind} control starts its own terminal`,async()=>{

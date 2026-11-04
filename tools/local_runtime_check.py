@@ -136,6 +136,9 @@ def main(database_url=None):
             return base64.b64decode(tk("attachSession", {"id": session_id}).get("data", "")).decode(errors="replace")
         if args.codex_pty or args.harness_pty:
             direct_name = args.harness_pty or "codex"
+            setup = tk("getSession")["welcomeSetup"]
+            if not args.browser:
+                tk("setDefaultHarness", {"expectedVersion": setup["version"], "harness": direct_name})
             assert row["harness"] == direct_name + "-pty" and row["directory"] == str(repository.resolve())
             if args.codex_pty:
                 skill_path = isolated_home / ".agents/skills/teleport/SKILL.md"
@@ -155,6 +158,12 @@ def main(database_url=None):
                 browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
                 browser("wait", "#welcome-status")
                 browser("press", "Escape")
+                browser("click", "#account")
+                browser("click", "#account-settings")
+                browser("select", "#default-harness", direct_name)
+                browser("click", "#save-default-harness")
+                browser("wait", "--fn", "document.querySelector('#default-harness-status')?.textContent==='Default harness saved.'")
+                browser("press", "Escape")
                 browser("click", f"#{direct_name}-pty-console")
                 browser("wait", ".xterm-screen")
                 second = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] != session_id and item["harness"] == direct_name + "-pty"), None))
@@ -166,6 +175,20 @@ def main(database_url=None):
                 browser("press", "Enter")
                 browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                 wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == second["id"] and item["state"] == "exited"), None))
+                browser("click", "#harness-console")
+                browser("wait", "--fn", f"terminalView?.id==={json.dumps(session_id)}")
+                browser("press", "Escape")
+                tk("stopSession", {"id": session_id, "confirm": True})
+                wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == session_id and item["state"] == "exited"), None))
+                browser("click", "#harness-console")
+                browser("wait", ".xterm-screen")
+                third = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] not in (session_id, second["id"]) and item["harness"] == direct_name + "-pty"), None))
+                wait_for(lambda: "direct Codex fixture ready" in base64.b64decode(tk("attachSession", {"id": third["id"]}).get("data", "")).decode(errors="replace"))
+                for key in "quit":
+                    browser("press", key)
+                browser("press", "Enter")
+                browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
+                wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == third["id"] and item["state"] == "exited"), None))
             tk("stopSession", {"id": session_id, "confirm": True})
             wait_for(lambda: all(item["state"] in ("exited", "failed") for item in tk("listSessions")["items"]))
             tk("shutdownLocalRuntime", {"confirm": True})

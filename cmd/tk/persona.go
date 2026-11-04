@@ -74,7 +74,7 @@ func personaArguments(raw string) ([]string, error) {
 		if payload.ProposalJob != nil {
 			job := payload.ProposalJob
 			instruction := fmt.Sprintf("Produce a proposal for ticket %d at version %d using the ticket context and any prior proposal and feedback. Return the requested JSON object with a title and items. Each item has a unique key, kind epic or task, title, description and criteria; tasks use parentKey referring to an earlier epic. Do not create tickets. Teleport will retain your proposal for human review.", job.TicketID, job.TicketVersion)
-			args = append(args, "--print", "--output-format", "stream-json", "--verbose", "--json-schema", proposalSchema, "--tools", "Read", "--strict-mcp-config", "--safe-mode", "--permission-mode", "dontAsk", "--no-session-persistence", instruction)
+			args = append(args, "--print", "--output-format", "stream-json", "--include-partial-messages", "--verbose", "--json-schema", proposalSchema, "--tools", "Read", "--strict-mcp-config", "--safe-mode", "--permission-mode", "dontAsk", "--no-session-persistence", instruction)
 		}
 		return args, nil
 	}

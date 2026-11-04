@@ -46,7 +46,10 @@ func main() {
 			if err != nil {
 				history.Exit(2)
 			}
-			fmt.Println(`{"type":"assistant","message":{"content":[{"type":"text","text":"Planning proposal fixture"}]}}`)
+			fmt.Println(`{"type":"stream_event","event":{"type":"message_start"}}`)
+			fmt.Println(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Planning proposal fixture"}}}`)
+			fmt.Println(`{"type":"stream_event","event":{"type":"message_stop"}}`)
+			time.Sleep(time.Second)
 			if strings.Contains(strings.Join(os.Args, " "), "fixture-failure") {
 				fmt.Println(`{"type":"result","is_error":true,"usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":0,"output_tokens":30},"total_cost_usd":0.0003}`)
 				history.Exit(1)
@@ -73,7 +76,12 @@ func main() {
 				if readErr != nil {
 					history.Exit(2)
 				}
-				fmt.Println("Planning proposal fixture")
+				fmt.Println(`{"type":"thread.started","thread_id":"fixture"}`)
+				fmt.Println(`{"type":"turn.started"}`)
+				fmt.Println(`{"type":"item.started","item":{"id":"cmd","type":"command_execution","command":"tk ticket show"}}`)
+				fmt.Println(`{"type":"item.updated","item":{"id":"cmd","type":"command_execution","aggregated_output":"Planning proposal fixture\n"}}`)
+				time.Sleep(time.Second)
+				fmt.Println(`{"type":"item.completed","item":{"id":"cmd","type":"command_execution","aggregated_output":"Planning proposal fixture\n"}}`)
 				fmt.Println(`{"type":"turn.completed","usage":{"input_tokens":120,"cached_input_tokens":20,"output_tokens":30}}`)
 				if strings.Contains(strings.Join(os.Args, " "), "fixture-failure") {
 					history.Exit(1)

@@ -20,9 +20,11 @@ import (
 const proposalSchema = `{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string"},"items":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"key":{"type":"string"},"parentKey":{"type":"string"},"kind":{"type":"string","enum":["epic","task"]},"title":{"type":"string"},"description":{"type":"string"},"criteria":{"type":"string"}},"required":["key","parentKey","kind","title","description","criteria"]}}},"required":["title","items"]}`
 
 type proposalEventWriter struct {
-	capture *limitedBuffer
-	pending []byte
-	output  io.Writer
+	capture  *limitedBuffer
+	pending  []byte
+	output   io.Writer
+	commands map[string]string
+	streamed bool
 }
 
 func (w *proposalEventWriter) Write(p []byte) (int, error) {
@@ -36,14 +38,32 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 		line := w.pending[:index]
 		w.pending = w.pending[index+1:]
 		var event struct {
-			Type    string `json:"type"`
-			Message struct {
-				Content []struct {
+			Type  string `json:"type"`
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+			Event struct {
+				Type  string `json:"type"`
+				Delta struct {
 					Type string `json:"type"`
 					Text string `json:"text"`
+				} `json:"delta"`
+				ContentBlock struct {
+					Type string `json:"type"`
+					Name string `json:"name"`
+				} `json:"content_block"`
+			} `json:"event"`
+			Message struct {
+				Content []struct {
+					Type    string          `json:"type"`
+					Text    string          `json:"text"`
+					Name    string          `json:"name"`
+					Input   json.RawMessage `json:"input"`
+					Content json.RawMessage `json:"content"`
 				} `json:"content"`
 			} `json:"message"`
 			Item struct {
+				ID               string `json:"id"`
 				Type             string `json:"type"`
 				Text             string `json:"text"`
 				Command          string `json:"command"`
@@ -54,20 +74,84 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 			fmt.Fprintln(w.output, string(line))
 			continue
 		}
+		if event.Type == "thread.started" || event.Type == "turn.started" {
+			fmt.Fprintln(w.output, "["+strings.ReplaceAll(event.Type, ".", " ")+"]")
+		}
+		if event.Type == "error" || event.Type == "turn.failed" {
+			if event.Error.Message != "" {
+				fmt.Fprintln(w.output, "[Harness error] "+event.Error.Message)
+			} else {
+				fmt.Fprintln(w.output, string(line))
+			}
+		}
 		if event.Type == "item.started" && event.Item.Type == "command_execution" {
 			fmt.Fprintln(w.output, "$ "+event.Item.Command)
 		}
-		if event.Type == "item.completed" && event.Item.Type == "agent_message" {
+		if event.Type == "item.started" && event.Item.Type == "reasoning" {
+			fmt.Fprintln(w.output, "[Agent thinking]")
+		}
+		if event.Type == "item.completed" && (event.Item.Type == "agent_message" || event.Item.Type == "reasoning") {
 			fmt.Fprintln(w.output, event.Item.Text)
 		}
-		if event.Type == "item.completed" && event.Item.Type == "command_execution" && event.Item.AggregatedOutput != "" {
-			fmt.Fprintln(w.output, event.Item.AggregatedOutput)
+		if (event.Type == "item.updated" || event.Type == "item.completed") && event.Item.Type == "command_execution" && event.Item.AggregatedOutput != "" {
+			if w.commands == nil {
+				w.commands = make(map[string]string)
+			}
+			old := w.commands[event.Item.ID]
+			text := event.Item.AggregatedOutput
+			if strings.HasPrefix(text, old) {
+				text = text[len(old):]
+			}
+			fmt.Fprint(w.output, text)
+			w.commands[event.Item.ID] = event.Item.AggregatedOutput
+		}
+		if event.Type == "stream_event" {
+			if event.Event.Type == "message_start" {
+				w.streamed = false
+				fmt.Fprintln(w.output, "[Agent responding]")
+			}
+			if event.Event.Type == "content_block_start" && event.Event.ContentBlock.Type == "tool_use" {
+				fmt.Fprintln(w.output, "[Tool] "+event.Event.ContentBlock.Name)
+			}
+			if event.Event.Type == "content_block_delta" && event.Event.Delta.Type == "text_delta" {
+				fmt.Fprint(w.output, event.Event.Delta.Text)
+				w.streamed = true
+			}
+			if event.Event.Type == "message_stop" && w.streamed {
+				fmt.Fprintln(w.output)
+			}
 		}
 		if event.Type == "assistant" {
 			for _, part := range event.Message.Content {
-				if part.Type == "text" && part.Text != "" {
+				if part.Type == "text" && part.Text != "" && !w.streamed {
 					fmt.Fprintln(w.output, part.Text)
 				}
+				if part.Type == "tool_use" {
+					fmt.Fprintf(w.output, "[Tool] %s %s\n", part.Name, part.Input)
+				}
+			}
+		}
+		if event.Type == "user" {
+			for _, part := range event.Message.Content {
+				if part.Type != "tool_result" || len(part.Content) == 0 {
+					continue
+				}
+				var content string
+				if json.Unmarshal(part.Content, &content) != nil {
+					var blocks []struct {
+						Text string `json:"text"`
+					}
+					if json.Unmarshal(part.Content, &blocks) == nil {
+						for _, block := range blocks {
+							if block.Text != "" {
+								fmt.Fprintln(w.output, block.Text)
+							}
+						}
+						continue
+					}
+					content = string(part.Content)
+				}
+				fmt.Fprintln(w.output, content)
 			}
 		}
 	}
@@ -76,6 +160,32 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 		w.pending = nil
 	}
 	return len(p), nil
+}
+
+// Display the actual instructions and stdin supplied to the harness, but never credentials.
+func showProposalInput(out io.Writer, args []string, context []byte, harness string) {
+	var system string
+	for i, arg := range args {
+		if strings.HasPrefix(arg, "developer_instructions=") {
+			_ = json.Unmarshal([]byte(strings.TrimPrefix(arg, "developer_instructions=")), &system)
+		}
+		if arg == "--append-system-prompt" && i+1 < len(args) {
+			system = args[i+1]
+		}
+	}
+	clean := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if r < 32 && r != '\n' && r != '\t' && r != '\r' || r == 127 {
+				return -1
+			}
+			return r
+		}, s)
+	}
+	fmt.Fprintf(out, "[Starting %s planning harness]\n\n[Agent and ticket context]\n%s\n\n[Prompt]\n%s\n", harness, clean(system), clean(args[len(args)-1]))
+	if len(context) > 0 {
+		fmt.Fprintf(out, "\n[Previous proposal and feedback supplied on stdin]\n%s\n", clean(string(context)))
+	}
+	fmt.Fprintln(out, "\n[Harness output]")
 }
 
 func claudeProposalResult(data []byte) (json.RawMessage, *model.TokenEvidence, error) {
@@ -123,6 +233,7 @@ func runPersonaProposal(harness string, args []string, persona personaLaunch) er
 	if persona.ProposalJob == nil || len(args) == 0 || os.Getenv("TELEPORT_SESSION_ID") == "" {
 		return errors.New("invalid proposal launch")
 	}
+	fmt.Fprintf(os.Stdout, "[Preparing %s planning session]\n", persona.Agent.Harness)
 	dir, err := os.MkdirTemp("", "tk-proposal-")
 	if err != nil {
 		return err
@@ -175,6 +286,7 @@ func runPersonaProposal(harness string, args []string, persona personaLaunch) er
 		instruction := args[len(args)-1] + " The granted project directory for source inspection is " + projectDir + "."
 		args = append(append(append([]string{}, args[:len(args)-1]...), "--json", "--skip-git-repo-check", "--cd", dir, "--output-schema", schemaPath, "--output-last-message", resultPath), instruction)
 	}
+	showProposalInput(os.Stdout, args, context, persona.Agent.Harness)
 	cmd := exec.Command(harness, args...)
 	var events bytes.Buffer
 	stream := &proposalEventWriter{capture: &limitedBuffer{b: &events, remaining: 2 << 20}, output: os.Stdout}
@@ -189,6 +301,9 @@ func runPersonaProposal(harness string, args []string, persona personaLaunch) er
 		cmd.Env = append(cmd.Env, "PATH="+filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	}
 	runErr := cmd.Run()
+	if len(stream.pending) > 0 {
+		fmt.Fprintln(stream.output, string(stream.pending))
+	}
 	var data []byte
 	var usage *model.TokenEvidence
 	var resultErr error

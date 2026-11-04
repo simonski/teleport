@@ -184,6 +184,9 @@ def main(database_url=None):
                 browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
                 browser("press", "Shift+F10"); browser("wait", '[data-agent-usage]')
                 browser("click", '[data-agent-usage]')
+                browser("wait", "--fn", "terminalView && Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n').includes('Planning proposal fixture')")
+                transcript = browser("eval", "Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n')")
+                assert "Starting " + args.proposal_harness + " planning harness" in transcript and "Planning source" in transcript and "Produce a proposal" in transcript
                 first = wait_for(lambda: (items[-1] if len(items := tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 1 and items[-1]["ready"] else None))
                 session_id = first["sessionId"]
                 browser("wait", '.proposal-targets li button'); browser("click", '.proposal-targets li button')

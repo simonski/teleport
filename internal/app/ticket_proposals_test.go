@@ -144,6 +144,13 @@ func TestProposalRequiresSuccessfulOwnedExit(t *testing.T) {
 	}
 }
 
+func TestProposalSessionShowsFrozenHarnessConfiguration(t *testing.T) {
+	info := localInfo(model.LocalSession{Harness: "codex-pty", Persona: &model.AgentDefinition{Name: "Planner", Model: "example-model", Thinking: "high"}})
+	if info.PersonaName != "Planner" || info.Harness != "codex-pty" || info.Model != "example-model" || info.Thinking != "high" {
+		t.Fatalf("missing session configuration: %#v", info)
+	}
+}
+
 func TestProposalAttentionTracksLatestReviewableRound(t *testing.T) {
 	st, _, ticket, _ := managedFixture()
 	now := time.Now().UTC()

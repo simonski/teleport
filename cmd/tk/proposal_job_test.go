@@ -42,6 +42,9 @@ func TestProposalStreamShowsHarnessProgressWithoutRepeatingOutput(t *testing.T) 
 		`{"type":"item.updated","item":{"id":"1","type":"command_execution","aggregated_output":"first\n"}}`,
 		`{"type":"item.completed","item":{"id":"1","type":"command_execution","aggregated_output":"first\nsecond\n"}}`,
 		`{"type":"item.completed","item":{"type":"reasoning","text":"Inspecting the ticket"}}`,
+		`{"type":"item.started","item":{"id":"search","type":"web_search","query":"example"}}`,
+		`{"type":"item.updated","item":{"id":"answer","type":"agent_message","text":"Draft"}}`,
+		`{"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"Draft plan"}}`,
 		`{"type":"stream_event","event":{"type":"message_start"}}`,
 		`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Live answer"}}}`,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"Live answer"}]}}`,
@@ -50,7 +53,7 @@ func TestProposalStreamShowsHarnessProgressWithoutRepeatingOutput(t *testing.T) 
 		_, _ = w.Write([]byte(line + "\n"))
 	}
 	text := shown.String()
-	for _, want := range []string{"thread started", "$ tk ticket show 7", "first", "second", "Inspecting the ticket", "Live answer", "Read result"} {
+	for _, want := range []string{"thread started", "$ tk ticket show 7", "first", "second", "Inspecting the ticket", "web_search", "Draft plan", "Live answer", "Read result"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in %q", want, text)
 		}

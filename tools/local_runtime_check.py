@@ -144,7 +144,7 @@ def main(database_url=None):
             config = folder / "isolated-codex" / "config.toml"
             config.write_text("[projects." + json.dumps(str(folder.resolve())) + "]\ntrust_level = \"untrusted\"\n[projects." + json.dumps(str(repository.resolve())) + "]\ntrust_level = \"trusted\"\n")
         if args.proposal_only:
-            definition = tk("saveAgentDefinition", {"name":"Fixture planner","goal":"Propose a breakdown","prompt":"","skills":[],"harness":args.proposal_harness,"requestId":"planner"})
+            definition = tk("saveAgentDefinition", {"name":"Fixture planner","goal":"Propose a breakdown","prompt":"","skills":[],"harness":args.proposal_harness,"model":"fixture-model","thinking":"high","requestId":"planner"})
             ticket = tk("createTicket", {"projectId":project["id"],"title":"Planning source","agent":False,"requestId":"planning-source"})
             usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Plan","agentId":definition["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"planning-usage"})
             def run_proposal(request_id, previous=None):
@@ -180,6 +180,7 @@ def main(database_url=None):
                 browser("click", '[data-agent-usage]')
                 browser("wait", "--fn", "terminalView && Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n').includes('Planning proposal fixture')")
                 browser("wait", "--fn", "document.querySelector('#terminal-started')?.dateTime && /^\\d+:\\d{2}(?::\\d{2})?$/.test(document.querySelector('#terminal-elapsed')?.textContent)")
+                assert "true" in browser("eval", "document.querySelector('#terminal-harness').textContent === " + json.dumps(args.proposal_harness) + " && document.querySelector('#terminal-model').textContent === 'fixture-model' && document.querySelector('#terminal-thinking').textContent === 'high' && !document.querySelector('#terminal-activity').hidden")
                 transcript = browser("eval", "Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n')")
                 assert "Starting " + args.proposal_harness + " planning harness" in transcript and "Planning source" in transcript and "Produce a proposal" in transcript
                 browser("press", "Escape")

@@ -24,6 +24,7 @@ type proposalEventWriter struct {
 	pending  []byte
 	output   io.Writer
 	commands map[string]string
+	texts    map[string]string
 	streamed bool
 }
 
@@ -38,8 +39,13 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 		line := w.pending[:index]
 		w.pending = w.pending[index+1:]
 		var event struct {
-			Type  string `json:"type"`
-			Error struct {
+			Type       string          `json:"type"`
+			Subtype    string          `json:"subtype"`
+			Model      string          `json:"model"`
+			Structured json.RawMessage `json:"structured_output"`
+			IsError    bool            `json:"is_error"`
+			Result     json.RawMessage `json:"result"`
+			Error      struct {
 				Message string `json:"message"`
 			} `json:"error"`
 			Event struct {
@@ -77,6 +83,17 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 		if event.Type == "thread.started" || event.Type == "turn.started" {
 			fmt.Fprintln(w.output, "["+strings.ReplaceAll(event.Type, ".", " ")+"]")
 		}
+		if event.Type == "turn.completed" {
+			fmt.Fprintln(w.output, "[turn completed]")
+		}
+		if event.Type == "system" && event.Subtype == "init" {
+			fmt.Fprintln(w.output, "[Harness initialized"+func() string {
+				if event.Model != "" {
+					return " · " + event.Model
+				}
+				return ""
+			}()+"]")
+		}
 		if event.Type == "error" || event.Type == "turn.failed" {
 			if event.Error.Message != "" {
 				fmt.Fprintln(w.output, "[Harness error] "+event.Error.Message)
@@ -90,8 +107,21 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 		if event.Type == "item.started" && event.Item.Type == "reasoning" {
 			fmt.Fprintln(w.output, "[Agent thinking]")
 		}
-		if event.Type == "item.completed" && (event.Item.Type == "agent_message" || event.Item.Type == "reasoning") {
-			fmt.Fprintln(w.output, event.Item.Text)
+		if (event.Type == "item.updated" || event.Type == "item.completed") && (event.Item.Type == "agent_message" || event.Item.Type == "reasoning") && event.Item.Text != "" {
+			if w.texts == nil {
+				w.texts = make(map[string]string)
+			}
+			key := event.Item.Type + ":" + event.Item.ID
+			text := event.Item.Text
+			if strings.HasPrefix(text, w.texts[key]) {
+				text = text[len(w.texts[key]):]
+			}
+			fmt.Fprint(w.output, text)
+			w.texts[key] = event.Item.Text
+			if event.Type == "item.completed" {
+				fmt.Fprintln(w.output)
+				delete(w.texts, key)
+			}
 		}
 		if (event.Type == "item.updated" || event.Type == "item.completed") && event.Item.Type == "command_execution" && event.Item.AggregatedOutput != "" {
 			if w.commands == nil {
@@ -113,6 +143,9 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 			if event.Event.Type == "content_block_start" && event.Event.ContentBlock.Type == "tool_use" {
 				fmt.Fprintln(w.output, "[Tool] "+event.Event.ContentBlock.Name)
 			}
+			if event.Event.Type == "content_block_start" && event.Event.ContentBlock.Type == "thinking" {
+				fmt.Fprintln(w.output, "[Agent thinking]")
+			}
 			if event.Event.Type == "content_block_delta" && event.Event.Delta.Type == "text_delta" {
 				fmt.Fprint(w.output, event.Event.Delta.Text)
 				w.streamed = true
@@ -120,6 +153,18 @@ func (w *proposalEventWriter) Write(p []byte) (int, error) {
 			if event.Event.Type == "message_stop" && w.streamed {
 				fmt.Fprintln(w.output)
 			}
+		}
+		if event.Type == "result" && len(event.Structured) > 0 && string(event.Structured) != "null" {
+			fmt.Fprintln(w.output, "[Harness result]", string(event.Structured))
+		}
+		if event.Type == "result" && event.IsError {
+			fmt.Fprintln(w.output, "[Harness error]", string(event.Result))
+		}
+		if strings.HasPrefix(event.Type, "item.") && event.Item.Type != "command_execution" && event.Item.Type != "agent_message" && event.Item.Type != "reasoning" {
+			fmt.Fprintln(w.output, "[Harness event]", string(line))
+		}
+		if event.Type != "" && !strings.HasPrefix(event.Type, "item.") && event.Type != "thread.started" && event.Type != "turn.started" && event.Type != "turn.completed" && event.Type != "turn.failed" && event.Type != "error" && event.Type != "stream_event" && event.Type != "assistant" && event.Type != "user" && event.Type != "system" && event.Type != "result" {
+			fmt.Fprintln(w.output, "[Harness event]", string(line))
 		}
 		if event.Type == "assistant" {
 			for _, part := range event.Message.Content {

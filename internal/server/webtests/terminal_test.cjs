@@ -61,6 +61,13 @@ test('session elapsed time advances and freezes only on confirmed exit',()=>{
   assert.equal(vm.runInContext("terminalElapsed({state:'running'},start)",context),'—');
 });
 
+test('terminal configuration distinguishes explicit selections from harness defaults',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){}});vm.runInContext(source,context);
+  assert.equal(vm.runInContext("terminalConfiguration({harness:'codex-pty',model:'example',thinking:'high'}).model",context),'example');
+  assert.equal(vm.runInContext("terminalConfiguration({harness:'claude-pty'}).thinking",context),'Harness default');
+  assert.equal(vm.runInContext("terminalConfiguration({harness:'shell'}).showModel",context),false);
+});
+
 test('all retained live and idle robots expose exact session and ticket identity',()=>{
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String});vm.runInContext(source,context);
   vm.runInContext(`localSessions=Array.from({length:5},(_,i)=>({id:'H'+i,state:i===4?'unknown':'running',ticketId:i?7:0,activity:i?'active':'idle'}))`,context);

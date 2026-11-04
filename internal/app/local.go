@@ -24,6 +24,8 @@ type LocalSessionInfo struct {
 	ProposalRun      bool       `json:"proposalRun,omitempty"`
 	PersonaName      string     `json:"personaName,omitempty"`
 	PersonaID        string     `json:"personaId,omitempty"`
+	Model            string     `json:"model,omitempty"`
+	Thinking         string     `json:"thinking,omitempty"`
 	ContextTicketID  int64      `json:"contextTicketId,omitempty"`
 	ProcessID        int        `json:"processId,omitempty"`
 	ReferenceRemoved bool       `json:"referenceRemoved,omitempty"`
@@ -152,6 +154,8 @@ func localInfo(row model.LocalSession) LocalSessionInfo {
 	if row.Persona != nil {
 		info.PersonaID = row.Persona.ID
 		info.PersonaName = row.Persona.Name
+		info.Model = row.Persona.Model
+		info.Thinking = row.Persona.Thinking
 		info.ContextTicketID = row.ContextTicketID
 	}
 	info.ProposalRun = row.ProposalRun != nil

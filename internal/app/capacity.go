@@ -111,6 +111,13 @@ func phaseCapacity(st *model.State, t model.Ticket, phase model.Phase) error {
 		if row.ProjectID == t.ProjectID && row.Spellcheck != nil && activeLocal(row) && refinePool(phase) {
 			poolUsed++
 		}
+		if row.ProjectID == t.ProjectID && row.ProposalRun != nil && activeLocal(row) && row.CapacityReleasedAt == nil && refinePool(phase) {
+			poolUsed++
+			other := st.Tickets[row.ProposalRun.TicketID]
+			if workflow.ID == st.Workflows[other.Workflow].ID && phase.ID == other.Phase {
+				laneUsed++
+			}
+		}
 		if row.ProjectID != t.ProjectID || row.TicketID == 0 || !activeLocal(row) || countedSessions["local:"+row.ID] {
 			continue
 		}

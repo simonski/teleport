@@ -29,14 +29,60 @@ type message struct {
 
 var history *toolhistory.Call
 
+func proposalFixture(context []byte) string {
+	result := `{"title":"Fixture breakdown","items":[{"key":"e","parentKey":"","kind":"epic","title":"Proposed epic","description":"Epic description","criteria":"Epic criteria"},{"key":"t","parentKey":"e","kind":"task","title":"Proposed task","description":"Task description","criteria":"Task criteria"}]}`
+	if strings.Contains(string(context), "Split the epic") {
+		result = strings.ReplaceAll(result, "Proposed epic", "Revised epic")
+	}
+	return result
+}
+
 func main() {
 	history = toolhistory.Start("tools/fixtures/native-codex")
 	defer history.End()
+	for _, arg := range os.Args {
+		if arg == "--json-schema" {
+			context, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				history.Exit(2)
+			}
+			fmt.Println(`{"type":"assistant","message":{"content":[{"type":"text","text":"Planning proposal fixture"}]}}`)
+			if strings.Contains(strings.Join(os.Args, " "), "fixture-failure") {
+				fmt.Println(`{"type":"result","is_error":true,"usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":0,"output_tokens":30},"total_cost_usd":0.0003}`)
+				history.Exit(1)
+			}
+			fmt.Println(`{"type":"result","is_error":false,"structured_output":` + proposalFixture(context) + `,"usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":0,"output_tokens":30},"total_cost_usd":0.0003}`)
+			return
+		}
+	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		var output string
+		var schema string
 		for i, arg := range os.Args {
 			if arg == "--output-last-message" && i+1 < len(os.Args) {
 				output = os.Args[i+1]
+			}
+			if arg == "--output-schema" && i+1 < len(os.Args) {
+				schema = os.Args[i+1]
+			}
+		}
+		if schema != "" {
+			data, err := os.ReadFile(schema)
+			if err == nil && strings.Contains(string(data), `"parentKey"`) {
+				context, readErr := io.ReadAll(os.Stdin)
+				if readErr != nil {
+					history.Exit(2)
+				}
+				fmt.Println("Planning proposal fixture")
+				fmt.Println(`{"type":"turn.completed","usage":{"input_tokens":120,"cached_input_tokens":20,"output_tokens":30}}`)
+				if strings.Contains(strings.Join(os.Args, " "), "fixture-failure") {
+					history.Exit(1)
+				}
+				result := proposalFixture(context)
+				if output == "" || os.WriteFile(output, []byte(result), 0600) != nil {
+					history.Exit(2)
+				}
+				return
 			}
 		}
 		data, err := io.ReadAll(os.Stdin)

@@ -227,8 +227,11 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		if err := checkScriptDispatch(ctx, st, &a, operation, raw); err != nil {
 			return false, err
 		}
-		if a.ServiceSessionID != "" && !contains([]string{"getTicket", "listTickets", "listProjects", "listWorkflows", "getWorkflow", "getTicketAgreements", "listTicketHistory"}, operation) {
+		if a.ServiceSessionID != "" && !contains([]string{"getTicket", "listTickets", "listProjects", "listWorkflows", "getWorkflow", "getTicketAgreements", "listTicketHistory", "submitTicketProposal", "getProposalRunContext", "reportProposalRunUsage"}, operation) {
 			return false, failure(403, "agent_scope", "This managed credential permits scoped context reads only")
+		}
+		if a.ServiceSessionReadOnly && (operation == "submitTicketProposal" || operation == "reportProposalRunUsage") {
+			return false, failure(403, "agent_scope", "This harness credential permits context reads only")
 		}
 		switch operation {
 		case "getSession":
@@ -254,6 +257,10 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 		case "listAgentUsages", "saveAgentUsage", "removeAgentUsage":
 			var changed bool
 			result, changed, err = agentUsageCall(st, a, operation, raw)
+			return changed, err
+		case "listTicketProposals", "submitTicketProposal", "commentTicketProposal", "acceptTicketProposal", "getProposalRunContext", "reportProposalRunUsage":
+			var changed bool
+			result, changed, err = ticketProposalOperations(st, a, operation, raw)
 			return changed, err
 		default:
 			var changed bool

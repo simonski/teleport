@@ -75,10 +75,19 @@ func latestPrice(st *model.State, name string) (model.UsagePrice, bool) {
 	return rows[len(rows)-1], true
 }
 func applyUsagePrice(st *model.State, row *model.LocalSession) bool {
-	if row.Spellcheck == nil || row.Spellcheck.Usage == nil || row.Persona == nil || row.Persona.Harness != "codex" || row.Persona.Model == "" {
+	if row.Persona == nil || row.Persona.Harness != "codex" || row.Persona.Model == "" {
 		return false
 	}
-	u := row.Spellcheck.Usage
+	var u *model.TokenEvidence
+	var valuation *[]model.UsageValuation
+	if row.Spellcheck != nil {
+		u, valuation = row.Spellcheck.Usage, &row.Spellcheck.Valuations
+	} else if row.ProposalRun != nil {
+		u, valuation = row.ProposalRun.Usage, &row.ProposalRun.Valuations
+	}
+	if u == nil {
+		return false
+	}
 	if u.Source != "codex-exec-json" || u.Cached == nil {
 		return false
 	}
@@ -86,7 +95,7 @@ func applyUsagePrice(st *model.State, row *model.LocalSession) bool {
 	if !ok {
 		return false
 	}
-	values := row.Spellcheck.Valuations
+	values := *valuation
 	if len(values) > 0 && values[len(values)-1].PriceVersion >= p.Version {
 		return false
 	}
@@ -103,7 +112,7 @@ func applyUsagePrice(st *model.State, row *model.LocalSession) bool {
 		value := values[len(values)-1].EstimateMicros
 		prior = &value
 	}
-	row.Spellcheck.Valuations = append(values, model.UsageValuation{PriceVersion: p.Version, EstimateMicros: sum.Int64(), PreviousMicros: prior, InputTokens: u.Input, CachedTokens: *u.Cached, OutputTokens: u.Output, Calculation: "codex-usd-v1", At: time.Now().UTC(), Effective: p.Effective, Source: p.Source})
+	*valuation = append(values, model.UsageValuation{PriceVersion: p.Version, EstimateMicros: sum.Int64(), PreviousMicros: prior, InputTokens: u.Input, CachedTokens: *u.Cached, OutputTokens: u.Output, Calculation: "codex-usd-v1", At: time.Now().UTC(), Effective: p.Effective, Source: p.Source})
 	return true
 }
 func (s *Service) usagePriceCall(ctx context.Context, token, op string, raw json.RawMessage) (any, error) {
@@ -153,14 +162,20 @@ func (s *Service) usagePriceCall(ctx context.Context, token, op string, raw json
 			return out, nil
 		}
 		row, ok := st.LocalSessions[id]
-		if !ok || row.Spellcheck == nil {
+		if !ok || row.Spellcheck == nil && row.ProposalRun == nil {
 			return nil, failure(404, "not_found", "Usage history not found")
 		}
 		if err = localAllowed(st, a, row); err != nil {
 			return nil, err
 		}
 		out := Page[model.UsageValuation]{Items: []model.UsageValuation{}}
-		for i, v := range row.Spellcheck.Valuations {
+		values := []model.UsageValuation{}
+		if row.Spellcheck != nil {
+			values = row.Spellcheck.Valuations
+		} else if row.ProposalRun != nil {
+			values = row.ProposalRun.Valuations
+		}
+		for i, v := range values {
 			n := int64(i + 1)
 			if n <= after {
 				continue

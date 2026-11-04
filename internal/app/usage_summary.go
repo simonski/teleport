@@ -62,7 +62,7 @@ func usageWindow(st *model.State, a model.Account, project int64, name string, s
 		if row.Harness == "shell" || role(st, a, row.ProjectID) == "" || project != 0 && row.ProjectID != project || row.CreatedAt.After(now) || !since.IsZero() && row.CreatedAt.Before(since) {
 			continue
 		}
-		if row.Spellcheck == nil && row.Managed == nil {
+		if row.Spellcheck == nil && row.Managed == nil && row.ProposalRun == nil {
 			result.InteractiveSessions++
 			continue
 		}
@@ -72,6 +72,10 @@ func usageWindow(st *model.State, a model.Account, project int64, name string, s
 		}
 		result.Invocations++
 		switch {
+		case row.ProposalRun != nil && row.State == "exited" && row.ExitCode != nil && *row.ExitCode == 0 && !row.StopRequested && row.ProposalRun.ProposalID != "":
+			result.Succeeded++
+		case row.ProposalRun != nil && (row.State == "failed" || row.State == "exited"):
+			result.Failed++
 		case row.Spellcheck != nil && row.Spellcheck.State == "completed":
 			result.Succeeded++
 		case row.Spellcheck != nil && row.Spellcheck.State == "failed":
@@ -92,8 +96,14 @@ func usageWindow(st *model.State, a model.Account, project int64, name string, s
 		} else {
 			result.ElapsedPartial = true
 		}
-		if row.Spellcheck != nil && row.Spellcheck.Usage != nil {
-			u := row.Spellcheck.Usage
+		var u *model.TokenEvidence
+		values := []model.UsageValuation{}
+		if row.Spellcheck != nil {
+			u, values = row.Spellcheck.Usage, row.Spellcheck.Valuations
+		} else if row.ProposalRun != nil {
+			u, values = row.ProposalRun.Usage, row.ProposalRun.Valuations
+		}
+		if u != nil {
 			result.MeasuredRuns++
 			input += u.Input
 			if u.Cached != nil {
@@ -107,7 +117,6 @@ func usageWindow(st *model.State, a model.Account, project int64, name string, s
 				result.EstimatedRuns++
 			} else if row.Persona != nil && row.Persona.Harness == "codex" && row.Persona.Model != "" && u.Cached != nil {
 				price, ok := latestPrice(st, row.Persona.Model)
-				values := row.Spellcheck.Valuations
 				if ok && (len(values) == 0 || values[len(values)-1].PriceVersion != price.Version) {
 					result.PricePending++
 				}

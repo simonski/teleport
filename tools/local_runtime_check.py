@@ -24,11 +24,16 @@ def main(database_url=None):
     parser.add_argument("--persona-pty", action="store_true", help="Exercise an agent persona through the zero-model Codex PTY fixture; requires --codex-pty")
     parser.add_argument("--usage-pty", action="store_true", help="Exercise a configured Todo conversation action; requires --codex-pty")
     parser.add_argument("--spellcheck", action="store_true", help="Exercise a zero-model spellcheck run; requires --codex-pty")
+    parser.add_argument("--proposal-only", action="store_true", help="Exercise proposal review and revision with a zero-model Codex fixture")
+    parser.add_argument("--proposal-harness", choices=["codex","claude"], default="codex")
     parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY with a zero-model fixture")
     parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
     parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
     parser.add_argument("--database", help="Existing empty disposable PostgreSQL database")
     args = parser.parse_args()
+    if args.proposal_only:
+        args.codex_pty = True
+        if args.proposal_harness == "claude": args.harness_pty = "claude"
     if args.usage_pty:
         args.persona_pty = True
     if args.persona_pty and not args.codex_pty:
@@ -138,6 +143,90 @@ def main(database_url=None):
         if args.native_startup_only:
             config = folder / "isolated-codex" / "config.toml"
             config.write_text("[projects." + json.dumps(str(folder.resolve())) + "]\ntrust_level = \"untrusted\"\n[projects." + json.dumps(str(repository.resolve())) + "]\ntrust_level = \"trusted\"\n")
+        if args.proposal_only:
+            definition = tk("saveAgentDefinition", {"name":"Fixture planner","goal":"Propose a breakdown","prompt":"","skills":[],"harness":args.proposal_harness,"requestId":"planner"})
+            ticket = tk("createTicket", {"projectId":project["id"],"title":"Planning source","agent":False,"requestId":"planning-source"})
+            usage = None if args.browser else tk("saveAgentUsage", {"projectId":project["id"],"name":"Plan","agentId":definition["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"planning-usage"})
+            def run_proposal(request_id, previous=None):
+                nonlocal session_id
+                launch = {"projectId":project["id"],"agentId":definition["id"],"expectedVersion":definition["version"],"ticketId":ticket["id"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":request_id}
+                if previous: launch["proposalPreviousId"] = previous
+                row = tk("openAgentSession", launch)
+                session_id = row["id"]
+                finished = wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == row["id"] and item["state"] == "exited"), None))
+                proposals = tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]
+                if not proposals or not proposals[-1]["ready"]:
+                    import base64
+                    output = base64.b64decode(tk("attachSession", {"id":row["id"]}).get("data", "")).decode(errors="replace")
+                    raise AssertionError(f"proposal session failed: {finished}; terminal: {output}")
+                return proposals[-1]
+            if args.browser:
+                browser("open", endpoint); browser_open = True
+                browser("find", "label", "Username", "fill", "admin")
+                browser("find", "label", "Password", "fill", "password")
+                browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                browser("wait", "#welcome-status"); browser("press", "Escape")
+                browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
+                browser("click", "#project + .choice-button")
+                browser("click", '.choice-list [data-value="' + str(project["id"]) + '"]')
+                browser("wait", "--fn", "document.querySelector('#account-project-settings')")
+                browser("click", "#account"); browser("click", "#account-project-settings"); browser("click", "#project-agent-usage")
+                browser("wait", '[data-add-agent-usage]'); browser("click", '[data-add-agent-usage]')
+                browser("select", '#editor [name="runMode"]', "todo-proposal")
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", "--fn", "document.querySelector('#project-usages')?.textContent.includes('Proposal')")
+                usage = tk("listAgentUsages", {"projectId":project["id"]})["items"][0]
+                assert usage["kind"] == "todo-proposal" and usage["workflow"] == ticket["workflow"] and usage["phase"] == ticket["phase"]
+                browser("press", "Escape")
+                browser("click", '[data-view="Todos"]')
+                card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
+                browser("wait", card)
+                browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
+                browser("press", "Shift+F10"); browser("wait", '[data-ticket-menu="agents"]'); browser("click", '[data-ticket-menu="agents"]')
+                browser("wait", '[data-agent-usage]'); browser("click", '[data-agent-usage]')
+                first = wait_for(lambda: (items[-1] if len(items := tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 1 and items[-1]["ready"] else None))
+                session_id = first["sessionId"]
+                browser("wait", '#terminal-review'); browser("click", '#terminal-review')
+                browser("wait", '.proposal-targets li button'); browser("click", '.proposal-targets li button')
+                browser("fill", '#editor [name="feedback"]', "Split the epic")
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.textContent.includes('Split the epic')")
+                assert tk("listTicketProposals", {"ticketId":ticket["id"]})["items"][-1]["feedback"][0]["itemKey"] == "e"
+                browser("find", "role", "button", "click", "--name", "Revise with feedback", "--exact")
+                second = wait_for(lambda: (items[-1] if len(items := tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 2 and items[-1]["ready"] else None))
+                session_id = second["sessionId"]
+                browser("wait", '#terminal-review'); browser("click", '#terminal-review')
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.textContent.includes('Revised epic')")
+                browser("screenshot", "/tmp/teleport-proposal-review.png")
+                browser("click", '[data-proposal-accept]')
+                browser("check", '#editor input[type="checkbox"]')
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.textContent.includes('Accepted')")
+                accepted = tk("listTicketProposals", {"ticketId":ticket["id"]})["items"][-1]
+            else:
+                first = run_proposal("planning-run")
+                first = tk("commentTicketProposal", {"ticketId":ticket["id"],"proposalId":first["id"],"expectedVersion":first["version"],"requestId":"planning-feedback","text":"Split the epic"})
+                second = run_proposal("planning-rerun", first["id"])
+                accepted = tk("acceptTicketProposal", {"ticketId":ticket["id"],"proposalId":second["id"],"expectedVersion":second["version"],"expectedTicketVersion":ticket["version"]})
+            assert second["previousId"] == first["id"] and second["items"][0]["title"] == "Revised epic"
+            assert first["items"][0]["title"] == "Proposed epic" and not first.get("createdIds")
+            assert len(accepted["createdIds"]) == 2 and tk("getTicket", {"id":accepted["createdIds"][1]})["parentId"] == accepted["createdIds"][0]
+            assert tk("getTicket", {"id":ticket["id"]})["version"] == ticket["version"]
+            summary = tk("getUsageSummary", {"projectId":project["id"]})
+            totals = next(window for window in summary["windows"] if window["name"] == "all")
+            assert totals["invocations"] == 2 and totals["succeeded"] == 2 and totals["tokens"] == 300
+            failing = tk("saveAgentDefinition", {"name":"Failing planner","goal":"fixture-failure","prompt":"","skills":[],"harness":args.proposal_harness,"requestId":"failing-planner"})
+            failing_usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Fail","agentId":failing["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"failing-usage"})
+            failed = tk("openAgentSession", {"projectId":project["id"],"agentId":failing["id"],"expectedVersion":failing["version"],"ticketId":ticket["id"],"usageId":failing_usage["id"],"usageVersion":failing_usage["version"],"requestId":"failing-run"})
+            session_id = failed["id"]
+            wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == failed["id"] and item["state"] == "exited"), None))
+            totals = next(window for window in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if window["name"] == "all")
+            assert totals["invocations"] == 3 and totals["failed"] == 1 and totals["tokens"] == 450
+            assert len(tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 2
+            tk("shutdownLocalRuntime", {"confirm":True})
+            clean = True
+            print("PASS: proposal PTY, persisted feedback, revision and idempotent human acceptance; no model calls")
+            return
         if args.console_only:
             git("checkout", "-b", "console-feature")
         if args.spellcheck:
@@ -676,7 +765,7 @@ def main(database_url=None):
                         if item["state"] not in ("exited", "failed"):
                             tk("stopSession", {"id": item["id"], "confirm": True})
                     wait_for(lambda: all(r["state"] in ("exited", "failed") for r in tk("listSessions")["items"]))
-                tk("shutdownLocalRuntime", {"confirm": True})
+                    tk("shutdownLocalRuntime", {"confirm": True})
                 clean = True
             except (RuntimeError, AssertionError):
                 print(f"Retain unresolved owned runtime evidence: {folder}")

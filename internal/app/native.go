@@ -19,7 +19,7 @@ func localActor(st *model.State, token string) (model.Account, bool) {
 	}
 	hash := digest(token)
 	for _, row := range st.LocalSessions {
-		if row.CredentialHash == hash && row.State == "running" && !row.StopRequested && time.Now().Before(row.CredentialExpires) {
+		if (row.CredentialHash == hash || row.ReadCredentialHash == hash) && row.State == "running" && !row.StopRequested && time.Now().Before(row.CredentialExpires) {
 			owner, ok := st.Accounts[row.Creator]
 			binding := st.Projects[row.ProjectID].Repository
 			if !ok || owner.Suspended || len(st.Accounts) != 1 || require(st, owner, row.ProjectID, "Contributor") != nil || binding == nil || binding.Version != row.BindingVersion {
@@ -31,7 +31,13 @@ func localActor(st *model.State, token string) (model.Account, bool) {
 					return model.Account{}, false
 				}
 			}
-			return model.Account{ID: "agent:" + row.ID, Username: "agent:" + row.ID, ServiceSessionID: row.ID, ServiceProjectID: row.ProjectID}, true
+			if row.ProposalRun != nil {
+				t := st.Tickets[row.ProposalRun.TicketID]
+				if t.ID == 0 || t.ProjectID != row.ProjectID || t.StopRequested || t.ResumeHold || t.Archived || t.Deleted || t.Status == "Cancelled" {
+					return model.Account{}, false
+				}
+			}
+			return model.Account{ID: "agent:" + row.ID, Username: "agent:" + row.ID, ServiceSessionID: row.ID, ServiceProjectID: row.ProjectID, ServiceSessionReadOnly: row.ReadCredentialHash == hash}, true
 		}
 	}
 	return model.Account{}, false
@@ -142,10 +148,13 @@ func (s *Service) nativeRequestCall(ctx context.Context, token, op string, raw j
 	return receipt, err
 }
 func (s *Service) writeContextCredential(row model.LocalSession) (string, error) {
+	return s.writeOwnedContextCredential(row, ".client.json", row.CredentialHash)
+}
+func (s *Service) writeOwnedContextCredential(row model.LocalSession, suffix, expectedHash string) (string, error) {
 	if s.localEndpoint == "" {
 		return "", failure(409, "local_endpoint_required", "Configure an explicit local server endpoint for managed context reads")
 	}
-	path := filepath.Join(s.localClient.Root, row.ID+".client.json")
+	path := filepath.Join(s.localClient.Root, row.ID+suffix)
 	if info, err := os.Lstat(path); err == nil {
 		if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 			return "", failure(409, "context_credential_conflict", "Managed context credential ownership changed")
@@ -156,10 +165,13 @@ func (s *Service) writeContextCredential(row model.LocalSession) (string, error)
 			return "", failure(409, "context_credential_conflict", "Managed context credential basis changed")
 		}
 		hash := digest(saved["token"])
-		if row.CredentialHash != "" && row.CredentialHash != hash {
+		if expectedHash != "" && expectedHash != hash {
 			return "", failure(409, "context_credential_conflict", "Managed context credential changed")
 		}
 		return hash, nil
+	}
+	if expectedHash != "" {
+		return "", failure(409, "context_credential_conflict", "Retained context credential is unavailable; reconcile the existing session")
 	}
 	token := randomID()
 	data, _ := json.Marshal(map[string]string{"server": s.localEndpoint, "token": token, "kind": "teleport-local-context", "sessionId": row.ID, "launchId": row.LaunchID})

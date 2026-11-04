@@ -25,6 +25,12 @@ func init() {
 		}{}, app.AgentUsageList{}},
 		{"saveAgentUsage", "Configure a project agent usage", app.AgentUsageInput{}, model.AgentUsage{}},
 		{"removeAgentUsage", "Remove a project agent usage", app.RemoveAgentUsageInput{}, model.AgentUsage{}},
+		{"listTicketProposals", "List retained ticket proposals", app.TicketProposalListInput{}, app.TicketProposalList{}},
+		{"submitTicketProposal", "Submit a ticket proposal", app.TicketProposalInput{}, model.TicketProposal{}},
+		{"commentTicketProposal", "Record proposal feedback", app.TicketProposalFeedbackInput{}, model.TicketProposal{}},
+		{"acceptTicketProposal", "Accept a ticket proposal", app.TicketProposalAcceptInput{}, model.TicketProposal{}},
+		{"getProposalRunContext", "Read the current proposal run's prior feedback", struct{}{}, map[string]any{}},
+		{"reportProposalRunUsage", "Record provider usage for the current proposal run", app.ProposalRunUsageInput{}, map[string]bool{}},
 		{"startSpellcheck", "Start a scoped Todo spellcheck", app.SpellcheckInput{}, app.SpellcheckView{}},
 		{"getSpellcheckRun", "Inspect an owned spellcheck run", app.SpellcheckStatusInput{}, app.SpellcheckView{}},
 		{"getTicketSpellchecks", "Inspect spellcheck completion marks", app.IDInput{}, app.SpellcheckMarks{}},
@@ -43,6 +49,9 @@ func init() {
 		}
 		if entry.name == "listAgentUsages" || entry.name == "saveAgentUsage" || entry.name == "removeAgentUsage" {
 			action = "ACT-1517"
+		}
+		if entry.name == "listTicketProposals" || entry.name == "submitTicketProposal" || entry.name == "commentTicketProposal" || entry.name == "acceptTicketProposal" || entry.name == "getProposalRunContext" || entry.name == "reportProposalRunUsage" {
+			action = "ACT-1519"
 		}
 		if entry.name == "startSpellcheck" || entry.name == "getSpellcheckRun" || entry.name == "getTicketSpellchecks" {
 			action = "ACT-1518"

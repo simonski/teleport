@@ -21,6 +21,7 @@ import (
 )
 
 type LocalSessionInfo struct {
+	ProposalRun      bool       `json:"proposalRun,omitempty"`
 	PersonaName      string     `json:"personaName,omitempty"`
 	PersonaID        string     `json:"personaId,omitempty"`
 	ContextTicketID  int64      `json:"contextTicketId,omitempty"`
@@ -52,25 +53,27 @@ type LocalHarnesses struct {
 	Available []HarnessChoice `json:"available"`
 }
 type OpenLocalSessionInput struct {
-	UsageID         string `json:"usageId,omitempty"`
-	UsageVersion    int64  `json:"usageVersion,omitempty"`
-	PersonaID       string `json:"personaId,omitempty"`
-	PersonaVersion  int64  `json:"personaVersion,omitempty"`
-	ContextTicketID int64  `json:"contextTicketId,omitempty"`
-	ProjectID       int64  `json:"projectId"`
-	TicketID        int64  `json:"ticketId,omitempty"`
-	ExpectedVersion int64  `json:"expectedVersion,omitempty"`
-	Harness         string `json:"harness"`
-	RequestID       string `json:"requestId"`
+	ProposalPreviousID string `json:"proposalPreviousId,omitempty"`
+	UsageID            string `json:"usageId,omitempty"`
+	UsageVersion       int64  `json:"usageVersion,omitempty"`
+	PersonaID          string `json:"personaId,omitempty"`
+	PersonaVersion     int64  `json:"personaVersion,omitempty"`
+	ContextTicketID    int64  `json:"contextTicketId,omitempty"`
+	ProjectID          int64  `json:"projectId"`
+	TicketID           int64  `json:"ticketId,omitempty"`
+	ExpectedVersion    int64  `json:"expectedVersion,omitempty"`
+	Harness            string `json:"harness"`
+	RequestID          string `json:"requestId"`
 }
 type OpenAgentSessionInput struct {
-	UsageID         string `json:"usageId,omitempty"`
-	UsageVersion    int64  `json:"usageVersion,omitempty"`
-	ProjectID       int64  `json:"projectId"`
-	AgentID         string `json:"agentId"`
-	ExpectedVersion int64  `json:"expectedVersion"`
-	TicketID        int64  `json:"ticketId,omitempty"`
-	RequestID       string `json:"requestId"`
+	ProposalPreviousID string `json:"proposalPreviousId,omitempty"`
+	UsageID            string `json:"usageId,omitempty"`
+	UsageVersion       int64  `json:"usageVersion,omitempty"`
+	ProjectID          int64  `json:"projectId"`
+	AgentID            string `json:"agentId"`
+	ExpectedVersion    int64  `json:"expectedVersion"`
+	TicketID           int64  `json:"ticketId,omitempty"`
+	RequestID          string `json:"requestId"`
 }
 type OpenShellSessionInput struct {
 	ProjectID int64  `json:"projectId"`
@@ -151,6 +154,7 @@ func localInfo(row model.LocalSession) LocalSessionInfo {
 		info.PersonaName = row.Persona.Name
 		info.ContextTicketID = row.ContextTicketID
 	}
+	info.ProposalRun = row.ProposalRun != nil
 	if row.State == "unknown" && row.TicketID == 0 && row.Managed == nil {
 		info.Reference = sessionReference(row)
 	}
@@ -345,7 +349,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 		if err = require(st, a, in.ProjectID, "Contributor"); err != nil {
 			return nil, err
 		}
-		if (in.UsageID == "") != (in.UsageVersion == 0) || in.UsageID != "" && in.TicketID == 0 {
+		if (in.UsageID == "") != (in.UsageVersion == 0) || in.UsageID != "" && in.TicketID == 0 || in.ProposalPreviousID != "" && (in.UsageID == "" || in.TicketID == 0) {
 			return nil, failure(422, "invalid_usage", "A configured action requires its version and ticket")
 		}
 		if saved, ok := st.Receipts[a.ID+":"+operation+":"+in.RequestID]; ok {
@@ -363,7 +367,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 				usageID = row.Attribution.UsageID
 				usageVersion = row.Attribution.UsageVersion
 			}
-			if row.ProjectID != in.ProjectID || row.Persona.ID != in.AgentID || row.Persona.Version != in.ExpectedVersion || row.ContextTicketID != in.TicketID || usageID != in.UsageID || usageVersion != in.UsageVersion {
+			if row.ProjectID != in.ProjectID || row.Persona.ID != in.AgentID || row.Persona.Version != in.ExpectedVersion || row.ContextTicketID != in.TicketID || usageID != in.UsageID || usageVersion != in.UsageVersion || (row.ProposalRun == nil && in.ProposalPreviousID != "") || (row.ProposalRun != nil && row.ProposalRun.PreviousID != in.ProposalPreviousID) {
 				return nil, failure(409, "request_conflict", "Session request identity was reused with different fields")
 			}
 			if err = localAllowed(st, a, row); err != nil {
@@ -372,7 +376,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 			if row.State != "preparing" {
 				return localInfo(row), nil
 			}
-			return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: row.Harness, PersonaID: row.Persona.ID, PersonaVersion: row.Persona.Version, ContextTicketID: in.TicketID, UsageID: in.UsageID, UsageVersion: in.UsageVersion})
+			return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: row.Harness, PersonaID: row.Persona.ID, PersonaVersion: row.Persona.Version, ContextTicketID: in.TicketID, UsageID: in.UsageID, UsageVersion: in.UsageVersion, ProposalPreviousID: in.ProposalPreviousID})
 		}
 		agent, ok := st.AgentDefinitions[in.AgentID]
 		if !ok || agent.Archived {
@@ -387,7 +391,7 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 				return nil, failure(409, "skill_unavailable", "A selected agent skill is no longer installed")
 			}
 		}
-		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: agent.Harness + "-pty", PersonaID: agent.ID, PersonaVersion: agent.Version, ContextTicketID: in.TicketID, UsageID: in.UsageID, UsageVersion: in.UsageVersion})
+		return s.openLocal(ctx, token, operation, OpenLocalSessionInput{ProjectID: in.ProjectID, RequestID: in.RequestID, Harness: agent.Harness + "-pty", PersonaID: agent.ID, PersonaVersion: agent.Version, ContextTicketID: in.TicketID, UsageID: in.UsageID, UsageVersion: in.UsageVersion, ProposalPreviousID: in.ProposalPreviousID})
 	}
 	if operation == "openShellSession" || operation == "openCodexTerminal" || operation == "openClaudeTerminal" || operation == "openCopilotTerminal" {
 		var in OpenShellSessionInput
@@ -458,6 +462,9 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	}
 	if row.Spellcheck != nil && operation != "stopSession" {
 		return nil, failure(403, "spellcheck_private", "Spellcheck jobs do not accept terminal input or attachment")
+	}
+	if row.ProposalRun != nil && operation == "sendSessionInput" {
+		return nil, failure(409, "proposal_input_unavailable", "Planning runs accept feedback after they finish")
 	}
 	if operation == "listSessionInterventions" {
 		after, limit, err := pageBounds(audit.Cursor, audit.Limit)
@@ -642,6 +649,9 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 	if in.UsageID != "" {
 		fingerprintText += fmt.Sprintf(":%s:%d", in.UsageID, in.UsageVersion)
 	}
+	if in.ProposalPreviousID != "" {
+		fingerprintText += ":proposal:" + in.ProposalPreviousID
+	}
 	fingerprint := digest(fingerprintText)
 	var row model.LocalSession
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
@@ -696,7 +706,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			}
 			if in.UsageID != "" {
 				usage, exists := st.AgentUsages[in.UsageID]
-				if !exists || usage.Removed || !usage.Enabled || usage.Kind != "todo-conversation" || usage.ProjectID != in.ProjectID || usage.AgentID != agent.ID || usage.Version != in.UsageVersion {
+				if !exists || usage.Removed || !usage.Enabled || !contains([]string{"todo-conversation", "todo-proposal"}, usage.Kind) || usage.ProjectID != in.ProjectID || usage.AgentID != agent.ID || usage.Version != in.UsageVersion {
 					return false, failure(409, "usage_unavailable", "The configured agent action changed or is unavailable")
 				}
 			}
@@ -710,6 +720,22 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 				}
 				if in.UsageID != "" && (ticket.Kind != "task" || ticket.Deleted || ticket.Archived || ticket.Protected || !usageMatchesTicket(st.AgentUsages[in.UsageID], ticket) || st.AgentUsages[in.UsageID].Workflow == "" && ticket.Agent) {
 					return false, failure(409, "usage_unavailable", "This action is unavailable for the ticket's current lane")
+				}
+				if st.AgentUsages[in.UsageID].Kind == "todo-proposal" {
+					if err := proposalAdmission(st, ticket); err != nil {
+						return false, err
+					}
+					job := &model.ProposalRun{TicketID: ticket.ID, TicketVersion: ticket.Version, UsageID: in.UsageID, UsageVersion: in.UsageVersion, PreviousID: in.ProposalPreviousID}
+					if in.ProposalPreviousID != "" {
+						previous, ok := st.TicketProposals[in.ProposalPreviousID]
+						if !ok || previous.TicketID != ticket.ID || previous.ProjectID != ticket.ProjectID || previous.AcceptedBy != "" || !proposalRunReady(st, previous) {
+							return false, failure(409, "proposal_unavailable", "Previous proposal is unavailable")
+						}
+						job.PreviousVersion = previous.Version
+					}
+					row.ProposalRun = job
+				} else if in.ProposalPreviousID != "" {
+					return false, failure(422, "invalid_usage", "A proposal revision requires a proposal usage")
 				}
 				promptInput, _ := json.Marshal(PromptInput{ID: ticket.ID})
 				promptResult, _, promptErr := ticketPrompt(st, a, promptInput)
@@ -863,12 +889,19 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		return nil, failure(409, "worktree_preparation_pending", "Retain this launch intent and reconcile its owned worktree before retrying")
 	}
 	// Persist the launch directory before dispatch so a retry cannot retarget it.
-	if in.Harness == "codex" {
+	if in.Harness == "codex" || row.ProposalRun != nil {
 		hash, err := s.writeContextCredential(row)
 		if err != nil {
 			return nil, err
 		}
 		row.CredentialHash = hash
+	}
+	if row.ProposalRun != nil {
+		hash, err := s.writeOwnedContextCredential(row, ".read.client.json", row.ReadCredentialHash)
+		if err != nil {
+			return nil, err
+		}
+		row.ReadCredentialHash = hash
 	}
 	err = s.db.Update(ctx, func(st *model.State) (bool, error) {
 		a, err := executionActor(ctx, st, token)
@@ -884,6 +917,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		}
 		current.Worktree = row.Worktree
 		current.CredentialHash = row.CredentialHash
+		current.ReadCredentialHash = row.ReadCredentialHash
 		if current.CredentialHash != "" && current.CredentialExpires.IsZero() {
 			current.CredentialExpires = time.Now().UTC().Add(12 * time.Hour)
 		}
@@ -908,6 +942,14 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 		}
 		if current.LaunchID != row.LaunchID || current.State != "preparing" || p.Repository == nil || p.Repository.Version != row.BindingVersion || len(st.Accounts) > 1 || st.Settings.Agents || st.Settings.Handbrake || p.Handbrake {
 			return false, failure(409, "launch_basis_changed", "Launch authority or repository changed")
+		}
+		if current.ProposalRun != nil {
+			job := current.ProposalRun
+			t, u := st.Tickets[job.TicketID], st.AgentUsages[job.UsageID]
+			w := st.Workflows[t.Workflow]
+			if t.ID == 0 || t.ProjectID != current.ProjectID || t.Version != job.TicketVersion || t.Archived || t.Deleted || t.Protected || t.StopRequested || t.ResumeHold || p.LaneLocks[w.ID+"#*"] || p.LaneLocks[w.ID+"#"+t.Phase] || u.Removed || !u.Enabled || u.Kind != "todo-proposal" || u.Version != job.UsageVersion || !usageMatchesTicket(u, t) || current.Persona == nil || st.AgentDefinitions[current.Persona.ID].Version != current.Persona.Version || job.PreviousID != "" && st.TicketProposals[job.PreviousID].Version != job.PreviousVersion {
+				return false, failure(409, "launch_basis_changed", "Ticket, feedback or proposal configuration changed")
+			}
 		}
 		if row.TicketID != 0 {
 			t := st.Tickets[row.TicketID]
@@ -949,7 +991,8 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 				Agent  model.AgentDefinition `json:"agent"`
 				Skills []string              `json:"skillPaths"`
 				Ticket string                `json:"ticket"`
-			}{*row.Persona, paths, row.ContextTicket})
+				Job    *model.ProposalRun    `json:"proposalJob,omitempty"`
+			}{*row.Persona, paths, row.ContextTicket, row.ProposalRun})
 			if err != nil {
 				return false, err
 			}
@@ -961,6 +1004,12 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 			}
 			launch.Args = []string{"_persona-pty-session", nativePath}
 			launch.Env = map[string]string{"TELEPORT_AGENT_PERSONA": string(payload)}
+			if row.ProposalRun != nil {
+				launch.Env["TELEPORT_CONFIG"] = filepath.Join(s.localClient.Root, row.ID+".client.json")
+				launch.Env["TELEPORT_SERVER"] = s.localEndpoint
+				launch.Env["TELEPORT_SESSION_ID"] = row.ID
+				launch.Env["TELEPORT_PROPOSAL_READ_CONFIG"] = filepath.Join(s.localClient.Root, row.ID+".read.client.json")
+			}
 		}
 		if in.Harness == "codex" {
 			role := "Console"
@@ -1113,6 +1162,13 @@ func (s *Service) PumpLocal(ctx context.Context) error {
 			if !activeLocal(row) {
 				continue
 			}
+			if row.ProposalRun != nil && !row.ProposalRun.TimedOut && time.Since(row.CreatedAt) >= 10*time.Minute {
+				row.ProposalRun.TimedOut = true
+				row.StopRequested, row.CredentialHash, row.ReadCredentialHash = true, "", ""
+				row.Attention = "Planning time limit reached"
+				st.LocalSessions[id] = row
+				changed = true
+			}
 			status, ok := observed[id]
 			if observedErr == nil && !ok && out.Generation == row.Generation && row.State == "preparing" {
 				a := st.Accounts[row.Creator]
@@ -1121,6 +1177,10 @@ func (s *Service) PumpLocal(ctx context.Context) error {
 				withdrawn := row.StopRequested || a.ID == "" || a.Suspended || len(st.Accounts) > 1 || require(st, a, row.ProjectID, "Contributor") != nil || p.Repository == nil || p.Repository.Version != row.BindingVersion
 				if row.TicketID != 0 {
 					withdrawn = withdrawn || t.StopRequested || t.ResumeHold || t.Deleted || t.Archived || t.Status == "Cancelled" || t.Execution != "local:"+row.ID
+				}
+				if row.ProposalRun != nil {
+					pt := st.Tickets[row.ProposalRun.TicketID]
+					withdrawn = withdrawn || pt.ID == 0 || pt.ProjectID != row.ProjectID || pt.StopRequested || pt.ResumeHold || pt.Deleted || pt.Archived || pt.Status == "Cancelled"
 				}
 				if withdrawn {
 					now := time.Now().UTC()
@@ -1156,6 +1216,13 @@ func (s *Service) PumpLocal(ctx context.Context) error {
 			if row.TicketID != 0 {
 				t := st.Tickets[row.TicketID]
 				withdrawn = withdrawn || t.StopRequested || t.Status == "Cancelled" || t.Archived || t.Deleted || t.Execution != "local:"+row.ID
+			}
+			if row.ProposalRun != nil {
+				pt := st.Tickets[row.ProposalRun.TicketID]
+				withdrawn = withdrawn || pt.ID == 0 || pt.ProjectID != row.ProjectID || pt.StopRequested || pt.ResumeHold || pt.Deleted || pt.Archived || pt.Status == "Cancelled"
+				if row.ProposalRun.TimedOut {
+					status.Attention = "Planning time limit reached"
+				}
 			}
 			if withdrawn && status.State == "running" {
 				if _, err := s.localClient.Call(ctx, daemonRequest(row, "stop")); err != nil {

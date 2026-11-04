@@ -117,7 +117,7 @@ func agentUsageCall(st *model.State, a model.Account, operation string, raw json
 			in.Kind = "todo-spellcheck"
 		}
 	}
-	if !contains([]string{"todo-spellcheck", "todo-conversation", "todo-refine"}, in.Kind) {
+	if !contains([]string{"todo-spellcheck", "todo-conversation", "todo-refine", "todo-proposal"}, in.Kind) {
 		return nil, false, failure(422, "invalid_usage_kind", "Choose a supported usage")
 	}
 	if in.Kind == "todo-refine" && (in.View == "" || in.Workflow == "" || in.Phase == "") {

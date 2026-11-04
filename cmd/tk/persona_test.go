@@ -41,3 +41,11 @@ func TestPersonaAlwaysReceivesTeleportSkillInstructions(t *testing.T) {
 		}
 	}
 }
+
+func TestProposalPersonaStartsCodexWithScopedPrompt(t *testing.T) {
+	body, _ := json.Marshal(personaLaunch{Agent: model.AgentDefinition{Name: "Planner", Harness: "codex"}, ProposalJob: &model.ProposalRun{TicketID: 7, TicketVersion: 2}})
+	args, err := personaArguments(string(body))
+	if err != nil || len(args) == 0 || args[0] != "exec" || !strings.Contains(strings.Join(args, " "), "proposal") || !strings.Contains(strings.Join(args, " "), "read-only") {
+		t.Fatalf("invalid proposal invocation: %v %v", args, err)
+	}
+}

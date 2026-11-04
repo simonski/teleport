@@ -237,7 +237,7 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		if t.Protected || !contains([]string{"Done", "Cancelled"}, t.Status) {
 			return nil, false, failure(409, "invalid_reopen", "Select ordinary terminal work to reopen")
 		}
-		if busy(t) || hasContinuation(t) {
+		if busy(t) || hasContinuation(t) || proposalOwnsTicket(st, t.ID) {
 			return nil, false, failure(409, "execution_busy", "Confirm prior execution exit before reopening")
 		}
 		if t.Agent {
@@ -280,7 +280,7 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		if t.Protected {
 			return nil, false, failure(403, "protected_record", "Unassigned defaults cannot be hidden")
 		}
-		if busy(t) || hasContinuation(t) {
+		if busy(t) || hasContinuation(t) || proposalOwnsTicket(st, t.ID) {
 			return nil, false, failure(409, "execution_busy", "Stop and confirm own execution exit before changing visibility")
 		}
 		old := t
@@ -328,7 +328,7 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		ids := subtree(st, t.ID)
 		for _, id := range ids {
 			item := st.Tickets[id]
-			if item.Protected || busy(item) || hasContinuation(item) || item.Delivery != nil {
+			if item.Protected || busy(item) || hasContinuation(item) || item.Delivery != nil || proposalOwnsTicket(st, item.ID) {
 				return nil, false, failure(409, "transfer_blocked", "Protected defaults or pending execution block the whole transfer")
 			}
 			if item.Assignee != "" && role(st, st.Accounts[item.Assignee], p.ID) == "" {

@@ -3,6 +3,7 @@ package model
 import "time"
 
 type LocalSession struct {
+	ProposalRun        *ProposalRun          `json:"proposalRun,omitempty"`
 	Attribution        *ExecutionAttribution `json:"attribution,omitempty"`
 	Spellcheck         *SpellcheckRun        `json:"spellcheck,omitempty"`
 	Persona            *AgentDefinition      `json:"persona,omitempty"`
@@ -15,6 +16,7 @@ type LocalSession struct {
 	CapacityReleasedBy string                `json:"capacityReleasedBy,omitempty"`
 	Managed            *ManagedLaunch        `json:"managed,omitempty"`
 	CredentialHash     string                `json:"credentialHash,omitempty"`
+	ReadCredentialHash string                `json:"readCredentialHash,omitempty"`
 	CredentialExpires  time.Time             `json:"credentialExpires,omitempty"`
 	StopRequested      bool                  `json:"stopRequested"`
 	Number             int64                 `json:"number"`
@@ -35,6 +37,19 @@ type LocalSession struct {
 	CreatedAt          time.Time             `json:"createdAt"`
 	ExitedAt           *time.Time            `json:"exitedAt,omitempty"`
 	ExitCode           *int                  `json:"exitCode,omitempty"`
+}
+
+type ProposalRun struct {
+	TimedOut        bool             `json:"timedOut,omitempty"`
+	Usage           *TokenEvidence   `json:"usage,omitempty"`
+	Valuations      []UsageValuation `json:"valuations,omitempty"`
+	TicketID        int64            `json:"ticketId"`
+	TicketVersion   int64            `json:"ticketVersion"`
+	UsageID         string           `json:"usageId"`
+	UsageVersion    int64            `json:"usageVersion"`
+	PreviousID      string           `json:"previousId,omitempty"`
+	PreviousVersion int64            `json:"previousVersion,omitempty"`
+	ProposalID      string           `json:"proposalId,omitempty"`
 }
 
 // ExecutionAttribution records admission-time identity and hierarchy, without

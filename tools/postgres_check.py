@@ -36,6 +36,8 @@ def main():
     parser.add_argument("--native-large-frame", action="store_true", help="Exercise a large frame in the native fixture (requires --native-only)")
     parser.add_argument("--shell-pty", action="store_true", help="Exercise zsh PTYs (requires --terminal-only)")
     parser.add_argument("--codex-pty", action="store_true", help="Exercise direct Codex PTY fixture (requires --terminal-only)")
+    parser.add_argument("--proposal-pty", action="store_true", help="Exercise proposal planning PTY (requires --terminal-only)")
+    parser.add_argument("--proposal-harness", choices=["codex","claude"], default="codex")
     parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY fixture (requires --terminal-only)")
     args = parser.parse_args()
     if args.native_large_frame and not args.native_only:
@@ -44,6 +46,8 @@ def main():
         parser.error("--shell-pty requires --terminal-only")
     if args.codex_pty and (not args.terminal_only or args.shell_pty):
         parser.error("--codex-pty requires --terminal-only and excludes --shell-pty")
+    if args.proposal_pty and (not args.terminal_only or args.shell_pty or args.codex_pty or args.harness_pty):
+        parser.error("--proposal-pty requires --terminal-only and excludes other PTY options")
     if args.harness_pty and (not args.terminal_only or args.shell_pty or args.codex_pty):
         parser.error("--harness-pty requires --terminal-only and excludes other PTY selections")
     if (args.shell_only or args.studio_only) and not args.browser:
@@ -134,6 +138,8 @@ def main():
                     terminal_command.append("--shell-pty")
                 if args.codex_pty:
                     terminal_command.append("--codex-pty")
+                if args.proposal_pty:
+                    terminal_command.extend(["--proposal-only", "--proposal-harness", args.proposal_harness])
                 if args.harness_pty:
                     terminal_command.extend(["--harness-pty", args.harness_pty])
                 if args.browser:

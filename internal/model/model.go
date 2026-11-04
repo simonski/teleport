@@ -5,15 +5,16 @@ import "time"
 const SchemaVersion = 1
 
 type Account struct {
-	ServiceRunID     string `json:"-"`
-	ServiceCallID    string `json:"-"`
-	ServiceSessionID string `json:"-"`
-	ServiceProjectID int64  `json:"-"`
-	ID               string `json:"id"`
-	Username         string `json:"username"`
-	PasswordHash     string `json:"passwordHash,omitempty"`
-	Administrator    bool   `json:"administrator"`
-	Suspended        bool   `json:"suspended"`
+	ServiceSessionReadOnly bool   `json:"-"`
+	ServiceRunID           string `json:"-"`
+	ServiceCallID          string `json:"-"`
+	ServiceSessionID       string `json:"-"`
+	ServiceProjectID       int64  `json:"-"`
+	ID                     string `json:"id"`
+	Username               string `json:"username"`
+	PasswordHash           string `json:"passwordHash,omitempty"`
+	Administrator          bool   `json:"administrator"`
+	Suspended              bool   `json:"suspended"`
 }
 type Session struct {
 	AccountID string    `json:"accountId"`
@@ -62,6 +63,7 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
+	TicketProposals     map[string]TicketProposal     `json:"ticketProposals,omitempty"`
 	UsagePrices         map[string][]UsagePrice       `json:"usagePrices,omitempty"`
 	PriceRecalculations map[string]PriceRecalculation `json:"priceRecalculations,omitempty"`
 	AgentUsages         map[string]AgentUsage         `json:"agentUsages,omitempty"`

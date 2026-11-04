@@ -31,3 +31,12 @@ func TestUsagePriceRevisionsPreservePriorEstimates(t *testing.T) {
 		t.Fatalf("prior estimate lost: %+v", row.Spellcheck.Valuations)
 	}
 }
+
+func TestProposalUsageUsesConfiguredPrice(t *testing.T) {
+	cached := int64(20)
+	row := model.LocalSession{Persona: &model.AgentDefinition{Harness: "codex", Model: "example"}, ProposalRun: &model.ProposalRun{Usage: &model.TokenEvidence{Input: 120, Cached: &cached, Output: 30, Source: "codex-exec-json"}}}
+	st := &model.State{UsagePrices: map[string][]model.UsagePrice{"codex:example": {{Version: 1, InputMicros: 1000000, CachedMicros: 500000, OutputMicros: 2000000}}}}
+	if !applyUsagePrice(st, &row) || len(row.ProposalRun.Valuations) != 1 || row.ProposalRun.Valuations[0].EstimateMicros != 170 {
+		t.Fatal("proposal estimate incorrect")
+	}
+}

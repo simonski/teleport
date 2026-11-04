@@ -155,6 +155,13 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		var persona personaLaunch
+		if err = json.Unmarshal([]byte(os.Getenv("TELEPORT_AGENT_PERSONA")), &persona); err != nil {
+			return errors.New("invalid persona configuration")
+		}
+		if persona.ProposalJob != nil {
+			return runPersonaProposal(args[1], parameters, persona)
+		}
 		harness := exec.Command(args[1], parameters...)
 		harness.Stdin, harness.Stdout, harness.Stderr = os.Stdin, os.Stdout, os.Stderr
 		for _, value := range os.Environ() {

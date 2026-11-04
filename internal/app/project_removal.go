@@ -159,6 +159,11 @@ func removeProject(st *model.State, a model.Account, raw json.RawMessage, previe
 		delete(st.History, id)
 		delete(st.GoalReviews, id)
 	}
+	for id, proposal := range st.TicketProposals {
+		if proposal.ProjectID == in.ID {
+			delete(st.TicketProposals, id)
+		}
+	}
 	for id := range ideaIDs {
 		delete(st.Ideas, id)
 		delete(st.IdeaHistory, id)

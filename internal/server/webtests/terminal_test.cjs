@@ -69,7 +69,7 @@ for(const change of ['new foreground form','sign out'])test(`delayed session swi
 
 test('unknown sessions offer a recorded stop intent and ended sessions are grouped',async()=>{
   let html='';const form={},cancel={};
-  const dialog={querySelectorAll:()=>[]};
+  const dialog={querySelectorAll:()=>[],addEventListener(){}};
   form.append=()=>{};const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async()=>[],document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:(title,body)=>{html=body;return dialog},captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?cancel:form,on(){}});
   vm.runInContext(source,context);
   vm.runInContext(`refreshSessionRoster=async()=>{};localSessions=[{id:'H1',harness:'codex',state:'exited',processId:42},{id:'H2',harness:'codex',state:'exited'},{id:'H3',harness:'codex',state:'unknown',processId:43}]`,context);
@@ -79,7 +79,7 @@ test('unknown sessions offer a recorded stop intent and ended sessions are group
 
 test('recovery displays removed unresolved sessions without claiming exit',async()=>{
   let recoveryHTML='',requested;const form={append(section){recoveryHTML=section.innerHTML}};
-  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async(op,input)=>{requested=[op,input.includeHidden];return [{id:'H3',harness:'codex',projectId:4,state:'unknown',referenceRemoved:true,reference:'ref',errorCode:'native_exit_unverified'}]},document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:()=>({querySelectorAll:()=>[]}),captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?{}:form,on(){}});
+  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async(op,input)=>{requested=[op,input.includeHidden];return [{id:'H3',harness:'codex',projectId:4,state:'unknown',referenceRemoved:true,reference:'ref',errorCode:'native_exit_unverified'}]},document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:()=>({querySelectorAll:()=>[],addEventListener(){}}),captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?{}:form,on(){}});
   vm.runInContext(source,context);vm.runInContext('refreshSessionRoster=async()=>{}',context);await vm.runInContext('sessionSwitcher()',context);
   assert.deepEqual(requested,['listSessions',true]);assert.match(recoveryHTML,/H3/);assert.match(recoveryHTML,/native_exit_unverified/);assert.match(recoveryHTML,/Release reservation/);assert.match(recoveryHTML,/does not confirm/);
 });
@@ -120,9 +120,39 @@ test('non-Teleport stop confirmation closes before an error is shown',async()=>{
   const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);reject(new Error('Process changed; refresh'));await pending;assert.deepEqual(events,['close','Process changed; refresh']);
 });
 
+test('session-list stop returns to the list after the request completes',async()=>{
+  const form={},events=[];let resolve;
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},crypto:{randomUUID:()=> 'request'},openDialog:()=>({classList:{remove(){}},close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({follow:()=>true}),api:()=>new Promise(done=>resolve=done),notice:()=>events.push('notice')});
+  vm.runInContext(source,context);context.events=events;vm.runInContext("sessionSwitcher=async()=>events.push('sessions');confirmTerminalAction('H1','Stop','Confirm',null,true)",context);
+  const pending=form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close']);resolve({state:'stopping'});await pending;assert.deepEqual(events,['close','notice','sessions']);
+});
+
+test('host stop returns to the session list without claiming the process exited',async()=>{
+  const form={},events=[];const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String,openDialog:()=>({close(){events.push('close')}}),byId:()=>form,captureDialogCompletion:()=>({follow:()=>true}),api:async()=>({state:'signal_sent'}),notice:value=>events.push(value)});context.events=events;
+  vm.runInContext(source,context);vm.runInContext("sessionSwitcher=async()=>events.push('sessions');confirmHostHarnessStop({pid:12,harness:'codex',identity:'identity'},false,true)",context);
+  await form.onsubmit({preventDefault(){}});assert.deepEqual(events,['close','Stop requested; exit has not yet been confirmed.','sessions']);
+});
+
+test('open session list removes a session only after confirmed exit',async()=>{
+  let tick,removed=false;const element={querySelector:()=>({dataset:{session:'H1'}}),remove(){removed=true}},list={innerHTML:'',querySelectorAll:()=>removed?[]:[element],querySelector:selector=>selector==='p'?null:removed?null:element};
+  const form={append(){}},dialog={querySelectorAll:()=>[],querySelector:()=>list,addEventListener(){}};
+  const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async()=>[],document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(fn){tick=fn;return 1},clearInterval(){},openDialog:()=>dialog,captureDialogCompletion:()=>({current:()=>true}),byId:id=>id==='cancel'?{}:form,on(){}});
+  vm.runInContext(source,context);vm.runInContext("refreshSessionRoster=async()=>{};localSessions=[{id:'H1',state:'stopping',harness:'shell'}]",context);await vm.runInContext('sessionSwitcher()',context);
+  await tick();assert.equal(removed,false);vm.runInContext("localSessions[0].state='exited'",context);await tick();assert.equal(removed,true);assert.match(list.innerHTML,/No active/);
+});
+
+test('host inspection returns to sessions on close without reopening a newer view',async()=>{
+  for(const allowed of [true,false]){
+    const form={},events=[];let onClose;const dialog={addEventListener(type,fn){if(type==='close')onClose=fn;},close(){events.push('close');onClose();}};
+    const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String,openDialog:()=>dialog,byId:id=>id==='cancel'?{}:form,captureDialogCompletion:()=>({follow:()=>allowed}),showError(){}});context.events=events;
+    vm.runInContext(source,context);vm.runInContext("sessionSwitcher=async()=>events.push('sessions');showHostHarnessDetails({pid:7,harness:'codex'})",context);
+    form.onsubmit({preventDefault(){}});assert.deepEqual(events,allowed?['close','sessions']:['close']);
+  }
+});
+
 test('unknown free consoles offer removal, with confirmation closing before the result',async()=>{
   let html='',resolve;const form={},events=[];
-  form.append=()=>{};const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async()=>[],document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:(title,body)=>{html=body;return {querySelectorAll:()=>[],close(){events.push('close')}}},captureDialogCompletion:()=>({current:()=>true,follow:()=>true}),byId:id=>id==='cancel'?{}:form,on(){},api:(op,input)=>{events.push([op,input.id,input.expectedReference,input.confirm]);return new Promise(done=>resolve=done)},notice:value=>events.push(value)});
+  form.append=()=>{};const context=vm.createContext({session:{account:{id:'one',administrator:false}},detailEpoch:1,foregroundOpen:()=>false,escapeHTML:String,pages:async()=>[],document:{addEventListener(){},createElement:()=>({querySelectorAll:()=>[]})},setInterval(){},openDialog:(title,body)=>{html=body;return {querySelectorAll:()=>[],addEventListener(){},close(){events.push('close')}}},captureDialogCompletion:()=>({current:()=>true,follow:()=>true}),byId:id=>id==='cancel'?{}:form,on(){},api:(op,input)=>{events.push([op,input.id,input.expectedReference,input.confirm]);return new Promise(done=>resolve=done)},notice:value=>events.push(value)});
   vm.runInContext(source,context);vm.runInContext("refreshSessionRoster=async()=>{};localSessions=[{id:'H3',harness:'codex',state:'unknown',reference:'identity',stopRequested:true}]",context);
   await vm.runInContext('sessionSwitcher()',context);assert.match(html,/data-remove-reference="H3"/);
   vm.runInContext("confirmRemoveSessionReference(localSessions[0])",context);assert.match(html,/No process will be stopped/);assert.match(html,/quarantined/);

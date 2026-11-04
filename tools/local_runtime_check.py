@@ -57,6 +57,7 @@ def main(database_url=None):
         (folder / "isolated-codex").mkdir(mode=0o700)
     harness = "codex" if args.native_fixture or args.native_startup_only else "fixture"
     process = None
+    host_fixture = None
     session_id = None
     clean = False
     browser_name = f"teleport-terminal-{port}"
@@ -151,6 +152,11 @@ def main(database_url=None):
             wait_for(lambda: "direct fixture received: hello" in read())
             tk("resizeSession", {"id": session_id, "cols": 120, "rows": 35})
             if args.browser:
+                fixture_dir = folder / "host-fixture"
+                fixture_dir.mkdir()
+                subprocess.run(["go", "build", "-o", str(fixture_dir / "codex"), "./tools/fixtures/native-codex"], cwd=ROOT, check=True, timeout=60)
+                host_fixture = subprocess.Popen([str(fixture_dir / "codex"), "app-server"], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                wait_for(lambda: next((item for item in tk("listHostHarnesses")["items"] if item["pid"] == host_fixture.pid and not item["managed"]), None))
                 browser("open", endpoint)
                 browser_open = True
                 browser("find", "label", "Username", "fill", "admin")
@@ -189,6 +195,24 @@ def main(database_url=None):
                 browser("press", "Enter")
                 browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                 wait_for(lambda: next((item for item in tk("listSessions")["items"] if item["id"] == third["id"] and item["state"] == "exited"), None))
+                fourth = tk(operation, {"projectId": project["id"], "requestId": "session-list-stop"})
+                browser("click", "#session-recovery")
+                browser("wait", f'[data-host-inspect="{host_fixture.pid}"]')
+                browser("click", f'[data-host-inspect="{host_fixture.pid}"]')
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open] h2')?.textContent==='Harness process'")
+                browser("click", "#editor-form button[type=submit]")
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open] h2')?.textContent==='Harness sessions'")
+                browser("wait", f'[data-host-stop="{host_fixture.pid}"]')
+                browser("click", f'[data-host-stop="{host_fixture.pid}"]:not([data-force])')
+                browser("click", "#editor-form button[type=submit]")
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open] h2')?.textContent==='Harness sessions'")
+                host_fixture.wait(timeout=10)
+                browser("wait", "--fn", f"!document.querySelector('[data-host-stop=\"{host_fixture.pid}\"]')")
+                browser("click", f'[data-stop-managed="{fourth["id"]}"]')
+                browser("click", "#editor-form button[type=submit]")
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open] h2')?.textContent==='Harness sessions'")
+                browser("wait", "--fn", f"!document.querySelector('[data-stop-managed=\"{fourth['id']}\"]')")
+                browser("press", "Escape")
             tk("stopSession", {"id": session_id, "confirm": True})
             wait_for(lambda: all(item["state"] in ("exited", "failed") for item in tk("listSessions")["items"]))
             tk("shutdownLocalRuntime", {"confirm": True})
@@ -442,6 +466,9 @@ def main(database_url=None):
             browser("screenshot", "/tmp/teleport-terminal-failure.png")
         raise
     finally:
+        if host_fixture is not None and host_fixture.poll() is None:
+            host_fixture.terminate()
+            host_fixture.wait(timeout=10)
         if args.browser:
             subprocess.run(["agent-browser", "--session", browser_name, "close"], capture_output=True, timeout=15)
         if not clean and process is not None and process.poll() is None:

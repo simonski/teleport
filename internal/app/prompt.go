@@ -17,6 +17,7 @@ type PromptView struct {
 	Basis         string               `json:"basis"`
 	SessionID     string               `json:"sessionId,omitempty"`
 	Saved         bool                 `json:"saved"`
+	Hypothetical  bool                 `json:"hypothetical,omitempty"`
 	Prompt        model.PromptSnapshot `json:"prompt"`
 }
 
@@ -32,14 +33,23 @@ func ticketPrompt(st *model.State, a model.Account, raw json.RawMessage) (any, b
 	if err != nil {
 		return nil, false, err
 	}
+	preview := t
 	if !t.Agent {
-		return nil, false, failure(409, "agent_ticket_required", "Human tickets have no harness prompt")
+		if in.SessionID != "" {
+			return nil, false, failure(404, "prompt_not_found", "No saved managed launch prompt matches this ticket")
+		}
+		preview.Workflow = st.Projects[t.ProjectID].AgentWorkflow
+		phase, ok := phaseForRole(st.Workflows[preview.Workflow], "Refine")
+		if !ok {
+			return nil, false, failure(409, "workflow_mapping", "The project agent workflow needs one Refine phase for this preview")
+		}
+		preview.Agent, preview.Phase = true, phase.ID
 	}
-	phase, ok := phaseByID(st.Workflows[t.Workflow], t.Phase)
+	phase, ok := phaseByID(st.Workflows[preview.Workflow], preview.Phase)
 	if !ok {
 		return nil, false, failure(409, "workflow_mapping", "Pinned phase is unavailable")
 	}
-	view := PromptView{TicketID: t.ID, TicketVersion: t.Version, Workflow: t.Workflow, Phase: t.Phase, Basis: executionBasis(st, t), Prompt: composeManagedPrompt(st, t, phase)}
+	view := PromptView{TicketID: t.ID, TicketVersion: t.Version, Workflow: preview.Workflow, Phase: preview.Phase, Basis: executionBasis(st, t), Hypothetical: !t.Agent, Prompt: composeManagedPrompt(st, preview, phase)}
 	if in.SessionID != "" {
 		row, ok := st.LocalSessions[in.SessionID]
 		if !ok || row.TicketID != t.ID || row.Managed == nil {

@@ -201,6 +201,8 @@ def main(temporary_root=None):
             ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Pack the flight case", "agent": False, "requestId": "smoke-ticket"})))
             ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
             assert ticket["status"] == "Doing"
+            if args.todo_menu_only:
+                refine_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": project["id"], "title": "Refinement menu proof", "agent": False, "requestId": "menu-refine"})))
             if args.finder_only:
                 other = json.loads(tk("createProject", "--data", json.dumps({"name": "Finder project", "key": "finder-project", "requestId": "finder-project"})))
                 finder_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId": other["id"], "title": "Across project finder proof", "agent": False, "requestId": "finder-ticket"})))
@@ -249,8 +251,8 @@ def main(temporary_root=None):
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
                     if args.todo_menu_only:
-                        verify_todo_menu(browser, project["id"], ticket)
-                        print("PASS: Todos context menu moves, status, priority and confirmed delete")
+                        verify_todo_menu(browser, project["id"], ticket, refine_ticket)
+                        print("PASS: Todos context menu prompt, refinement, moves, priority and confirmed delete")
                         return
                     if args.ticket_project_only:
                         verify_shortcut_project(browser, tk, project["id"])

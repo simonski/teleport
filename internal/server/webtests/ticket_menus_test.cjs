@@ -22,7 +22,7 @@ test('Todos menu exposes adjacent valid moves, status, priority, open and guarde
   const f=fixture();f.context.roleAllowsWrite=()=>true;f.context.roleAllowsMaintain=()=>true;
   f.context.humanMoves=()=>[{target:'lane:todo',role:'Todo'},{target:'lane:done',role:'Done'}];
   f.run("view='Todos';ticket={id:7,projectId:2,kind:'task',agent:false,status:'Doing',priority:'medium'}");
-  assert.deepEqual(Array.from(f.run('ticketMenuEntries(ticket,[]).map(entry=>entry.id)')),['ahead','behind','status','priority','open','delete']);
+  assert.deepEqual(Array.from(f.run('ticketMenuEntries(ticket,[]).map(entry=>entry.id)')),['ahead','behind','status','priority','prompt','agents','open','delete']);
   assert.equal(f.run("ticketMenuEntries(ticket,[])[0].target"),'lane:done');
   assert.equal(f.run("ticketMenuEntries(ticket,[])[1].target"),'lane:todo');
   f.context.roleAllowsWrite=()=>false;f.context.roleAllowsMaintain=()=>false;

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"teleport/internal/model"
@@ -150,5 +151,32 @@ func TestPromptSnapshotIsImmutableAndPrivate(t *testing.T) {
 	other := model.Account{ID: "other", Administrator: true}
 	if _, _, err := ticketPrompt(st, other, input); err == nil {
 		t.Fatal("saved launch context leaked to another administrator")
+	}
+}
+
+func TestHumanTicketPromptPreviewsRefinementWithoutChangingTicket(t *testing.T) {
+	st, actor, ticket, _ := managedFixture()
+	project := st.Projects[1]
+	project.Name, project.Description, project.AgentWorkflow = "Example project", "Project context", "agent@1"
+	st.Projects[1] = project
+	ticket.Agent, ticket.Workflow, ticket.Phase, ticket.Status = false, "human@1", "Todo", "Todo"
+	ticket.Title = "Human request"
+	st.Tickets[ticket.ID] = ticket
+	input, _ := json.Marshal(PromptInput{ID: ticket.ID})
+	result, changed, err := ticketPrompt(st, actor, input)
+	if err != nil || changed {
+		t.Fatalf("preview failed or mutated state: %v, %v", changed, err)
+	}
+	view := result.(PromptView)
+	if !view.Hypothetical || view.Saved || view.Workflow != "agent@1" || view.Phase != "Refine" {
+		t.Fatalf("incorrect preview identity: %+v", view)
+	}
+	for _, part := range []string{"[system]", "[project]", "Project context", "[task]", "Human request", "[phase]"} {
+		if !strings.Contains(view.Prompt.Text, part) {
+			t.Errorf("prompt missing %q", part)
+		}
+	}
+	if st.Tickets[ticket.ID].Agent || st.Tickets[ticket.ID].Workflow != "human@1" || len(st.LocalSessions) != 0 {
+		t.Fatal("preview changed the ticket or started a session")
 	}
 }

@@ -1,7 +1,7 @@
 """Real-browser checks for view-aware creation and ticket keyboard ownership."""
 import json
 
-def verify_todo_menu(browser, project_id, ticket):
+def verify_todo_menu(browser, project_id, ticket, refine_ticket):
     browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
     browser("wait", "#project + .choice-button")
     browser("select", "#project", str(project_id))
@@ -22,7 +22,16 @@ def verify_todo_menu(browser, project_id, ticket):
         browser("wait", "--fn", f'document.querySelector({json.dumps(card)})?.closest(".lane")?.querySelector("h2")?.textContent==={json.dumps(role)}')
     lane('Doing')
     menu()
-    browser("eval", "if(!['ahead','behind','status','priority','open','delete'].every(id=>document.querySelector('[data-ticket-menu='+id+']')))throw new Error('Missing Todos menu item')")
+    browser("eval", "if(!['ahead','behind','status','priority','prompt','agents','open','delete'].every(id=>document.querySelector('[data-ticket-menu='+id+']')))throw new Error('Missing Todos menu item')")
+    browser("click", '[data-ticket-menu="prompt"]')
+    browser("wait", "--fn", "document.querySelector('#editor h2')?.textContent.startsWith('Prompt ·')")
+    browser("eval", "{const text=document.querySelector('#editor').textContent;if(!text.includes('Refinement preview')||!text.includes('[system]')||!text.includes('[project]')||!text.includes('[task]')||!text.includes('Pack the flight case'))throw new Error('Human ticket prompt lacks composed context')}")
+    browser("press", "Escape")
+    menu()
+    browser("click", '[data-ticket-menu="agents"]')
+    browser("eval", "if(!document.querySelector('[data-ticket-agent=spellcheck]').disabled||!document.querySelector('[data-ticket-agent=refine]').disabled)throw new Error('Unavailable agent actions were enabled')")
+    browser("press", "Escape")
+    menu()
     browser("click", '[data-ticket-menu="behind"]')
     lane('Todo')
     menu()
@@ -43,6 +52,14 @@ def verify_todo_menu(browser, project_id, ticket):
     browser("wait", "--fn", "document.querySelector('#editor h2')?.textContent==='Delete ticket'")
     browser("click", '#editor button[type="submit"]')
     browser("wait", "--fn", f'!document.querySelector({json.dumps(card)})')
+    refine_card = f'.ticket-open[data-ticket="{refine_ticket["id"]}"]'
+    browser("wait", refine_card)
+    browser("eval", f'document.querySelector({json.dumps(refine_card)}).focus()')
+    browser("press", "Shift+F10")
+    browser("click", '[data-ticket-menu="agents"]')
+    browser("eval", "if(document.querySelector('[data-ticket-agent=refine]').disabled)throw new Error('Todo refinement is unavailable')")
+    browser("click", '[data-ticket-agent="refine"]')
+    browser("wait", "--fn", f'tickets.some(t=>t.id==={refine_ticket["id"]}&&t.agent&&t.status==="Refine")')
 
 def verify_shortcut_project(browser, tk, project_id):
     browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")

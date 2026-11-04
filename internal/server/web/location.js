@@ -2,8 +2,8 @@
 let locationEpoch=0,locationOwner='',locationKnown='',locationPending=null,locationInFlight=null,locationPromise=null;
 function resetLocationWriter(){locationEpoch++;locationOwner='';locationKnown='';locationPending=null;locationInFlight=null;locationPromise=null;}
 function locationCacheKey(account){return 'teleport-location:'+account.installationId+':'+account.account.id;}
-function readLocationCache(account){try{return JSON.parse(localStorage.getItem(locationCacheKey(account))||'null');}catch{return null;}}
-function writeLocationCache(account,value){try{localStorage.setItem(locationCacheKey(account),JSON.stringify(value));}catch{/* Server persistence remains available when browser storage is disabled. */}}
+function readLocationCache(account){if(typeof browserLocationAllowed!=='function'||!browserLocationAllowed())return null;try{return JSON.parse(localStorage.getItem(locationCacheKey(account))||'null');}catch{return null;}}
+function writeLocationCache(account,value){if(typeof browserLocationAllowed!=='function'||!browserLocationAllowed())return;try{localStorage.setItem(locationCacheKey(account),JSON.stringify(value));}catch{/* Server persistence remains available when browser storage is disabled. */}}
 function validLocation(context,available){return context&&supportedNavigation.includes(context.view)&&Number.isSafeInteger(context.projectId)&&context.projectId>=0&&(context.projectId===0||available.some(project=>project.id===context.projectId));}
 function chooseInitialLocation(account,available){
   const cache=readLocationCache(account),fallback={view:account.preferences.defaultView,projectId:account.preferences.defaultProject};

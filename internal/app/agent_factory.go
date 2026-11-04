@@ -91,6 +91,11 @@ func agentFactoryCall(st *model.State, a model.Account, operation string, raw js
 		return nil, false, failure(403, "administrator_required", "Agent factory requires an administrator")
 	}
 	switch operation {
+	case "getAgentInventory":
+		if err := parse(raw, &struct{}{}); err != nil {
+			return nil, false, err
+		}
+		return agentInventory(), false, nil
 	case "listInstalledAgentSkills":
 		if err := parse(raw, &struct{}{}); err != nil {
 			return nil, false, err
@@ -152,7 +157,7 @@ func agentFactoryCall(st *model.State, a model.Account, operation string, raw js
 		in.Goal = strings.TrimSpace(in.Goal)
 		in.Prompt = strings.TrimSpace(in.Prompt)
 		in.Model = strings.TrimSpace(in.Model)
-		if in.Name == "" || len(in.Name) > 120 || in.Goal == "" || len(in.Goal) > 2000 || len(in.Prompt) > 12000 || len(in.Model) > 100 || strings.ContainsRune(in.Name, 0) || strings.ContainsRune(in.Goal, 0) || strings.ContainsRune(in.Prompt, 0) || strings.ContainsRune(in.Model, 0) || !contains([]string{"codex", "claude"}, in.Harness) || !contains([]string{"", "low", "medium", "high"}, in.Thinking) || len(in.Skills) > 30 {
+		if in.Name == "" || len(in.Name) > 120 || in.Goal == "" || len(in.Goal) > 2000 || len(in.Prompt) > 12000 || len(in.Model) > 100 || strings.ContainsRune(in.Name, 0) || strings.ContainsRune(in.Goal, 0) || strings.ContainsRune(in.Prompt, 0) || strings.ContainsRune(in.Model, 0) || !contains([]string{"codex", "claude"}, in.Harness) || !contains([]string{"", "low", "medium", "high", "xhigh", "max", "ultra"}, in.Thinking) || in.Harness == "claude" && in.Thinking == "ultra" || len(in.Skills) > 30 {
 			return nil, false, failure(422, "invalid_agent_definition", "Provide a name, goal, supported harness and bounded settings")
 		}
 		skills := installedAgentSkills()

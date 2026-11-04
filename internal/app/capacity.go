@@ -7,7 +7,7 @@ import (
 )
 
 func refinePool(p model.Phase) bool {
-	return p.Role == "Refine" || p.Role == "Decompose"
+	return p.Role == "Typo" || p.Role == "Refine" || p.Role == "Decompose"
 }
 
 // Count retained reservations, including uncertain sessions, once per owned process.
@@ -108,6 +108,9 @@ func phaseCapacity(st *model.State, t model.Ticket, phase model.Phase) error {
 		count(other)
 	}
 	for _, row := range st.LocalSessions {
+		if row.ProjectID == t.ProjectID && row.Spellcheck != nil && activeLocal(row) && refinePool(phase) {
+			poolUsed++
+		}
 		if row.ProjectID != t.ProjectID || row.TicketID == 0 || !activeLocal(row) || countedSessions["local:"+row.ID] {
 			continue
 		}

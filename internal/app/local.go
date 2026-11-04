@@ -443,6 +443,9 @@ func (s *Service) localCall(ctx context.Context, token, operation string, raw js
 	if err != nil {
 		return nil, err
 	}
+	if row.Spellcheck != nil && operation != "stopSession" {
+		return nil, failure(403, "spellcheck_private", "Spellcheck jobs do not accept terminal input or attachment")
+	}
 	if operation == "listSessionInterventions" {
 		after, limit, err := pageBounds(audit.Cursor, audit.Limit)
 		if err != nil {

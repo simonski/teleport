@@ -9,6 +9,23 @@ import (
 	"teleport/internal/model"
 )
 
+func TestSpellcheckReservesRefineCapacity(t *testing.T) {
+	st := &model.State{Projects: map[int64]model.Project{1: {ID: 1}}, Workflows: map[string]model.Workflow{"human": {ID: "human"}}, Tickets: map[int64]model.Ticket{}, LocalSessions: map[string]model.LocalSession{"H1": {ID: "H1", ProjectID: 1, State: "unknown", Spellcheck: &model.SpellcheckRun{TicketID: 2}}}}
+	ticket := model.Ticket{ID: 3, ProjectID: 1, Workflow: "human", Phase: "Todo"}
+	if err := phaseCapacity(st, ticket, model.Phase{ID: "Todo", Role: "Refine"}); err == nil {
+		t.Fatal("unresolved spellcheck did not reserve refinement capacity")
+	}
+	if err := phaseCapacity(st, ticket, model.Phase{ID: "Todo", Role: "Doing"}); err != nil {
+		t.Fatalf("spellcheck incorrectly reserved implementation capacity: %v", err)
+	}
+	row := st.LocalSessions["H1"]
+	row.State = "exited"
+	st.LocalSessions["H1"] = row
+	if err := phaseCapacity(st, ticket, model.Phase{ID: "Todo", Role: "Typo"}); err != nil {
+		t.Fatalf("exited spellcheck retained capacity: %v", err)
+	}
+}
+
 func TestProjectAgentLimitCountsOwnedReservationsAndUnknownSessions(t *testing.T) {
 	maximum := 2
 	st := &model.State{Projects: map[int64]model.Project{1: {ID: 1, MaxAgents: &maximum}}, Tickets: map[int64]model.Ticket{}, LocalSessions: map[string]model.LocalSession{}}

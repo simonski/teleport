@@ -53,6 +53,12 @@ func run(args []string) error {
 	}
 	args = expanded
 	command := args[0]
+	if command == "_spellcheck-job" {
+		if len(args) != 2 {
+			return errors.New("spellcheck wrapper requires a harness")
+		}
+		return runSpellcheck(args[1], os.Getenv("TELEPORT_SPELLCHECK"), os.Stdout)
+	}
 	if command == "_project-remove" {
 		return removeProjectCommand(args[1:], os.Stdin, os.Stdout, os.Stderr)
 	}
@@ -344,6 +350,9 @@ func run(args []string) error {
 					}
 					if err := service.PumpLocal(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("local runtime reconciliation failed", "error", err)
+					}
+					if err := service.PumpSpellchecks(stopCtx); err != nil && stopCtx.Err() == nil {
+						slog.Error("spellcheck reconciliation failed", "error", err)
 					}
 					if err := service.PumpNative(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("native workflow reconciliation failed", "error", err)

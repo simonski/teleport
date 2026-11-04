@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"teleport/tools/toolhistory"
@@ -30,6 +32,42 @@ var history *toolhistory.Call
 func main() {
 	history = toolhistory.Start("tools/fixtures/native-codex")
 	defer history.End()
+	if len(os.Args) > 1 && os.Args[1] == "exec" {
+		var output string
+		for i, arg := range os.Args {
+			if arg == "--output-last-message" && i+1 < len(os.Args) {
+				output = os.Args[i+1]
+			}
+		}
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil || output == "" {
+			history.Exit(2)
+		}
+		parts := strings.SplitN(string(data), "Ticket data: ", 2)
+		var ticket struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}
+		if len(parts) != 2 || json.Unmarshal([]byte(parts[1]), &ticket) != nil {
+			history.Exit(2)
+		}
+		if strings.Contains(ticket.Title, "slow") {
+			time.Sleep(2 * time.Second)
+		}
+		if strings.Contains(ticket.Title, "invalid") {
+			if os.WriteFile(output, []byte(`{"title":"changed"}`), 0600) != nil {
+				history.Exit(2)
+			}
+			return
+		}
+		ticket.Title = strings.ReplaceAll(ticket.Title, "teh", "the")
+		ticket.Description = strings.ReplaceAll(ticket.Description, "teh", "the")
+		result, _ := json.Marshal(ticket)
+		if os.WriteFile(output, result, 0600) != nil {
+			history.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println("codex-cli 0.166.0")
 		return

@@ -22,6 +22,7 @@ def main(database_url=None):
     parser.add_argument("--shell-pty", action="store_true", help="Exercise a real local zsh PTY without an agent")
     parser.add_argument("--codex-pty", action="store_true", help="Exercise direct Codex PTY with a zero-model fixture")
     parser.add_argument("--persona-pty", action="store_true", help="Exercise an agent persona through the zero-model Codex PTY fixture; requires --codex-pty")
+    parser.add_argument("--spellcheck", action="store_true", help="Exercise a zero-model spellcheck run; requires --codex-pty")
     parser.add_argument("--harness-pty", choices=["claude", "copilot"], help="Exercise a direct harness PTY with a zero-model fixture")
     parser.add_argument("--console-only", action="store_true", help="Check only the independent project-root console")
     parser.add_argument("--native-startup-only", action="store_true", help="Check installed Codex startup without provider credentials or a model turn")
@@ -29,6 +30,8 @@ def main(database_url=None):
     args = parser.parse_args()
     if args.persona_pty and not args.codex_pty:
         parser.error("--persona-pty requires --codex-pty")
+    if args.spellcheck and not args.codex_pty:
+        parser.error("--spellcheck requires --codex-pty")
     folder = Path(tempfile.mkdtemp(prefix="teleport-terminal-proof-"))
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -90,7 +93,7 @@ def main(database_url=None):
         raise AssertionError("local terminal proof timed out")
 
     def serve():
-        server = subprocess.Popen([str(ROOT / "bin/tk"), "serve", "--addr", f"127.0.0.1:{port}", "--runtime-dir", str(folder / "runtime"), "--enable-terminal-fixture"], env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        server = subprocess.Popen([str(ROOT / "bin/tk"), "serve", "--addr", f"127.0.0.1:{port}", "--runtime-dir", str(folder / "runtime"), "--enable-terminal-fixture"], env=environment, stdout=subprocess.DEVNULL, stderr=open(folder / "server.log", "w"))
         def ready():
             try:
                 with urllib.request.urlopen(endpoint + "/healthz", timeout=1) as response:
@@ -132,6 +135,78 @@ def main(database_url=None):
             config.write_text("[projects." + json.dumps(str(folder.resolve())) + "]\ntrust_level = \"untrusted\"\n[projects." + json.dumps(str(repository.resolve())) + "]\ntrust_level = \"trusted\"\n")
         if args.console_only:
             git("checkout", "-b", "console-feature")
+        if args.spellcheck:
+            skill_text = "---\nname: proof-skill\ndescription: Test skill.\n---\n\nCorrect spelling.\n"
+            skill = tk("saveInstalledSkill", {"name":"proof-skill","content":skill_text})
+            initial_hash = skill["hash"]
+            assert tk("getInstalledSkill", {"name":"proof-skill"})["content"] == skill_text
+            skill_text += "Keep meaning.\n"
+            skill = tk("saveInstalledSkill", {"name":"proof-skill","content":skill_text,"expectedHash":skill["hash"]})
+            try:
+                tk("saveInstalledSkill", {"name":"proof-skill","content":skill_text+"conflicting edit\n","expectedHash":initial_hash})
+                raise AssertionError("stale skill edit was accepted")
+            except RuntimeError as error:
+                assert "changed" in str(error)
+            assert "proof-skill" in tk("listInstalledAgentSkills")["items"]
+            agent = tk("saveAgentDefinition", {"name":"Fixture spellchecker","goal":"Correct spelling","prompt":"Preserve meaning","skills":["proof-skill"],"harness":"codex","requestId":"spell-agent"})
+            usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Spellcheck","agentId":agent["id"],"enabled":True,"requestId":"spell-usage"})
+            ticket = tk("createTicket", {"projectId":project["id"],"title":"Fix teh issue","description":"Check teh text","agent":False,"kind":"task","requestId":"spell-ticket"})
+            request = {"ticketId":ticket["id"],"expectedVersion":ticket["version"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":"spell-run"}
+            run = tk("startSpellcheck", request)
+            assert tk("startSpellcheck", request)["id"] == run["id"]
+            done = wait_for(lambda: (value if (value:=tk("getSpellcheckRun", {"id":run["id"]}))["state"] != "running" else None))
+            assert done["state"] == "completed", done
+            result = tk("getTicket", {"id":ticket["id"]})
+            assert result["title"] == "Fix the issue" and result["description"] == "Check the text"
+            assert tk("getTicketSpellchecks", {"id":ticket["id"]})["items"][0]["current"]
+            history = tk("listTicketHistory", {"id":ticket["id"]})["items"]
+            assert history[-2]["snapshot"]["title"] == "Fix teh issue" and history[-1]["action"] == "spellcheck"
+            if args.browser:
+                browser("open", endpoint); browser_open = True
+                browser("find", "label", "Username", "fill", "admin")
+                browser("find", "label", "Password", "fill", "password")
+                browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                browser("wait", "#welcome-status"); browser("press", "Escape")
+                browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
+                browser("click", "#project + .choice-button")
+                browser("click", '.choice-list [data-value="' + str(project["id"]) + '"]')
+                browser("click", '[data-view="Todos"]')
+                card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
+                browser("wait", card);browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
+                browser("press", "Shift+F10");browser("wait", '[data-ticket-menu="agents"]');browser("click", '[data-ticket-menu="agents"]')
+                browser("wait", "--fn", "document.querySelector('[data-spellcheck-usage]')?.textContent.startsWith('✓ Spellcheck')")
+                browser("press", "Escape")
+            tk("updateTicket", {"id":ticket["id"],"expectedVersion":result["version"],"title":"Another edit"})
+            assert not tk("getTicketSpellchecks", {"id":ticket["id"]})["items"][0]["current"]
+            if args.browser:
+                browser("wait", "--fn", "document.querySelector('[data-ticket=" + json.dumps(str(ticket["id"])) + "]')?.textContent.includes('Another edit')")
+                browser("eval", f'document.querySelector({json.dumps(card)}).focus()');browser("press", "Shift+F10");browser("wait", '[data-ticket-menu="agents"]');browser("click", '[data-ticket-menu="agents"]')
+                browser("wait", "--fn", "document.querySelector('[data-spellcheck-usage]')?.textContent.includes('checked before text changed')")
+            stale_ticket = tk("createTicket", {"projectId":project["id"],"title":"slow teh issue","agent":False,"kind":"task","requestId":"spell-stale-ticket"})
+            stale_run = tk("startSpellcheck", {"ticketId":stale_ticket["id"],"expectedVersion":stale_ticket["version"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":"spell-stale-run"})
+            tk("updateTicket", {"id":stale_ticket["id"],"expectedVersion":stale_ticket["version"],"title":"human edited"})
+            stale_result = wait_for(lambda: (value if (value:=tk("getSpellcheckRun", {"id":stale_run["id"]}))["state"] != "running" else None))
+            assert stale_result["state"] == "failed" and tk("getTicket", {"id":stale_ticket["id"]})["title"] == "human edited"
+            assert not tk("getTicketSpellchecks", {"id":stale_ticket["id"]})["items"]
+            invalid_ticket = tk("createTicket", {"projectId":project["id"],"title":"invalid teh issue","agent":False,"kind":"task","requestId":"spell-invalid-ticket"})
+            invalid_run = tk("startSpellcheck", {"ticketId":invalid_ticket["id"],"expectedVersion":invalid_ticket["version"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":"spell-invalid-run"})
+            invalid_result = wait_for(lambda: (value if (value:=tk("getSpellcheckRun", {"id":invalid_run["id"]}))["state"] != "running" else None))
+            assert invalid_result["state"] == "failed" and tk("getTicket", {"id":invalid_ticket["id"]})["title"] == "invalid teh issue"
+            assert not tk("getTicketSpellchecks", {"id":invalid_ticket["id"]})["items"]
+            if args.browser:
+                browser_ticket = tk("createTicket", {"projectId":project["id"],"title":"browser teh action","agent":False,"kind":"task","requestId":"spell-browser-ticket"})
+                browser("press", "Escape")
+                browser_card = f'.ticket-open[data-ticket="{browser_ticket["id"]}"]'
+                browser("wait", browser_card); browser("eval", f'document.querySelector({json.dumps(browser_card)}).focus()')
+                browser("press", "Shift+F10");browser("wait", '[data-ticket-menu="agents"]');browser("click", '[data-ticket-menu="agents"]')
+                browser("click", "[data-spellcheck-usage]")
+                wait_for(lambda: tk("getTicket", {"id":browser_ticket["id"]})["title"] == "browser the action")
+                browser("wait", "--fn", "document.querySelector('[data-ticket=" + json.dumps(str(browser_ticket["id"])) + "]')?.textContent.includes('browser the action')")
+                browser("eval", f'document.querySelector({json.dumps(browser_card)}).focus()');browser("press", "Shift+F10");browser("wait", '[data-ticket-menu="agents"]');browser("click", '[data-ticket-menu="agents"]')
+                browser("wait", "--fn", "document.querySelector('[data-spellcheck-usage]')?.textContent.startsWith('✓ Spellcheck')")
+            tk("shutdownLocalRuntime", {"confirm":True});clean=True
+            print("PASS: configured spellcheck, skill curation, history, retry, stale mark and concurrent edit using zero-model fixture")
+            return
         operation = "openShellSession" if args.shell_pty else "openCodexTerminal" if args.codex_pty else "open" + args.harness_pty.title() + "Terminal" if args.harness_pty else "openConsoleSession"
         start = {"projectId": project["id"], "requestId": "terminal-start"}
         if args.persona_pty:
@@ -508,6 +583,8 @@ def main(database_url=None):
         clean = True
         print("PASS: real owned daemon/PTY, duplicate fencing, resize, same-instance API restart, observed stop and zero model calls" + ("; native wire question/resolution, redaction and scoped context credentials" if args.native_fixture else "") + ("; browser stdin/output, Escape detach and robot reconnect" if args.browser else ""))
     except Exception:
+        if args.spellcheck:
+            print((folder / "server.log").read_text())
         if args.browser and browser_open:
             print(browser("eval", "JSON.stringify({error:document.querySelector('#terminal-error')?.textContent,active:document.activeElement?.outerHTML.slice(0,120),viewer:terminalView&&{cursor:terminalView.cursor,stopped:terminalView.stopped,sending:terminalView.sending,queue:terminalView.queue.length},state:document.querySelector('#terminal-state')?.textContent})"))
             browser("screenshot", "/tmp/teleport-terminal-failure.png")

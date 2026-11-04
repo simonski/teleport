@@ -3,6 +3,7 @@ package model
 import "time"
 
 type LocalSession struct {
+	Spellcheck         *SpellcheckRun   `json:"spellcheck,omitempty"`
 	Persona            *AgentDefinition `json:"persona,omitempty"`
 	ContextTicketID    int64            `json:"contextTicketId,omitempty"`
 	ContextTicket      string           `json:"contextTicket,omitempty"`
@@ -33,6 +34,27 @@ type LocalSession struct {
 	CreatedAt          time.Time        `json:"createdAt"`
 	ExitedAt           *time.Time       `json:"exitedAt,omitempty"`
 	ExitCode           *int             `json:"exitCode,omitempty"`
+}
+
+type SpellcheckRun struct {
+	UsageID       string `json:"usageId"`
+	UsageVersion  int64  `json:"usageVersion"`
+	TicketID      int64  `json:"ticketId"`
+	TicketVersion int64  `json:"ticketVersion"`
+	RequestID     string `json:"requestId"`
+	Payload       string `json:"payload"`
+	State         string `json:"state"`
+	Error         string `json:"error,omitempty"`
+}
+
+type SpellcheckRecord struct {
+	UsageID      string    `json:"usageId"`
+	UsageVersion int64     `json:"usageVersion"`
+	AgentID      string    `json:"agentId"`
+	AgentVersion int64     `json:"agentVersion"`
+	Actor        string    `json:"actor"`
+	Basis        string    `json:"basis"`
+	At           time.Time `json:"at"`
 }
 
 // ManagedLaunch freezes the exact phase authority and prompt at reservation.

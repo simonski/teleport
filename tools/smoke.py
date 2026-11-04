@@ -127,8 +127,15 @@ def verify_agent_factory(browser, project_id, ticket):
     browser("wait", "--fn", "document.querySelector('#account-project-settings')")
     browser("click", '#nav-views [data-view="Agents"]')
     browser("wait", "#new-agent")
+    browser("click", "#factory-skills")
+    browser("wait", "--fn", "document.querySelector('#new-agent')?.textContent==='New skill'")
     browser("click", "#new-agent")
-    browser("wait", "--fn", "!document.querySelector('#agent-skills')?.textContent.includes('Loading')")
+    browser("fill", '#editor [name="name"]', "proof-skill")
+    browser("click", '#editor button[type="submit"]')
+    browser("wait", "--fn", "document.querySelector('#agent-factory-list')?.textContent.includes('proof-skill')")
+    browser("click", "#factory-agents")
+    browser("click", "#new-agent")
+    browser("wait", "--fn", "!document.querySelector('#agent-skills')?.textContent.includes('Loading')&&!document.querySelector('#agent-inventory-status')?.textContent.includes('Loading')")
     browser("fill", '#editor [name="name"]', "Fixture reviewer")
     browser("fill", '#editor [name="goal"]', "Review project work")
     browser("fill", '#editor [name="prompt"]', "Ask before changing files")
@@ -152,7 +159,7 @@ def verify_agent_factory(browser, project_id, ticket):
     browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
     browser("press", "Shift+F10")
     browser("click", '[data-ticket-menu="agents"]')
-    browser("eval", "if(![...document.querySelectorAll('.ticket-context-submenu button')].some(b=>b.disabled&&b.textContent.includes('Spellcheck proof · unavailable')))throw new Error('Configured action was not shown as unavailable')")
+    browser("eval", "if(![...document.querySelectorAll('.ticket-context-submenu button')].some(b=>!b.disabled&&b.textContent.includes('Spellcheck proof')))throw new Error('Configured action was not enabled')")
     browser("wait", '[data-ticket-persona]')
     browser("click", '[data-ticket-persona]')
     browser("eval", f'if(window.agentFactoryProof?.agent.name!=="Fixture reviewer"||window.agentFactoryProof.project!=={project_id}||window.agentFactoryProof.ticket!=={ticket["id"]})throw new Error("Ticket agent action lost its context");startAgentConversation=window.agentFactoryProofStart')
@@ -198,6 +205,10 @@ def main(temporary_root=None):
             (folder / "smoke-control.json").write_text(json.dumps({"browserSession": f"teleport-smoke-{port}"}))
         endpoint = f"http://127.0.0.1:{port}"
         environment = dict(os.environ, TELEPORT_DB=database_url, TELEPORT_CONFIG=str(folder / "client.json"), TELEPORT_SERVER=endpoint)
+        if args.agent_factory_only:
+            skill_home = folder / "skill-home"
+            skill_home.mkdir()
+            environment["HOME"] = str(skill_home)
         # Hidden test tabs must keep polling during long acceptance flows.
         # Chrome otherwise throttles chained timers after five minutes hidden.
         browser_environment = dict(os.environ, AGENT_BROWSER_ARGS=",".join(filter(None, [
@@ -290,7 +301,8 @@ def main(temporary_root=None):
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
                     if args.agent_factory_only:
-                        verify_agent_factory(browser, project["id"], ticket)
+                        factory_ticket = json.loads(tk("createTicket", "--data", json.dumps({"projectId":project["id"],"title":"Spellcheck menu proof","agent":False,"requestId":"factory-ticket"})))
+                        verify_agent_factory(browser, project["id"], factory_ticket)
                         print("PASS: administrator agent factory and ticket menu discovery without model calls")
                         return
                     if args.todo_menu_only:

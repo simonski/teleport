@@ -102,6 +102,7 @@ func InitializeWithOptions(ctx context.Context, db *store.Store, options Initial
 }
 
 type Service struct {
+	skillMu        sync.Mutex
 	scriptMu       sync.Mutex
 	localEndpoint  string
 	localMu        sync.Mutex
@@ -187,6 +188,12 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 	if operation == "listHostHarnesses" || operation == "stopHostHarness" {
 		return s.hostHarnessCall(ctx, token, operation, raw)
 	}
+	if operation == "getInstalledSkill" || operation == "saveInstalledSkill" {
+		return s.installedSkillCall(ctx, token, operation, raw)
+	}
+	if contains([]string{"startSpellcheck", "getSpellcheckRun", "getTicketSpellchecks"}, operation) {
+		return s.spellcheckCall(ctx, token, operation, raw)
+	}
 	if localOperation(operation) {
 		return s.localCall(ctx, token, operation, raw)
 	}
@@ -228,7 +235,7 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			delete(st.Sessions, digest(token))
 			result = map[string]bool{"signedOut": true}
 			return true, nil
-		case "listAgentDefinitions", "listInstalledAgentSkills", "saveAgentDefinition", "listProjectAgents":
+		case "listAgentDefinitions", "listInstalledAgentSkills", "saveAgentDefinition", "listProjectAgents", "getAgentInventory":
 			var changed bool
 			result, changed, err = agentFactoryCall(st, a, operation, raw)
 			return changed, err

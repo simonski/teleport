@@ -13,6 +13,13 @@ type VersionInput struct {
 	ExpectedVersion int64  `json:"expectedVersion"`
 	Reason          string `json:"reason,omitempty"`
 }
+type RefinementRequestInput struct {
+	ID              int64  `json:"id"`
+	ExpectedVersion int64  `json:"expectedVersion"`
+	Reason          string `json:"reason,omitempty"`
+	UsageID         string `json:"usageId,omitempty"`
+	UsageVersion    int64  `json:"usageVersion,omitempty"`
+}
 type VisibilityInput struct {
 	ID              int64 `json:"id"`
 	ExpectedVersion int64 `json:"expectedVersion"`

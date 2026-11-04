@@ -117,8 +117,11 @@ func agentUsageCall(st *model.State, a model.Account, operation string, raw json
 			in.Kind = "todo-spellcheck"
 		}
 	}
-	if !contains([]string{"todo-spellcheck", "todo-conversation"}, in.Kind) {
-		return nil, false, failure(422, "invalid_usage_kind", "Choose a conversation or spellcheck action")
+	if !contains([]string{"todo-spellcheck", "todo-conversation", "todo-refine"}, in.Kind) {
+		return nil, false, failure(422, "invalid_usage_kind", "Choose a supported usage")
+	}
+	if in.Kind == "todo-refine" && (in.View == "" || in.Workflow == "" || in.Phase == "") {
+		return nil, false, failure(422, "invalid_usage", "Choose a Todo view, workflow and lane")
 	}
 	if in.View != "" || in.Workflow != "" || in.Phase != "" {
 		if !contains([]string{"Todos", "Board", "Backlog", "Graph"}, in.View) {
@@ -132,16 +135,22 @@ func agentUsageCall(st *model.State, a model.Account, operation string, raw json
 		if !ok {
 			return nil, false, failure(422, "invalid_usage_phase", "Choose a lane in the selected workflow")
 		}
-		if in.Kind == "todo-spellcheck" && (in.View != "Todos" || phase.Role != "Todo" || phase.Agentic) {
-			return nil, false, failure(422, "invalid_usage_view", "Spellcheck requires a human Todo lane in the Todos view")
+		if contains([]string{"todo-spellcheck", "todo-refine"}, in.Kind) && (in.View != "Todos" || phase.Role != "Todo" || phase.Agentic) {
+			return nil, false, failure(422, "invalid_usage_view", "This action requires a human Todo lane in the Todos view")
 		}
 	}
 	if in.Name == "" || len(in.Name) > 120 || strings.ContainsRune(in.Name, 0) {
 		return nil, false, failure(422, "invalid_usage", "Provide an action name of up to 120 bytes")
 	}
-	agent, ok := st.AgentDefinitions[in.AgentID]
-	if !ok || agent.Archived && (in.Enabled || in.ID == "" || st.AgentUsages[in.ID].AgentID != in.AgentID) {
-		return nil, false, failure(422, "agent_unavailable", "Select an active agent")
+	if in.Kind == "todo-refine" {
+		if in.AgentID != "" {
+			return nil, false, failure(422, "invalid_usage", "Workflow refinement does not use an agent persona")
+		}
+	} else {
+		agent, ok := st.AgentDefinitions[in.AgentID]
+		if !ok || agent.Archived && (in.Enabled || in.ID == "" || st.AgentUsages[in.ID].AgentID != in.AgentID) {
+			return nil, false, failure(422, "agent_unavailable", "Select an active agent")
+		}
 	}
 	if st.AgentUsages == nil {
 		st.AgentUsages = map[string]model.AgentUsage{}

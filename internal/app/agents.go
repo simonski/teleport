@@ -407,7 +407,7 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		st.Settings.Version++
 		return st.Settings, true, nil
 	case "requestRefinement":
-		var in VersionInput
+		var in RefinementRequestInput
 		if err := parse(raw, &in); err != nil {
 			return nil, false, err
 		}
@@ -417,6 +417,12 @@ func agentOperations(st *model.State, a model.Account, operation string, raw jso
 		}
 		if err = expected(t, in.ExpectedVersion); err != nil {
 			return nil, false, err
+		}
+		if in.UsageID != "" || in.UsageVersion != 0 {
+			u, ok := st.AgentUsages[in.UsageID]
+			if !ok || u.Removed || !u.Enabled || u.Kind != "todo-refine" || u.Version != in.UsageVersion || u.ProjectID != t.ProjectID || !usageMatchesTicket(u, t) {
+				return nil, false, failure(409, "usage_unavailable", "The configured refinement action changed or is unavailable")
+			}
 		}
 		if !t.Agent {
 			if t.Kind != "task" || t.Status != "Todo" || !refinementQueueAvailable(st, t) {

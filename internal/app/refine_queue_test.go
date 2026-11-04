@@ -13,7 +13,8 @@ func TestHumanTodoCanQueueAndReturnWithoutHarness(t *testing.T) {
 	p := call(t, svc, token, "createProject", app.CreateProjectInput{Name: "Queue", RequestID: "queue"}).(model.Project)
 	agent := false
 	ticket := call(t, svc, token, "createTicket", app.CreateTicketInput{ProjectID: p.ID, Title: "Refine this draft", Agent: &agent, RequestID: "draft"}).(model.Ticket)
-	queued := call(t, svc, token, "requestRefinement", app.VersionInput{ID: ticket.ID, ExpectedVersion: ticket.Version}).(model.Ticket)
+	usage := call(t, svc, token, "saveAgentUsage", app.AgentUsageInput{ProjectID: p.ID, Name: "Refine", Kind: "todo-refine", View: "Todos", Workflow: ticket.Workflow, Phase: ticket.Phase, Enabled: true, RequestID: "refine-usage"}).(model.AgentUsage)
+	queued := call(t, svc, token, "requestRefinement", app.RefinementRequestInput{ID: ticket.ID, ExpectedVersion: ticket.Version, UsageID: usage.ID, UsageVersion: usage.Version}).(model.Ticket)
 	if !queued.Agent || queued.Status != "Refine" || queued.Assignee != "" {
 		t.Fatal("human draft was not handed to refinement", queued)
 	}

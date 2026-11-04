@@ -53,10 +53,12 @@ def verify_human_todos(browser, api, project):
     browser("wait", "--fn", f"tickets.find(ticket=>ticket.id==={ticket['id']})?.status==='Done'")
     browser("screenshot", "/tmp/teleport-human-todos.png")
     queued = api("createTicket", {"projectId": project["id"], "title": "Queue from human Todos", "agent": False, "requestId": "browser-queue"})
+    api("saveAgentUsage", {"projectId": project["id"], "name": "Refine", "agentId": "", "kind": "todo-refine", "view": "Todos", "workflow": queued["workflow"], "phase": queued["phase"], "enabled": True, "requestId": "browser-refine-usage"})
     button = f'[data-ticket="{queued["id"]}"]'
     browser("wait", button)
     menu()
-    browser("click", '[data-ticket-menu="refine"]')
+    browser("click", '[data-ticket-menu="agents"]')
+    browser("click", '[data-refine-usage]')
     browser("wait", "--fn", f"!document.querySelector('.human-board [data-ticket=\"{queued['id']}\"]')")
     assert api("getTicket", {"id": queued["id"]})["agent"]
     browser("click", '[data-view="Board"]')

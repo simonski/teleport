@@ -12,7 +12,7 @@ func init() {
 	}{
 		{"setExecutionMode", "ACT-0918", "Configure explicit off/demo/trusted-local execution", app.ExecutionModeInput{}, model.Settings{}},
 		{"getPrompt", "ACT-0712", "Inspect current composition or an exact saved managed launch prompt", app.PromptInput{}, app.PromptView{}},
-		{"requestRefinement", "ACT-0301", "Request scoped refinement", app.VersionInput{}, model.Ticket{}},
+		{"requestRefinement", "ACT-0301", "Request scoped refinement", app.RefinementRequestInput{}, model.Ticket{}},
 		{"returnRefinementToTodo", "ACT-0403", "Return unowned queued refinement to human Todo", app.VersionInput{}, model.Ticket{}},
 		{"runDemoStage", "ACT-0316", "Run one labelled deterministic demo stage", app.DemoStageInput{}, app.DemoStageResult{}},
 		{"acceptRefinement", "ACT-0420", "Human accepts the exact current proposal", app.AcceptScopeInput{}, model.Ticket{}},

@@ -105,3 +105,34 @@ func TestAgentUsageLanePlacement(t *testing.T) {
 		t.Fatal("unknown lane accepted")
 	}
 }
+
+func TestWorkflowRefinementUsageRequiresMatchingActiveAllocation(t *testing.T) {
+	st, actor, ticket, _ := managedFixture()
+	human := model.SeedWorkflows()["human@1"]
+	st.Workflows["human@1"] = human
+	ticket.Agent, ticket.Workflow, ticket.Phase, ticket.Status = false, "human@1", "Todo", "Todo"
+	st.Tickets[ticket.ID] = ticket
+	st.Receipts = map[string]model.Receipt{}
+	in := AgentUsageInput{ProjectID: ticket.ProjectID, Name: "Refine", Kind: "todo-refine", View: "Todos", Workflow: "human@1", Phase: "Todo", Enabled: true, RequestID: "refine-usage"}
+	raw, _ := json.Marshal(in)
+	result, _, err := agentUsageCall(st, actor, "saveAgentUsage", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage := result.(model.AgentUsage)
+	request := RefinementRequestInput{ID: ticket.ID, ExpectedVersion: ticket.Version, UsageID: usage.ID, UsageVersion: usage.Version + 1}
+	raw, _ = json.Marshal(request)
+	if _, _, err = agentOperations(st, actor, "requestRefinement", raw); err == nil {
+		t.Fatal("stale usage accepted")
+	}
+	if st.Tickets[ticket.ID].Agent {
+		t.Fatal("stale usage changed ticket")
+	}
+	usage.Enabled = false
+	st.AgentUsages[usage.ID] = usage
+	request.UsageVersion = usage.Version
+	raw, _ = json.Marshal(request)
+	if _, _, err = agentOperations(st, actor, "requestRefinement", raw); err == nil {
+		t.Fatal("disabled usage accepted")
+	}
+}

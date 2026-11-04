@@ -26,7 +26,7 @@ test('visible tab names are lowercase while persisted view identifiers remain st
   const buttons=[...html.matchAll(/<button[^>]*data-view="([^"]+)"[^>]*aria-label="([^"]+)"[^>]*>(.*?)<\/button>/g)];
   assert.deepEqual(buttons.map(match=>[match[1],match[2]]),[
     ['Home','home'],['Backlog','backlog'],['Board','board'],['Todos','todo'],
-    ['Calendar','calendar'],['Graph','graph'],['Workflows','workflows'],['Cost','cost'],
+    ['Calendar','calendar'],['Graph','graph'],['Workflows','workflows'],['Cost','cost / usage'],
   ]);
   for(const match of buttons)assert.ok(match[3].includes(`<span class="tab-label">${match[2]}</span>`));
   assert.match(html,/data-view="Todos"[^>]*aria-current="page"/);

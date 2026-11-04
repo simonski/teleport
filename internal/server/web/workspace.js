@@ -67,7 +67,7 @@ function render(){
   restoreFocus();restoreBoardFocus();
   if(view==='Graph')mountGraph();if(view==='Calendar')mountCalendar();
   if(view==='Workflows')mountWorkflows();if(view==='Agents'&&session.account.administrator)mountAgentFactory();
-  if(view==='Home')mountHome();if(view==='Backlog')mountBacklog(backlogFocusKey);
+  if(view==='Home')mountHome();if(view==='Cost')mountCost();if(view==='Backlog')mountBacklog(backlogFocusKey);
   on('lens','change',e=>{lens=e.target.value;render();});
 }
 async function signOut(){try{await flushCurrentLocation();await api('logout');loadGeneration++;detailEpoch++;clearPresentation();session=null;projects=[];tickets=[];ideas=[];projectId=0;view='Home';login();}catch(error){showError(error);}}

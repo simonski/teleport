@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,8 +25,40 @@ type spellcheckPayload struct {
 	Description string                `json:"description"`
 }
 type spellcheckResult struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title       string               `json:"title"`
+	Description string               `json:"description"`
+	Usage       *model.TokenEvidence `json:"usage,omitempty"`
+}
+
+func codexSpellcheckUsage(data []byte) *model.TokenEvidence {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	var usage *model.TokenEvidence
+	for scanner.Scan() {
+		var event struct {
+			Type  string `json:"type"`
+			Usage *struct {
+				Input  *int64 `json:"input_tokens"`
+				Cached *int64 `json:"cached_input_tokens"`
+				Output *int64 `json:"output_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &event) != nil || event.Type != "turn.completed" || event.Usage == nil || event.Usage.Input == nil || event.Usage.Output == nil {
+			continue
+		}
+		cached := int64(0)
+		if event.Usage.Cached != nil {
+			cached = *event.Usage.Cached
+		}
+		if *event.Usage.Input < 0 || *event.Usage.Input > 1_000_000_000_000 || *event.Usage.Output < 0 || *event.Usage.Output > 1_000_000_000_000 || cached < 0 || cached > *event.Usage.Input {
+			continue
+		}
+		usage = &model.TokenEvidence{Input: *event.Usage.Input, Cached: event.Usage.Cached, Output: *event.Usage.Output, Source: "codex-exec-json"}
+	}
+	if scanner.Err() != nil {
+		return nil
+	}
+	return usage
 }
 
 func runSpellcheck(path, raw string, output io.Writer) error {
@@ -63,7 +97,7 @@ func runSpellcheck(path, raw string, output io.Writer) error {
 		if err = os.WriteFile(schemaPath, []byte(schema), 0600); err != nil {
 			return err
 		}
-		args = []string{"exec", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--sandbox", "read-only", "--output-schema", schemaPath, "--output-last-message", resultPath, "--color", "never"}
+		args = []string{"exec", "--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--sandbox", "read-only", "--output-schema", schemaPath, "--output-last-message", resultPath, "--color", "never"}
 		if in.Agent.Model != "" {
 			args = append(args, "--model", in.Agent.Model)
 		}
@@ -89,13 +123,25 @@ func runSpellcheck(path, raw string, output io.Writer) error {
 		}
 	}
 	var stdout bytes.Buffer
-	cmd.Stdout = &limitedBuffer{b: &stdout, remaining: 128 << 10}
+	cmd.Stdout = &limitedBuffer{b: &stdout, remaining: 2 << 20}
 	cmd.Stderr = io.Discard
-	if err = cmd.Run(); err != nil {
-		return errors.New("spellcheck harness failed")
-	}
 	var data []byte
+	var usage *model.TokenEvidence
+	emitted := false
+	defer func() {
+		if !emitted && usage != nil {
+			encoded, _ := json.Marshal(struct {
+				Usage *model.TokenEvidence `json:"usage"`
+			}{usage})
+			_, _ = fmt.Fprintln(output, string(encoded))
+		}
+	}()
+	runErr := cmd.Run()
 	if in.Agent.Harness == "codex" {
+		usage = codexSpellcheckUsage(stdout.Bytes())
+		if runErr != nil {
+			return errors.New("spellcheck harness failed")
+		}
 		info, statErr := os.Stat(resultPath)
 		if statErr != nil || !info.Mode().IsRegular() || info.Size() > 64<<10 {
 			return errors.New("invalid spellcheck result")
@@ -108,11 +154,40 @@ func runSpellcheck(path, raw string, output io.Writer) error {
 		var envelope struct {
 			StructuredOutput json.RawMessage `json:"structured_output"`
 			IsError          bool            `json:"is_error"`
+			Cost             *float64        `json:"total_cost_usd"`
+			Usage            *struct {
+				Input         *int64 `json:"input_tokens"`
+				CacheRead     *int64 `json:"cache_read_input_tokens"`
+				CacheCreation *int64 `json:"cache_creation_input_tokens"`
+				Output        *int64 `json:"output_tokens"`
+			} `json:"usage"`
 		}
-		if json.Unmarshal(stdout.Bytes(), &envelope) != nil || envelope.IsError {
+		if json.Unmarshal(stdout.Bytes(), &envelope) != nil {
 			return errors.New("spellcheck result missing")
 		}
 		data = envelope.StructuredOutput
+		if envelope.Usage != nil && envelope.Usage.Input != nil && envelope.Usage.Output != nil {
+			u := envelope.Usage
+			cached, creation := int64(0), int64(0)
+			if u.CacheRead != nil {
+				cached = *u.CacheRead
+			}
+			if u.CacheCreation != nil {
+				creation = *u.CacheCreation
+			}
+			if *u.Input >= 0 && *u.Input <= 1_000_000_000_000 && *u.Output >= 0 && *u.Output <= 1_000_000_000_000 && cached >= 0 && cached <= 1_000_000_000_000 && creation >= 0 && creation <= 1_000_000_000_000 {
+				if u.CacheRead != nil && u.CacheCreation != nil {
+					usage = &model.TokenEvidence{Input: *u.Input + cached + creation, Cached: u.CacheRead, Output: *u.Output, Source: "claude-print-json"}
+				}
+				if usage != nil && envelope.Cost != nil && *envelope.Cost >= 0 && *envelope.Cost < 1e9 {
+					n := int64(math.Round(*envelope.Cost * 1e6))
+					usage.EstimateUSDMicros = &n
+				}
+			}
+		}
+		if runErr != nil || envelope.IsError {
+			return errors.New("spellcheck harness failed")
+		}
 	}
 	var parsed struct {
 		Title       *string `json:"title"`
@@ -123,8 +198,9 @@ func runSpellcheck(path, raw string, output io.Writer) error {
 	if len(data) > 64<<10 || decoder.Decode(&parsed) != nil || parsed.Title == nil || parsed.Description == nil || decoder.Decode(&struct{}{}) != io.EOF || strings.TrimSpace(*parsed.Title) == "" || len(*parsed.Title) > 20000 || len(*parsed.Description) > 20000 {
 		return errors.New("invalid spellcheck result")
 	}
-	result := spellcheckResult{Title: *parsed.Title, Description: *parsed.Description}
+	result := spellcheckResult{Title: *parsed.Title, Description: *parsed.Description, Usage: usage}
 	encoded, _ := json.Marshal(result)
+	emitted = true
 	_, err = fmt.Fprintln(output, string(encoded))
 	return err
 }

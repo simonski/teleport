@@ -3,7 +3,7 @@ const canonicalNavigation=['Home','Backlog','Board','Todos','Calendar','Graph','
 const supportedNavigation=['Home','Backlog','Board','Todos','Calendar','Graph','Workflows','Agents','Cost'];
 function availableNavigation(name){return supportedNavigation.includes(name)&&(name!=='Agents'||!!session?.account?.administrator);}
 function canonicalView(name){return ['Ideas','Goals','Epics','Tickets'].includes(name)?'Backlog':name==='Projects'?'Home':name;}
-function viewLabel(name){return name==='Todos'?'todo':name.toLowerCase();}
+function viewLabel(name){return name==='Todos'?'todo':name==='Cost'?'cost / usage':name.toLowerCase();}
 let navigationGesture=null,navigationDeferred=false,navigationSuppressClick=0,navigationApplied=null;
 
 function navigationValues(){return {...preferences,...preferenceDraft};}

@@ -354,6 +354,9 @@ func run(args []string) error {
 					if err := service.PumpSpellchecks(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("spellcheck reconciliation failed", "error", err)
 					}
+					if err := service.PumpUsagePrices(stopCtx); err != nil && stopCtx.Err() == nil {
+						slog.Error("usage price reconciliation failed", "error", err)
+					}
 					if err := service.PumpNative(stopCtx); err != nil && stopCtx.Err() == nil {
 						slog.Error("native workflow reconciliation failed", "error", err)
 					}

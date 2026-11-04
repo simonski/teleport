@@ -54,6 +54,7 @@ func main() {
 		if strings.Contains(ticket.Title, "slow") {
 			time.Sleep(2 * time.Second)
 		}
+		fmt.Println(`{"type":"turn.completed","usage":{"input_tokens":120,"cached_input_tokens":20,"output_tokens":30}}`)
 		if strings.Contains(ticket.Title, "invalid") {
 			if os.WriteFile(output, []byte(`{"title":"changed"}`), 0600) != nil {
 				history.Exit(2)

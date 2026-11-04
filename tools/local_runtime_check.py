@@ -148,7 +148,7 @@ def main(database_url=None):
             except RuntimeError as error:
                 assert "changed" in str(error)
             assert "proof-skill" in tk("listInstalledAgentSkills")["items"]
-            agent = tk("saveAgentDefinition", {"name":"Fixture spellchecker","goal":"Correct spelling","prompt":"Preserve meaning","skills":["proof-skill"],"harness":"codex","requestId":"spell-agent"})
+            agent = tk("saveAgentDefinition", {"name":"Fixture spellchecker","goal":"Correct spelling","prompt":"Preserve meaning","skills":["proof-skill"],"harness":"codex","model":"fixture-model","requestId":"spell-agent"})
             usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Spellcheck","agentId":agent["id"],"enabled":True,"requestId":"spell-usage"})
             ticket = tk("createTicket", {"projectId":project["id"],"title":"Fix teh issue","description":"Check teh text","agent":False,"kind":"task","requestId":"spell-ticket"})
             request = {"ticketId":ticket["id"],"expectedVersion":ticket["version"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":"spell-run"}
@@ -159,6 +159,25 @@ def main(database_url=None):
             result = tk("getTicket", {"id":ticket["id"]})
             assert result["title"] == "Fix the issue" and result["description"] == "Check the text"
             assert tk("getTicketSpellchecks", {"id":ticket["id"]})["items"][0]["current"]
+            usage_summary = tk("getUsageSummary", {"projectId":project["id"]})
+            usage_hour = next(item for item in usage_summary["windows"] if item["name"] == "hour")
+            assert usage_hour["invocations"] == 1 and usage_hour["succeeded"] == 1 and usage_hour["tokens"] == 150 and usage_hour["cached"] == 20
+            price = tk("publishUsagePrice", {"model":"fixture-model","expectedVersion":0,"requestId":"price-1","effective":"2099-01-01","source":"fixture rates","input":"1","cached":"0.5","output":"2"})
+            assert price["version"] == 1
+            assert tk("publishUsagePrice", {"model":"fixture-model","expectedVersion":0,"requestId":"price-1","effective":"2099-01-01","source":"fixture rates","input":"1","cached":"0.5","output":"2"})["version"] == 1
+            def priced():
+                row = next(item for item in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if item["name"] == "hour")
+                return row if row["estimatedUsdMicros"] == 170 and not row["pricePending"] else None
+            assert wait_for(priced)["futureRates"]
+            price = tk("publishUsagePrice", {"model":"fixture-model","expectedVersion":1,"requestId":"price-2","effective":"2026-01-01","source":"fixture revised","input":"1","cached":"0.5","output":"4"})
+            def repriced():
+                row = next(item for item in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if item["name"] == "hour")
+                return row if row["estimatedUsdMicros"] == 230 and not row["pricePending"] else None
+            assert wait_for(repriced)["revisedRates"]
+            price_history = tk("listUsagePriceHistory", {"model":"fixture-model"})["items"]
+            valuations = tk("listUsageValuations", {"id":run["id"]})["items"]
+            assert [item["version"] for item in price_history] == [1, 2]
+            assert [item["estimateMicros"] for item in valuations] == [170, 230] and valuations[1]["previousMicros"] == 170
             history = tk("listTicketHistory", {"id":ticket["id"]})["items"]
             assert history[-2]["snapshot"]["title"] == "Fix teh issue" and history[-1]["action"] == "spellcheck"
             if args.browser:
@@ -170,6 +189,17 @@ def main(database_url=None):
                 browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
                 browser("click", "#project + .choice-button")
                 browser("click", '.choice-list [data-value="' + str(project["id"]) + '"]')
+                browser("click", '[data-view="Home"]')
+                browser("wait", "--fn", "document.querySelector('#home-content')?.textContent.includes('150 tokens')")
+                browser("click", '[data-view="Cost"]')
+                browser("wait", "--fn", "document.querySelector('#usage-content')?.textContent.includes('150')")
+                browser("screenshot", "/tmp/teleport-cost-usage.png")
+                browser("eval", "if(!document.querySelector('#usage-content').textContent.includes('revised'))throw new Error('Revised estimate was not labelled')")
+                browser("click", "#usage-prices"); browser("wait", '[data-price-edit="fixture-model"]')
+                browser("click", '[data-price-edit="fixture-model"]'); browser("fill", '#editor [name="source"]', "browser rate source")
+                browser("click", '#editor button[type="submit"]')
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.textContent.includes('v3')")
+                browser("press", "Escape")
                 browser("click", '[data-view="Todos"]')
                 card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
                 browser("wait", card);browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
@@ -193,6 +223,8 @@ def main(database_url=None):
             invalid_result = wait_for(lambda: (value if (value:=tk("getSpellcheckRun", {"id":invalid_run["id"]}))["state"] != "running" else None))
             assert invalid_result["state"] == "failed" and tk("getTicket", {"id":invalid_ticket["id"]})["title"] == "invalid teh issue"
             assert not tk("getTicketSpellchecks", {"id":invalid_ticket["id"]})["items"]
+            failed_usage = next(item for item in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if item["name"] == "hour")
+            assert failed_usage["failed"] == 2 and failed_usage["tokens"] == 450
             if args.browser:
                 browser_ticket = tk("createTicket", {"projectId":project["id"],"title":"browser teh action","agent":False,"kind":"task","requestId":"spell-browser-ticket"})
                 browser("press", "Escape")
@@ -205,7 +237,7 @@ def main(database_url=None):
                 browser("eval", f'document.querySelector({json.dumps(browser_card)}).focus()');browser("press", "Shift+F10");browser("wait", '[data-ticket-menu="agents"]');browser("click", '[data-ticket-menu="agents"]')
                 browser("wait", "--fn", "document.querySelector('[data-spellcheck-usage]')?.textContent.startsWith('✓ Spellcheck')")
             tk("shutdownLocalRuntime", {"confirm":True});clean=True
-            print("PASS: configured spellcheck, skill curation, history, retry, stale mark and concurrent edit using zero-model fixture")
+            print("PASS: spellcheck usage, price revisions, failure accounting, browser views and concurrent edits using zero-model fixture")
             return
         operation = "openShellSession" if args.shell_pty else "openCodexTerminal" if args.codex_pty else "open" + args.harness_pty.title() + "Terminal" if args.harness_pty else "openConsoleSession"
         start = {"projectId": project["id"], "requestId": "terminal-start"}

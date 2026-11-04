@@ -313,18 +313,22 @@ func (s *Service) PumpSpellchecks(ctx context.Context) error {
 			continue
 		}
 		var result struct {
-			Title       *string `json:"title"`
-			Description *string `json:"description"`
+			Title       *string              `json:"title"`
+			Description *string              `json:"description"`
+			Usage       *model.TokenEvidence `json:"usage,omitempty"`
 		}
-		valid := row.State == "exited" && row.ErrorCode == "" && row.ExitCode != nil && *row.ExitCode == 0 && !row.StopRequested
-		if valid {
+		observed := row.State == "exited" && row.ErrorCode == "" && row.ExitCode != nil
+		valid := false
+		if observed {
 			request := daemonRequest(row, "read")
 			out, e := s.localClient.Call(ctx, request)
-			valid = e == nil && out.Status != nil && !out.Gap && out.Next == out.Status.Next && len(out.Data) <= 64<<10
-			if valid {
-				decoder := json.NewDecoder(bytes.NewReader(out.Data))
+			observed = e == nil && out.Status != nil && !out.Gap && out.Next == out.Status.Next && len(out.Data) <= 64<<10
+			if observed {
+				line := bytes.SplitN(out.Data, []byte("\n"), 2)[0]
+				decoder := json.NewDecoder(bytes.NewReader(line))
 				decoder.DisallowUnknownFields()
-				valid = decoder.Decode(&result) == nil && result.Title != nil && result.Description != nil && decoder.Decode(&struct{}{}) == io.EOF && strings.TrimSpace(*result.Title) != "" && len(*result.Title) <= 20000 && len(*result.Description) <= 20000
+				observed = decoder.Decode(&result) == nil && decoder.Decode(&struct{}{}) == io.EOF
+				valid = observed && *row.ExitCode == 0 && !row.StopRequested && result.Title != nil && result.Description != nil && strings.TrimSpace(*result.Title) != "" && len(*result.Title) <= 20000 && len(*result.Description) <= 20000
 			}
 		}
 		err = s.db.Update(ctx, func(st *model.State) (bool, error) {
@@ -333,6 +337,10 @@ func (s *Service) PumpSpellchecks(ctx context.Context) error {
 				return false, nil
 			}
 			job := current.Spellcheck
+			if observed && result.Usage != nil && result.Usage.Input >= 0 && result.Usage.Input <= 3_000_000_000_000 && (result.Usage.Cached == nil || *result.Usage.Cached >= 0 && *result.Usage.Cached <= result.Usage.Input) && result.Usage.Output >= 0 && result.Usage.Output <= 1_000_000_000_000 && (result.Usage.EstimateUSDMicros == nil || *result.Usage.EstimateUSDMicros >= 0 && *result.Usage.EstimateUSDMicros < 1_000_000_000_000_000) && contains([]string{"codex-exec-json", "claude-print-json"}, result.Usage.Source) {
+				job.Usage = result.Usage
+				applyUsagePrice(st, &current)
+			}
 			a := st.Accounts[current.Creator]
 			t := st.Tickets[job.TicketID]
 			p := st.Projects[current.ProjectID]

@@ -258,7 +258,7 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			var changed bool
 			result, changed, err = agentUsageCall(st, a, operation, raw)
 			return changed, err
-		case "listTicketProposals", "submitTicketProposal", "commentTicketProposal", "acceptTicketProposal", "getProposalRunContext", "reportProposalRunUsage":
+		case "listTicketProposals", "submitTicketProposal", "commentTicketProposal", "acceptTicketProposal", "discardTicketProposals", "getProposalRunContext", "reportProposalRunUsage":
 			var changed bool
 			result, changed, err = ticketProposalOperations(st, a, operation, raw)
 			return changed, err

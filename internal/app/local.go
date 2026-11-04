@@ -728,7 +728,7 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 					job := &model.ProposalRun{TicketID: ticket.ID, TicketVersion: ticket.Version, UsageID: in.UsageID, UsageVersion: in.UsageVersion, PreviousID: in.ProposalPreviousID}
 					if in.ProposalPreviousID != "" {
 						previous, ok := st.TicketProposals[in.ProposalPreviousID]
-						if !ok || previous.TicketID != ticket.ID || previous.ProjectID != ticket.ProjectID || previous.AcceptedBy != "" || !proposalRunReady(st, previous) {
+						if !ok || previous.TicketID != ticket.ID || previous.ProjectID != ticket.ProjectID || previous.AcceptedBy != "" || previous.DiscardedBy != "" || !proposalRunReady(st, previous) {
 							return false, failure(409, "proposal_unavailable", "Previous proposal is unavailable")
 						}
 						job.PreviousVersion = previous.Version

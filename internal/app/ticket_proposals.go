@@ -45,6 +45,17 @@ type TicketProposalAcceptInput struct {
 	ExpectedVersion       int64  `json:"expectedVersion"`
 	ExpectedTicketVersion int64  `json:"expectedTicketVersion"`
 }
+type TicketProposalDiscardInput struct {
+	TicketID              int64  `json:"ticketId"`
+	ExpectedTicketVersion int64  `json:"expectedTicketVersion"`
+	LatestID              string `json:"latestId"`
+	LatestVersion         int64  `json:"latestVersion"`
+	RequestID             string `json:"requestId"`
+}
+type TicketProposalDiscardResult struct {
+	TicketID  int64 `json:"ticketId"`
+	Discarded int   `json:"discarded"`
+}
 type ProposalRunUsageInput struct {
 	Usage *model.TokenEvidence `json:"usage"`
 }
@@ -150,6 +161,56 @@ func ticketProposalOperations(st *model.State, a model.Account, operation string
 		}
 		return out, false, nil
 	}
+	if operation == "discardTicketProposals" {
+		var in TicketProposalDiscardInput
+		if err := parse(raw, &in); err != nil {
+			return nil, false, err
+		}
+		t, err := ticketFor(st, a, in.TicketID, "Contributor")
+		if err != nil {
+			return nil, false, err
+		}
+		key, hash, prior, err := receipt(st, a, operation, in.RequestID, in)
+		if err != nil {
+			return nil, false, err
+		}
+		if prior != nil {
+			var saved TicketProposalDiscardResult
+			if json.Unmarshal(prior, &saved) != nil || saved.TicketID != t.ID {
+				return nil, false, failure(500, "invalid_receipt", "Invalid discard receipt")
+			}
+			return saved, false, nil
+		}
+		if t.Version != in.ExpectedTicketVersion {
+			return nil, false, failure(409, "proposal_stale", "Ticket changed; review proposals again")
+		}
+		if proposalOwnsTicket(st, t.ID) {
+			return nil, false, failure(409, "proposal_running", "Stop the planning run and confirm exit before discarding proposals")
+		}
+		var latest model.TicketProposal
+		for _, p := range st.TicketProposals {
+			if p.TicketID == t.ID && p.ProjectID == t.ProjectID && (latest.ID == "" || proposalCursor(p) > proposalCursor(latest)) {
+				latest = p
+			}
+		}
+		if latest.ID == "" || latest.ID != in.LatestID || latest.Version != in.LatestVersion {
+			return nil, false, failure(409, "proposal_stale", "Proposals changed; review them again")
+		}
+		result := TicketProposalDiscardResult{TicketID: t.ID}
+		now := time.Now().UTC()
+		for id, p := range st.TicketProposals {
+			if p.TicketID == t.ID && p.ProjectID == t.ProjectID && p.AcceptedBy == "" && p.DiscardedBy == "" {
+				p.DiscardedBy, p.DiscardedAt, p.Version = a.ID, &now, p.Version+1
+				st.TicketProposals[id] = p
+				result.Discarded++
+			}
+		}
+		if result.Discarded == 0 {
+			return nil, false, failure(409, "no_pending_proposals", "There are no proposals to discard")
+		}
+		remember(st, key, hash, result)
+		return result, true, nil
+	}
 	if operation == "commentTicketProposal" {
 		var in TicketProposalFeedbackInput
 		if err := parse(raw, &in); err != nil {
@@ -179,6 +240,8 @@ func ticketProposalOperations(st *model.State, a model.Account, operation string
 			p.Feedback = append([]model.ProposalFeedback{}, p.Feedback[:saved.Version-1]...)
 			p.AcceptedBy = ""
 			p.AcceptedAt = nil
+			p.DiscardedBy = ""
+			p.DiscardedAt = nil
 			p.CreatedIDs = nil
 			return p, false, nil
 		}
@@ -188,6 +251,9 @@ func ticketProposalOperations(st *model.State, a model.Account, operation string
 		}
 		if p.Version != in.ExpectedVersion {
 			return nil, false, failure(409, "version_conflict", "Proposal changed")
+		}
+		if p.DiscardedBy != "" {
+			return nil, false, failure(409, "proposal_discarded", "Discarded proposals cannot receive feedback")
 		}
 		if p.AcceptedBy != "" {
 			return nil, false, failure(409, "proposal_accepted", "Accepted proposals cannot receive new feedback")
@@ -241,6 +307,9 @@ func ticketProposalOperations(st *model.State, a model.Account, operation string
 		}
 		if p.AcceptedBy != "" {
 			return visibleProposal(st, a, p), false, nil
+		}
+		if p.DiscardedBy != "" {
+			return nil, false, failure(409, "proposal_discarded", "Discarded proposals cannot be accepted")
 		}
 		if !proposalRunReady(st, p) {
 			return nil, false, failure(409, "proposal_run_unfinished", "The agent run has not completed successfully")
@@ -368,7 +437,7 @@ func ticketProposalOperations(st *model.State, a model.Account, operation string
 	}
 	if in.PreviousID != "" {
 		p, ok := st.TicketProposals[in.PreviousID]
-		if !ok || p.TicketID != t.ID || p.ProjectID != t.ProjectID || p.AcceptedBy != "" {
+		if !ok || p.TicketID != t.ID || p.ProjectID != t.ProjectID || p.AcceptedBy != "" || p.DiscardedBy != "" {
 			return nil, false, failure(422, "invalid_proposal", "Previous proposal is unavailable")
 		}
 		for _, later := range st.TicketProposals {
@@ -477,7 +546,7 @@ func proposalAttention(st *model.State) map[int64]bool {
 	}
 	attention := make(map[int64]bool)
 	for id, p := range latest {
-		attention[id] = p.AcceptedBy == "" && proposalRunReady(st, p)
+		attention[id] = p.AcceptedBy == "" && p.DiscardedBy == "" && proposalRunReady(st, p)
 	}
 	return attention
 }

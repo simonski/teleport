@@ -42,6 +42,73 @@ func TestTicketProposalAcceptanceCreatesWorkOnce(t *testing.T) {
 	}
 }
 
+func TestTicketProposalDiscardResetsReviewAndRetainsHistory(t *testing.T) {
+	svc, token, db := fixtureWithStore(t)
+	project := call(t, svc, token, "createProject", app.CreateProjectInput{Name: "Discard proposals", RequestID: "project"}).(model.Project)
+	agent := false
+	ticket := call(t, svc, token, "createTicket", app.CreateTicketInput{ProjectID: project.ID, Title: "Source", Agent: &agent, RequestID: "source"}).(model.Ticket)
+	first := call(t, svc, token, "submitTicketProposal", app.TicketProposalInput{TicketID: ticket.ID, ExpectedVersion: ticket.Version, RequestID: "first", Title: "First", Items: []model.TicketProposalItem{{Key: "e", Kind: "epic", Title: "Epic"}}}).(model.TicketProposal)
+	feedback := call(t, svc, token, "commentTicketProposal", app.TicketProposalFeedbackInput{TicketID: ticket.ID, ProposalID: first.ID, ExpectedVersion: first.Version, RequestID: "feedback", Text: "Try again"}).(model.TicketProposal)
+	second := call(t, svc, token, "submitTicketProposal", app.TicketProposalInput{TicketID: ticket.ID, ExpectedVersion: ticket.Version, RequestID: "second", PreviousID: first.ID, Title: "Second", Items: []model.TicketProposalItem{{Key: "e", Kind: "epic", Title: "Epic"}}}).(model.TicketProposal)
+	in := app.TicketProposalDiscardInput{TicketID: ticket.ID, ExpectedTicketVersion: ticket.Version, LatestID: second.ID, LatestVersion: second.Version, RequestID: "discard"}
+	if err := db.Update(context.Background(), func(st *model.State) (bool, error) {
+		if st.LocalSessions == nil {
+			st.LocalSessions = map[string]model.LocalSession{}
+		}
+		st.LocalSessions["H99"] = model.LocalSession{ID: "H99", State: "unknown", ProposalRun: &model.ProposalRun{TicketID: ticket.ID}}
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(in)
+	if _, err := svc.Call(context.Background(), token, "discardTicketProposals", body); err == nil {
+		t.Fatal("unresolved run did not block discard")
+	}
+	if err := db.Update(context.Background(), func(st *model.State) (bool, error) {
+		row := st.LocalSessions["H99"]
+		row.State = "exited"
+		st.LocalSessions["H99"] = row
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result := call(t, svc, token, "discardTicketProposals", in).(app.TicketProposalDiscardResult)
+	if result.Discarded != 2 || call(t, svc, token, "discardTicketProposals", in).(app.TicketProposalDiscardResult) != result {
+		t.Fatal("discard did not atomically retain its retry result")
+	}
+	rows := call(t, svc, token, "listTicketProposals", map[string]any{"ticketId": ticket.ID}).(app.TicketProposalList).Items
+	if len(rows) != 2 || rows[0].DiscardedBy == "" || rows[1].DiscardedBy == "" || len(rows[0].Feedback) != 1 || feedback.Feedback[0].Text != "Try again" {
+		t.Fatal("discard lost history")
+	}
+	if call(t, svc, token, "getTicket", app.IDInput{ID: ticket.ID}).(model.Ticket).ProposalAttention {
+		t.Fatal("discarded proposal still requests attention")
+	}
+	accept, _ := json.Marshal(app.TicketProposalAcceptInput{TicketID: ticket.ID, ProposalID: second.ID, ExpectedVersion: second.Version, ExpectedTicketVersion: ticket.Version})
+	if _, err := svc.Call(context.Background(), token, "acceptTicketProposal", accept); err == nil {
+		t.Fatal("discarded proposal accepted")
+	}
+	revision, _ := json.Marshal(app.TicketProposalInput{TicketID: ticket.ID, ExpectedVersion: ticket.Version, RequestID: "revision", PreviousID: second.ID, Title: "Revision", Items: []model.TicketProposalItem{{Key: "e", Kind: "epic", Title: "Epic"}}})
+	if _, err := svc.Call(context.Background(), token, "submitTicketProposal", revision); err == nil {
+		t.Fatal("discarded proposal used as revision basis")
+	}
+	fresh := call(t, svc, token, "submitTicketProposal", app.TicketProposalInput{TicketID: ticket.ID, ExpectedVersion: ticket.Version, RequestID: "fresh", Title: "Fresh", Items: []model.TicketProposalItem{{Key: "e", Kind: "epic", Title: "Fresh epic"}}}).(model.TicketProposal)
+	if fresh.PreviousID != "" || !call(t, svc, token, "getTicket", app.IDInput{ID: ticket.ID}).(model.Ticket).ProposalAttention {
+		t.Fatal("fresh proposal did not reset review")
+	}
+	stale := in
+	stale.RequestID = "stale-discard"
+	body, _ = json.Marshal(stale)
+	if _, err := svc.Call(context.Background(), token, "discardTicketProposals", body); err == nil {
+		t.Fatal("stale review discarded fresh proposal")
+	}
+	approved := call(t, svc, token, "acceptTicketProposal", app.TicketProposalAcceptInput{TicketID: ticket.ID, ProposalID: fresh.ID, ExpectedVersion: fresh.Version, ExpectedTicketVersion: ticket.Version}).(model.TicketProposal)
+	pending := call(t, svc, token, "submitTicketProposal", app.TicketProposalInput{TicketID: ticket.ID, ExpectedVersion: ticket.Version, RequestID: "another", Title: "Another", Items: []model.TicketProposalItem{{Key: "e", Kind: "epic", Title: "Other"}}}).(model.TicketProposal)
+	call(t, svc, token, "discardTicketProposals", app.TicketProposalDiscardInput{TicketID: ticket.ID, ExpectedTicketVersion: ticket.Version, LatestID: pending.ID, LatestVersion: pending.Version, RequestID: "discard-again"})
+	if len(approved.CreatedIDs) != 1 || call(t, svc, token, "getTicket", app.IDInput{ID: approved.CreatedIDs[0]}).(model.Ticket).ID != approved.CreatedIDs[0] {
+		t.Fatal("discard removed accepted work")
+	}
+}
+
 func TestProposalCredentialCannotCreateOrApproveTickets(t *testing.T) {
 	svc, human, db := fixtureWithStore(t)
 	p := call(t, svc, human, "createProject", app.CreateProjectInput{Name: "Scoped proposal", RequestID: "project"}).(model.Project)

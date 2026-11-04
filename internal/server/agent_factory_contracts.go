@@ -29,6 +29,7 @@ func init() {
 		{"submitTicketProposal", "Submit a ticket proposal", app.TicketProposalInput{}, model.TicketProposal{}},
 		{"commentTicketProposal", "Record proposal feedback", app.TicketProposalFeedbackInput{}, model.TicketProposal{}},
 		{"acceptTicketProposal", "Accept a ticket proposal", app.TicketProposalAcceptInput{}, model.TicketProposal{}},
+		{"discardTicketProposals", "Discard unaccepted proposals for a ticket", app.TicketProposalDiscardInput{}, app.TicketProposalDiscardResult{}},
 		{"getProposalRunContext", "Read the current proposal run's prior feedback", struct{}{}, map[string]any{}},
 		{"reportProposalRunUsage", "Record provider usage for the current proposal run", app.ProposalRunUsageInput{}, map[string]bool{}},
 		{"startSpellcheck", "Start a scoped Todo spellcheck", app.SpellcheckInput{}, app.SpellcheckView{}},
@@ -50,7 +51,7 @@ func init() {
 		if entry.name == "listAgentUsages" || entry.name == "saveAgentUsage" || entry.name == "removeAgentUsage" {
 			action = "ACT-1517"
 		}
-		if entry.name == "listTicketProposals" || entry.name == "submitTicketProposal" || entry.name == "commentTicketProposal" || entry.name == "acceptTicketProposal" || entry.name == "getProposalRunContext" || entry.name == "reportProposalRunUsage" {
+		if entry.name == "listTicketProposals" || entry.name == "submitTicketProposal" || entry.name == "commentTicketProposal" || entry.name == "acceptTicketProposal" || entry.name == "discardTicketProposals" || entry.name == "getProposalRunContext" || entry.name == "reportProposalRunUsage" {
 			action = "ACT-1519"
 		}
 		if entry.name == "startSpellcheck" || entry.name == "getSpellcheckRun" || entry.name == "getTicketSpellchecks" {

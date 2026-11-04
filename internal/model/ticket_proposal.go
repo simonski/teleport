@@ -37,5 +37,7 @@ type TicketProposal struct {
 	Feedback      []ProposalFeedback   `json:"feedback"`
 	AcceptedBy    string               `json:"acceptedBy,omitempty"`
 	AcceptedAt    *time.Time           `json:"acceptedAt,omitempty"`
+	DiscardedBy   string               `json:"discardedBy,omitempty"`
+	DiscardedAt   *time.Time           `json:"discardedAt,omitempty"`
 	CreatedIDs    []int64              `json:"createdIds,omitempty"`
 }

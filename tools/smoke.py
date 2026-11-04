@@ -23,12 +23,26 @@ from smoke_profile import Profile
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def verify_tk_console(browser, tk):
+    browser("click", "#javascript-console")
+    browser("wait", "#script-source")
+    browser("fill", "#script-source", "tk project ls -json")
+    browser("press", "Enter")
+    browser("wait", "--fn", "document.querySelector('#script-status').textContent === 'Ready'")
+    browser("eval", "if(!document.querySelector('.script-entry-output').textContent.includes('items'))throw new Error('tk command did not return API results')")
+    browser("fill", "#script-source", "globalThis.consoleExecuted = true")
+    browser("press", "Enter")
+    browser("eval", "if(window.consoleExecuted || !document.querySelector('#script-status').textContent.includes('Enter a tk command'))throw new Error('Console accepted JavaScript')")
+    browser("press", "Escape")
+    assert not json.loads(tk("listScriptRuns"))["items"]
+
 def main(temporary_root=None):
     parser = argparse.ArgumentParser(description=__doc__, epilog=f"Total wall-clock budget: {TIMEOUT_SECONDS} seconds, including cleanup.")
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--browser-driver", choices=("persistent", "cli"), default="persistent", help="Keep the CLI driver for identical-workload comparisons")
     parser.add_argument("--browser-slice", choices=("core", "shell", "views"), help="Run one isolated part of the full browser suite")
     parser.add_argument("--shell-only", action="store_true", help="Verify only the shared shell and profile popups; requires --browser")
+    parser.add_argument("--console-only", action="store_true", help="Verify the authenticated tk command console; requires --browser")
     parser.add_argument("--navigation-only", action="store_true", help="Verify shared shell and persisted navigation; requires --browser")
     parser.add_argument("--tickets-only", action="store_true", help="Verify ticket creation and board keyboard controls; requires --browser")
     parser.add_argument("--projects-only", action="store_true", help="Verify project directory totals and metadata; requires --browser")
@@ -37,17 +51,17 @@ def main(temporary_root=None):
     parser.add_argument("--overview-only", action="store_true", help="Verify Home, Tickets, Attention and workflow assembly; requires --browser")
     parser.add_argument("--database", help="Empty disposable database owned by the parity runner")
     args = parser.parse_args()
-    if (args.browser_slice or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
+    if (args.browser_slice or args.console_only or args.shell_only or args.navigation_only or args.tickets_only or args.projects_only or args.graph_only or args.studio_only or args.overview_only) and not args.browser:
         parser.error("Focused UI checks require --browser")
     context = tempfile.TemporaryDirectory(prefix="teleport-smoke-") if temporary_root is None else nullcontext(str(temporary_root))
     from postgres import database
     with context as temporary, database(args.database) as database_url:
         folder = Path(temporary)
-        if args.browser and not args.browser_slice and not args.database and not any((args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
+        if args.browser and not args.browser_slice and not args.database and not any((args.console_only,args.shell_only,args.navigation_only,args.tickets_only,args.projects_only,args.graph_only,args.studio_only,args.overview_only)):
             from smoke_suite import run_suite
             run_suite(__file__, folder)
             return
-        focus = next((name for name in ("shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
+        focus = next((name for name in ("console", "shell", "navigation", "tickets", "projects", "graph", "studio", "overview") if getattr(args, name + "_only")), "suite-" + args.browser_slice if args.browser_slice else "full")
         profile = Profile("postgres/" + (f"{focus}-{args.browser_driver}" if args.browser else "api"), folder)
         profile.start("setup")
         with socket.socket() as sock:
@@ -100,7 +114,7 @@ def main(temporary_root=None):
             ticket = json.loads(tk("transitionTicket", "--data", json.dumps({"id": ticket["id"], "expectedVersion": ticket["version"], "target": "Doing"})))
             assert ticket["status"] == "Doing"
             if args.browser:
-                seeded_browser = args.browser_slice in ("core", "views") or args.studio_only or args.overview_only
+                seeded_browser = args.browser_slice in ("core", "views") or args.console_only or args.studio_only or args.overview_only
                 if seeded_browser:
                     setup = json.loads(tk("saveWelcomeSetup", "--data", json.dumps({"expectedVersion": 0, "step": 5, "projectId": project["id"], "harness": "codex", "attention": "quiet"})))
                     assert json.loads(tk("completeWelcomeSetup", "--data", json.dumps({"expectedVersion": setup["version"], "confirm": True})))["completed"]
@@ -137,6 +151,11 @@ def main(temporary_root=None):
                     browser("find", "label", "Username", "fill", "admin")
                     browser("find", "label", "Password", "fill", "password")
                     browser("find", "role", "button", "click", "--name", "Sign in", "--exact")
+                    if args.console_only:
+                        browser("wait", "#javascript-console")
+                        verify_tk_console(browser, tk)
+                        print("PASS: authenticated tk command console, API result and JavaScript rejection")
+                        return
                     if not seeded_browser:
                         browser("wait", "#welcome-status")
                         browser("screenshot", "/tmp/teleport-welcome.png")
@@ -221,10 +240,7 @@ def main(temporary_root=None):
                         browser("click", '#editor button[type="submit"]')
                         browser("wait", "--fn", "!document.querySelector('tk-dialog[open]')")
                         assert not json.loads(tk("getSession"))["settings"]["handbrake"]
-                        browser("click", "#javascript-console")
-                        browser("wait", "#script-source")
-                        browser("press", "Escape")
-                        assert not json.loads(tk("listScriptRuns"))["items"]
+                        verify_tk_console(browser, tk)
                         browser("click", "#harness-console")
                         browser("wait", "#new-console")
                         browser("press", "Escape")

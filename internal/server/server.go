@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/rand"
 	_ "embed"
 	"encoding/base64"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"teleport/internal/app"
+	"teleport/internal/model"
 	teleportskill "teleport/internal/skills/teleport"
 )
 
@@ -91,6 +93,33 @@ func New(service *app.Service, version string, configuredHosts ...string) http.H
 			}
 		}
 		op := r.PathValue("operation")
+		if op == "resolveConsoleCommand" {
+			identity, authErr := service.Call(r.Context(), token, "getSession", json.RawMessage(`{}`))
+			if authErr != nil {
+				writeError(w, app.ErrorResponse(authErr))
+				return
+			}
+			profile, ok := identity.(map[string]any)
+			account, accountOK := profile["account"].(model.Account)
+			if !ok || !accountOK || account.ServiceSessionID != "" || account.ServiceRunID != "" {
+				writeError(w, &app.Error{Status: 403, Code: "service_scope", Message: "The terminal requires a human session"})
+				return
+			}
+			var input ConsoleCommandInput
+			parse := json.NewDecoder(bytes.NewReader(raw))
+			parse.DisallowUnknownFields()
+			if err := parse.Decode(&input); err != nil {
+				writeError(w, &app.Error{Status: 400, Code: "invalid_request", Message: "Expected command arguments"})
+				return
+			}
+			result, err := resolveConsoleCommand(input, version)
+			if err != nil {
+				writeError(w, &app.Error{Status: 422, Code: "invalid_command", Message: err.Error()})
+				return
+			}
+			write(w, 200, result)
+			return
+		}
 		result, err := service.Call(r.Context(), token, op, raw)
 		if err != nil {
 			e := app.ErrorResponse(err)

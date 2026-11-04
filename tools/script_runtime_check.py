@@ -10,7 +10,6 @@ import tempfile
 import time
 import urllib.request
 import uuid
-from script_prompt_browser import verify_script_prompt
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -132,29 +131,14 @@ def main(database_url=None):
             browser("wait", "#welcome-status")
             browser("press", "Escape")
             browser("press", "/")
-            browser("wait", "#script-approve")
-            # Delay only a data read in this owned browser fixture. Source
-            # remains data and is never evaluated in the page.
-            browser("eval", "globalThis.__scriptProofApi=api;globalThis.__scriptProofHeld=false;globalThis.__scriptProofRelease=null;api=async function(op,data){const result=await globalThis.__scriptProofApi(op,data);if(op==='getScriptRun'&&data.id===" + json.dumps(row["id"]) + "&&!globalThis.__scriptProofHeld){globalThis.__scriptProofHeld=true;await new Promise(resolve=>globalThis.__scriptProofRelease=resolve);}return result;};")
-            browser("click", "#script-history + .choice-button")
-            browser("find", "role", "option", "click", "--name", row["id"] + " · waiting", "--exact")
-            browser("wait", "--fn", "typeof globalThis.__scriptProofRelease==='function'")
-            draft = 'return "edited while loading";'
-            browser("fill", "#script-source", draft)
-            browser("eval", "api=globalThis.__scriptProofApi;globalThis.__scriptProofRelease();")
-            browser("wait", "--fn", "document.querySelector('#script-confirmation')?.textContent.includes(" + json.dumps("#" + str(ticket["id"]) + " ") + ")")
-            assert draft in browser("get", "value", "#script-source"), "Delayed read overwrote edited source"
-            browser("press", "Escape")
-            assert tk("getScriptRun", {"id": row["id"]})["run"]["state"] == "waiting"
-            browser("press", "/")
-            browser("wait", "#script-approve")
-            browser("click", "#script-approve")
-            browser("wait", "--fn", "document.querySelector('#script-status')?.textContent.includes('completed')")
+            browser("wait", "#script-source")
+            browser("fill", "#script-source", "tk project ls -json")
+            browser("press", "Enter")
+            browser("wait", "--fn", "document.querySelector('#script-status')?.textContent === 'Ready'")
             browser("screenshot", "/tmp/teleport-script-console.png")
             browser("press", "Escape")
-        else:
-            pending = tk("getScriptRun", {"id": row["id"]})["calls"][0]
-            tk("confirmScriptCall", {"id": row["id"], "callId": pending["id"], "fingerprint": pending["fingerprint"], "decision": "approve", "confirm": True})
+        pending = tk("getScriptRun", {"id": row["id"]})["calls"][0]
+        tk("confirmScriptCall", {"id": row["id"], "callId": pending["id"], "fingerprint": pending["fingerprint"], "decision": "approve", "confirm": True})
         finished = wait_for(lambda: completed(row["id"]))
         assert finished["run"]["state"] == "completed" and finished["output"]["value"] == "Ready", finished
         assert finished["calls"][0]["confirmationActor"] == "admin"
@@ -167,29 +151,15 @@ def main(database_url=None):
         done_input = {"id": manual["id"], "expectedVersion": manual["version"], "target": "Done", "confirm": True}
         done_run = start('return (await tk("transitionTicket",' + json.dumps(done_input) + ')).status;')
         wait_for(lambda: tk("getScriptRun", {"id": done_run["id"]})["run"]["state"] == "waiting")
-        if args.browser:
-            browser("press", "/")
-            browser("wait", "#script-source")
-            browser("click", "#script-history + .choice-button")
-            browser("find", "role", "option", "click", "--name", done_run["id"] + " · waiting", "--exact")
-            browser("wait", "#script-approve")
-            assert "Fixture completion criteria" in browser("get", "text", "#script-confirmation")
-            browser("click", "#script-approve")
-            browser("wait", "--fn", "document.querySelector('#script-status')?.textContent.includes('completed')")
-            browser("screenshot", "/tmp/teleport-script-console.png")
-            browser("press", "Escape")
-        else:
-            pending = tk("getScriptRun", {"id": done_run["id"]})["calls"][0]
-            tk("confirmScriptCall", {"id": done_run["id"], "callId": pending["id"], "fingerprint": pending["fingerprint"], "decision": "approve", "confirm": True})
+        pending = tk("getScriptRun", {"id": done_run["id"]})["calls"][0]
+        tk("confirmScriptCall", {"id": done_run["id"], "callId": pending["id"], "fingerprint": pending["fingerprint"], "decision": "approve", "confirm": True})
         done = wait_for(lambda: completed(done_run["id"]))
         assert done["run"]["state"] == "completed" and done["output"]["value"] == "Done", done
-        if args.browser:
-            verify_script_prompt(browser, tk, project["id"])
         after = json.loads((folder / "runtime/sessions.json").read_text())[row["id"]]
         assert before["generation"] == after["generation"] and before["launchId"] == after["launchId"]
         tk("shutdownLocalRuntime", {"confirm": True})
         clean = True
-        print("PASS: owned isolated JavaScript, language/async API calls, duplicate receipts, private run credentials, bounded stop, logout/API restart and exact human confirmation; zero model calls" + ("; slash/Escape/reconnect browser path" if args.browser else ""))
+        print("PASS: owned isolated JavaScript, language/async API calls, duplicate receipts, private run credentials, bounded stop, logout/API restart and exact human confirmation; zero model calls" + ("; slash tk console browser path" if args.browser else ""))
     except Exception:
         if browser_open:
             print(browser("snapshot", "-i"))

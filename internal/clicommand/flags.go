@@ -1,4 +1,4 @@
-package main
+package clicommand
 
 import (
 	"crypto/rand"
@@ -85,7 +85,7 @@ func kebabField(value string) string {
 
 // Separate known flags from positional arguments without mistaking a flag's
 // value for a positional ID. Unlike flag.Parse, this accepts flags after an ID.
-func parseInterspersed(set *flag.FlagSet, arguments []string) ([]string, error) {
+func ParseInterspersed(set *flag.FlagSet, arguments []string) ([]string, error) {
 	var options, positional []string
 	seen := map[string]bool{}
 	for index := 0; index < len(arguments); index++ {
@@ -165,7 +165,7 @@ func requestObject(body string) (map[string]json.RawMessage, error) {
 	return object, nil
 }
 
-func newRequestID() string {
+func NewRequestID() string {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
 		panic("system randomness unavailable")
@@ -173,7 +173,7 @@ func newRequestID() string {
 	return fmt.Sprintf("cli-%x", value[:])
 }
 
-func expandOperation(command cliCommand, arguments []string, out io.Writer) ([]string, bool, error) {
+func ExpandOperation(command Command, arguments []string, out, diagnostics io.Writer, allowFiles bool) ([]string, bool, error) {
 	set := flag.NewFlagSet(command.Command, flag.ContinueOnError)
 	set.SetOutput(out)
 	raw := set.String("data", "", "JSON request object; cannot duplicate field flags")
@@ -221,7 +221,7 @@ func expandOperation(command cliCommand, arguments []string, out io.Writer) ([]s
 		set.PrintDefaults()
 		fmt.Fprintln(out, "Object/array flags take JSON. Secret fields use -f - JSON stdin. Required request IDs are generated if omitted; pass -request-id to retry the same request.")
 	}
-	positional, err := parseInterspersed(set, arguments)
+	positional, err := ParseInterspersed(set, arguments)
 	if errors.Is(err, flag.ErrHelp) {
 		return nil, true, nil
 	}
@@ -237,6 +237,9 @@ func expandOperation(command cliCommand, arguments []string, out io.Writer) ([]s
 		return nil, false, errors.New("choose -data or -f, not both")
 	}
 	if hasFile {
+		if !allowFiles {
+			return nil, false, errors.New("-f is not available in the browser console; use the local tk CLI for file or stdin input")
+		}
 		if *file == "" {
 			return nil, false, errors.New("-f requires a file path or - for stdin")
 		}
@@ -302,9 +305,9 @@ func expandOperation(command cliCommand, arguments []string, out io.Writer) ([]s
 	}
 	wantsRequestID = wantsRequestID || command.Operation == "saveIdea" && (len(fields["id"]) == 0 || string(fields["id"]) == `""`)
 	if wantsRequestID && len(fields["requestId"]) == 0 {
-		id := newRequestID()
+		id := NewRequestID()
 		fields["requestId"], _ = json.Marshal(id)
-		fmt.Fprintln(os.Stderr, "Request ID:", id, "(reuse -request-id for an uncertain retry)")
+		fmt.Fprintln(diagnostics, "Request ID:", id, "(reuse -request-id for an uncertain retry)")
 	}
 	body, err := json.Marshal(fields)
 	if err != nil || len(body) > 1<<20 {

@@ -445,6 +445,9 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			return nil, false, err
 		}
 		t, err := ticketFor(st, a, in.ID, "Viewer")
+		if err == nil {
+			t.ProposalAttention = proposalAttention(st)[t.ID]
+		}
 		return t, false, err
 	case "listTickets":
 		var in ListInput
@@ -472,12 +475,15 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 		}
 		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 		result := Page[model.Ticket]{Items: []model.Ticket{}}
+		attention := proposalAttention(st)
 		for i, id := range ids {
 			if i == limit {
 				result.NextCursor = cursor(ids[i-1])
 				break
 			}
-			result.Items = append(result.Items, st.Tickets[id])
+			t := st.Tickets[id]
+			t.ProposalAttention = attention[id]
+			result.Items = append(result.Items, t)
 		}
 		return result, false, nil
 	case "listTicketHistory":

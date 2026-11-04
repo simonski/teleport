@@ -57,6 +57,14 @@ test('all retained live and idle robots expose exact session and ticket identity
   const html=vm.runInContext('sessionIcons()',context);assert.equal((html.match(/data-session=/g)||[]).length,5);assert.match(html,/#7/);assert.match(html,/Idle/);assert.match(html,/H4/);
 });
 
+test('Todo cards show review attention and context-bound agents without crossing projects',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String,view:'Todos'});vm.runInContext(source,context);
+  vm.runInContext(`localSessions=[{id:'H1',projectId:4,contextTicketId:7,state:'running',personaName:'Idea Composer'},{id:'H2',projectId:5,contextTicketId:7,state:'running'},{id:'H3',projectId:4,contextTicketId:7,state:'exited'}];ticket={id:7,projectId:4,proposalAttention:true}`,context);
+  const html=vm.runInContext('ticketIndicators(ticket)',context);
+  assert.match(html,/data-proposal-review="7"/);assert.match(html,/Review recommendations/);assert.match(html,/data-session="H1"/);assert.match(html,/Idea Composer/);assert.doesNotMatch(html,/data-session="H[23]"/);
+  vm.runInContext("view='Board'",context);assert.doesNotMatch(vm.runInContext('ticketIndicators(ticket)',context),/data-proposal-review/);
+});
+
 for(const change of ['new foreground form','sign out'])test(`delayed session switcher preserves ${change}`,async()=>{
   let release,opened=0;
   const context=vm.createContext({session:{account:{id:'first'}},detailEpoch:1,pages:()=>new Promise(resolve=>release=resolve),byId:()=>null,foregroundOpen:()=>false,document:{addEventListener(){},querySelectorAll:()=>[]},setInterval(){},openDialog(){opened++;}});

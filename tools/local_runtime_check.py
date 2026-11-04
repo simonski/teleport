@@ -146,7 +146,7 @@ def main(database_url=None):
         if args.proposal_only:
             definition = tk("saveAgentDefinition", {"name":"Fixture planner","goal":"Propose a breakdown","prompt":"","skills":[],"harness":args.proposal_harness,"requestId":"planner"})
             ticket = tk("createTicket", {"projectId":project["id"],"title":"Planning source","agent":False,"requestId":"planning-source"})
-            usage = None if args.browser else tk("saveAgentUsage", {"projectId":project["id"],"name":"Plan","agentId":definition["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"planning-usage"})
+            usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Plan","agentId":definition["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"planning-usage"})
             def run_proposal(request_id, previous=None):
                 nonlocal session_id
                 launch = {"projectId":project["id"],"agentId":definition["id"],"expectedVersion":definition["version"],"ticketId":ticket["id"],"usageId":usage["id"],"usageVersion":usage["version"],"requestId":request_id}
@@ -169,15 +169,7 @@ def main(database_url=None):
                 browser("eval", "document.querySelector('#cookie-notice [data-storage=reject]')?.click()")
                 browser("click", "#project + .choice-button")
                 browser("click", '.choice-list [data-value="' + str(project["id"]) + '"]')
-                browser("wait", "--fn", "document.querySelector('#account-project-settings')")
-                browser("click", "#account"); browser("click", "#account-project-settings"); browser("click", "#project-agent-usage")
-                browser("wait", '[data-add-agent-usage]'); browser("click", '[data-add-agent-usage]')
-                browser("select", '#editor [name="runMode"]', "todo-proposal")
-                browser("click", '#editor button[type="submit"]')
-                browser("wait", "--fn", "document.querySelector('#project-usages')?.textContent.includes('Proposal')")
-                usage = tk("listAgentUsages", {"projectId":project["id"]})["items"][0]
                 assert usage["kind"] == "todo-proposal" and usage["workflow"] == ticket["workflow"] and usage["phase"] == ticket["phase"]
-                browser("press", "Escape")
                 browser("click", '[data-view="Todos"]')
                 card = f'.ticket-open[data-ticket="{ticket["id"]}"]'
                 browser("wait", card)
@@ -187,8 +179,15 @@ def main(database_url=None):
                 browser("wait", "--fn", "terminalView && Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n').includes('Planning proposal fixture')")
                 transcript = browser("eval", "Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n')")
                 assert "Starting " + args.proposal_harness + " planning harness" in transcript and "Planning source" in transcript and "Produce a proposal" in transcript
+                browser("press", "Escape")
+                browser("wait", f'[data-ticket-card="{ticket["id"]}"] [data-session]')
+                browser("click", f'[data-ticket-card="{ticket["id"]}"] [data-session]')
+                browser("wait", '.xterm-screen')
+                browser("press", "Escape")
                 first = wait_for(lambda: (items[-1] if len(items := tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == 1 and items[-1]["ready"] else None))
                 session_id = first["sessionId"]
+                browser("wait", f'[data-ticket-card="{ticket["id"]}"] [data-proposal-review]')
+                browser("click", f'[data-ticket-card="{ticket["id"]}"] [data-proposal-review]')
                 browser("wait", '.proposal-targets li button'); browser("click", '.proposal-targets li button')
                 browser("fill", '#editor [name="feedback"]', "Split the epic")
                 browser("click", '#editor button[type="submit"]')
@@ -220,6 +219,7 @@ def main(database_url=None):
             failing_usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Fail","agentId":failing["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"failing-usage"})
             if args.browser:
                 browser("press", "Escape")
+                browser("wait", "--fn", f'!document.querySelector(\'[data-ticket-card="{ticket["id"]}"] [data-proposal-review]\')')
                 browser("eval", f'document.querySelector({json.dumps(card)}).focus()')
                 browser("press", "Shift+F10")
                 browser("wait", '[data-ticket-menu="proposals"]')

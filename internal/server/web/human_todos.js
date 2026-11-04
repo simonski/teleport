@@ -18,7 +18,7 @@ function bindHumanTodos(){
   if(view!=='Todos')return;
   for(const card of root.querySelectorAll('[data-ticket-card]')){
     const ticket=tickets.find(ticket=>ticket.id===Number(card.dataset.ticketCard));if(!ticket||!roleAllowsWrite(ticket.projectId)||!humanMoves(ticket).length)continue;
-    card.draggable=true;card.ondragstart=e=>{if(e.target.closest('input,textarea,[data-session]')){e.preventDefault();return;}humanTicketDrag={ticket,actor:session.account.id,generation:loadGeneration,scope:projectId};card.classList.add('human-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-teleport-human-ticket',String(ticket.id));};card.ondragend=cancelHumanTicketDrag;
+    card.draggable=true;card.ondragstart=e=>{if(e.target.closest('input,textarea,[data-session],[data-proposal-review]')){e.preventDefault();return;}humanTicketDrag={ticket,actor:session.account.id,generation:loadGeneration,scope:projectId};card.classList.add('human-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-teleport-human-ticket',String(ticket.id));};card.ondragend=cancelHumanTicketDrag;
   }
   for(const lane of root.querySelectorAll('.human-board .lane')){
     const role=lane.querySelector('h2').textContent;

@@ -141,6 +141,7 @@ type Agreement struct {
 	BasisVersion         int64           `json:"basisVersion"`
 }
 type Ticket struct {
+	ProposalAttention  bool                        `json:"proposalAttention,omitempty"`
 	Spellchecks        map[string]SpellcheckRecord `json:"spellchecks,omitempty"`
 	ReadyApproval      *ReadyApproval              `json:"readyApproval,omitempty"`
 	GoalPlan           *GoalPlan                   `json:"goalPlan,omitempty"`

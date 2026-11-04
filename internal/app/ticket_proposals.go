@@ -462,6 +462,26 @@ func proposalRunReady(st *model.State, p model.TicketProposal) bool {
 	return ok && row.ProposalRun != nil && row.ProposalRun.ProposalID == p.ID && row.State == "exited" && row.ExitCode != nil && *row.ExitCode == 0 && !row.StopRequested
 }
 
+// proposalAttention derives the latest reviewable proposal for each ticket.
+// The flag is returned on ticket reads and is never written into ticket history.
+func proposalAttention(st *model.State) map[int64]bool {
+	latest := make(map[int64]model.TicketProposal)
+	for _, p := range st.TicketProposals {
+		t, ok := st.Tickets[p.TicketID]
+		if !ok || t.ProjectID != p.ProjectID {
+			continue
+		}
+		if previous, exists := latest[p.TicketID]; !exists || proposalCursor(p) > proposalCursor(previous) {
+			latest[p.TicketID] = p
+		}
+	}
+	attention := make(map[int64]bool)
+	for id, p := range latest {
+		attention[id] = p.AcceptedBy == "" && proposalRunReady(st, p)
+	}
+	return attention
+}
+
 func proposalAdmission(st *model.State, t model.Ticket) error {
 	if t.Kind != "task" || t.Archived || t.Deleted || t.Protected || busy(t) || t.StopRequested || t.ResumeHold {
 		return failure(409, "proposal_unavailable", "Planning requires an available visible task")

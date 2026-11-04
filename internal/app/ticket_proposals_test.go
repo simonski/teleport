@@ -143,3 +143,34 @@ func TestProposalRequiresSuccessfulOwnedExit(t *testing.T) {
 		t.Fatal("successful owned exit not accepted")
 	}
 }
+
+func TestProposalAttentionTracksLatestReviewableRound(t *testing.T) {
+	st, _, ticket, _ := managedFixture()
+	now := time.Now().UTC()
+	p := model.TicketProposal{ID: "p1", TicketID: ticket.ID, ProjectID: ticket.ProjectID, At: now}
+	st.TicketProposals = map[string]model.TicketProposal{p.ID: p}
+	if !proposalAttention(st)[ticket.ID] {
+		t.Fatal("reviewable proposal needs attention")
+	}
+	newer := model.TicketProposal{ID: "p2", TicketID: ticket.ID, ProjectID: ticket.ProjectID, At: now.Add(time.Second), SessionID: "H1"}
+	st.TicketProposals[newer.ID] = newer
+	if proposalAttention(st)[ticket.ID] {
+		t.Fatal("unfinished latest round must not be offered for review")
+	}
+	zero := 0
+	st.LocalSessions["H1"] = model.LocalSession{ID: "H1", State: "exited", ExitCode: &zero, ProposalRun: &model.ProposalRun{ProposalID: newer.ID}}
+	if !proposalAttention(st)[ticket.ID] {
+		t.Fatal("successful latest round needs attention")
+	}
+	newer.AcceptedBy = "human"
+	st.TicketProposals[newer.ID] = newer
+	if proposalAttention(st)[ticket.ID] {
+		t.Fatal("accepted proposal needs no attention")
+	}
+	newer.AcceptedBy = ""
+	newer.ProjectID++
+	st.TicketProposals[newer.ID] = newer
+	if !proposalAttention(st)[ticket.ID] {
+		t.Fatal("foreign project proposal affected ticket")
+	}
+}

@@ -18,9 +18,21 @@ func TestTicketProposalAcceptanceCreatesWorkOnce(t *testing.T) {
 	agent := false
 	source := call(t, svc, token, "createTicket", app.CreateTicketInput{ProjectID: p.ID, Title: "Source", Agent: &agent, RequestID: "source"}).(model.Ticket)
 	proposal := call(t, svc, token, "submitTicketProposal", app.TicketProposalInput{TicketID: source.ID, ExpectedVersion: source.Version, RequestID: "proposal", Title: "Breakdown", Items: []model.TicketProposalItem{{Key: "e", Kind: "epic", Title: "Epic"}, {Key: "t", ParentKey: "e", Kind: "task", Title: "Task"}}}).(model.TicketProposal)
+	if !call(t, svc, token, "getTicket", app.IDInput{ID: source.ID}).(model.Ticket).ProposalAttention {
+		t.Fatal("proposal attention missing from ticket")
+	}
+	listed := call(t, svc, token, "listTickets", app.ListInput{ProjectID: p.ID}).(app.Page[model.Ticket])
+	for _, ticket := range listed.Items {
+		if ticket.ID == source.ID && !ticket.ProposalAttention {
+			t.Fatal("proposal attention missing from listing")
+		}
+	}
 	in := app.TicketProposalAcceptInput{TicketID: source.ID, ProposalID: proposal.ID, ExpectedVersion: proposal.Version, ExpectedTicketVersion: source.Version}
 	accepted := call(t, svc, token, "acceptTicketProposal", in).(model.TicketProposal)
 	again := call(t, svc, token, "acceptTicketProposal", in).(model.TicketProposal)
+	if call(t, svc, token, "getTicket", app.IDInput{ID: source.ID}).(model.Ticket).ProposalAttention {
+		t.Fatal("accepted proposal still needs attention")
+	}
 	if len(accepted.CreatedIDs) != 2 || len(again.CreatedIDs) != 2 || accepted.CreatedIDs[0] != again.CreatedIDs[0] {
 		t.Fatal("acceptance was not idempotent")
 	}

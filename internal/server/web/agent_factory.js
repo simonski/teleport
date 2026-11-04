@@ -1,5 +1,6 @@
 "use strict";
 let agentFactoryEpoch=0,agentLaunch=null;
+function agentLaunchBusy(){return !!agentLaunch?.pending;}
 function agentFactoryHTML(){return '<div class="agent-factory"><header><div><p class="eyebrow">SYSTEM / FACTORY</p><h1>Agent factory</h1><p>Curate reusable agents and installed skills.</p></div><button type="button" id="new-agent">New agent</button></header><div class="status-actions"><button type="button" class="secondary" id="factory-agents">Agents</button><button type="button" class="secondary" id="factory-skills">Skills</button></div><p id="agent-factory-status" role="status">Loading agents…</p><div id="agent-factory-list" class="agent-factory-list"></div></div>';}
 async function mountAgentFactory(){
   const epoch=++agentFactoryEpoch,actor=session.account.id;
@@ -41,7 +42,7 @@ async function startAgentConversation(agent,project,ticket=0,usage=null,previous
   if(agentLaunch?.pending)return;
   if(!agentLaunch||agentLaunch.key!==key)agentLaunch={key,requestId:crypto.randomUUID(),pending:false};
   const launch=agentLaunch;launch.pending=true;
-  try{const row=await api('openAgentSession',{projectId:project,agentId:agent.id,expectedVersion:agent.version,...(ticket?{ticketId:ticket}:{}),...(usage?{usageId:usage.id,usageVersion:usage.version}:{}),...(previousId?{proposalPreviousId:previousId}:{}),requestId:launch.requestId});if(agentLaunch===launch)agentLaunch=null;await refreshSessionRoster();if(row.state==='failed')throw new Error('Agent session could not start: '+(row.errorCode||'launch failed'));if(session?.account.id===actor&&detailEpoch===epoch)await openTerminal(row.id,usage?.kind==='todo-proposal'?{autoReview:true,retry:()=>startAgentConversation(agent,project,ticket,usage,previousId)}:undefined);}
+  try{const row=await api('openAgentSession',{projectId:project,agentId:agent.id,expectedVersion:agent.version,...(ticket?{ticketId:ticket}:{}),...(usage?{usageId:usage.id,usageVersion:usage.version}:{}),...(previousId?{proposalPreviousId:previousId}:{}),requestId:launch.requestId});await refreshSessionRoster();if(row.state==='failed')throw new Error('Agent session could not start: '+(row.errorCode||'launch failed'));if(session?.account.id===actor&&detailEpoch===epoch)await openTerminal(row.id,usage?.kind==='todo-proposal'?{autoReview:true,retry:()=>startAgentConversation(agent,project,ticket,usage,previousId)}:undefined);if(agentLaunch===launch)agentLaunch=null;}
   catch(error){if(error.status&&error.status<500&&agentLaunch===launch)agentLaunch=null;throw error;}
   finally{launch.pending=false;}
 }

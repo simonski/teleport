@@ -17,6 +17,9 @@ type AgentUsageInput struct {
 	Name            string `json:"name"`
 	AgentID         string `json:"agentId"`
 	Kind            string `json:"kind,omitempty"`
+	View            string `json:"view,omitempty"`
+	Workflow        string `json:"workflow,omitempty"`
+	Phase           string `json:"phase,omitempty"`
 	Enabled         bool   `json:"enabled"`
 }
 type RemoveAgentUsageInput struct {
@@ -117,6 +120,22 @@ func agentUsageCall(st *model.State, a model.Account, operation string, raw json
 	if !contains([]string{"todo-spellcheck", "todo-conversation"}, in.Kind) {
 		return nil, false, failure(422, "invalid_usage_kind", "Choose a conversation or spellcheck action")
 	}
+	if in.View != "" || in.Workflow != "" || in.Phase != "" {
+		if !contains([]string{"Todos", "Board", "Backlog", "Graph"}, in.View) {
+			return nil, false, failure(422, "invalid_usage_view", "Choose a ticket view")
+		}
+		workflow, ok := st.Workflows[in.Workflow]
+		if !ok || !workflow.Published || workflow.ProjectID != 0 && workflow.ProjectID != in.ProjectID {
+			return nil, false, failure(422, "invalid_usage_workflow", "Choose a published workflow available to this project")
+		}
+		phase, ok := phaseByID(workflow, in.Phase)
+		if !ok {
+			return nil, false, failure(422, "invalid_usage_phase", "Choose a lane in the selected workflow")
+		}
+		if in.Kind == "todo-spellcheck" && (in.View != "Todos" || phase.Role != "Todo" || phase.Agentic) {
+			return nil, false, failure(422, "invalid_usage_view", "Spellcheck requires a human Todo lane in the Todos view")
+		}
+	}
 	if in.Name == "" || len(in.Name) > 120 || strings.ContainsRune(in.Name, 0) {
 		return nil, false, failure(422, "invalid_usage", "Provide an action name of up to 120 bytes")
 	}
@@ -155,8 +174,12 @@ func agentUsageCall(st *model.State, a model.Account, operation string, raw json
 		}
 		version = old.Version + 1
 	}
-	row := model.AgentUsage{ID: id, ProjectID: in.ProjectID, Version: version, Name: in.Name, AgentID: in.AgentID, Kind: in.Kind, Enabled: in.Enabled, UpdatedBy: a.ID, UpdatedAt: time.Now().UTC()}
+	row := model.AgentUsage{ID: id, ProjectID: in.ProjectID, Version: version, Name: in.Name, AgentID: in.AgentID, Kind: in.Kind, View: in.View, Workflow: in.Workflow, Phase: in.Phase, Enabled: in.Enabled, UpdatedBy: a.ID, UpdatedAt: time.Now().UTC()}
 	st.AgentUsages[id] = row
 	remember(st, key, hash, row)
 	return row, true, nil
+}
+
+func usageMatchesTicket(u model.AgentUsage, t model.Ticket) bool {
+	return u.Workflow == "" || u.Workflow == t.Workflow && u.Phase == t.Phase
 }

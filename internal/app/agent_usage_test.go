@@ -79,3 +79,29 @@ func TestConversationUsageCanBeRemovedWithoutLosingHistory(t *testing.T) {
 		t.Fatal("removed name cannot be reused", err)
 	}
 }
+
+func TestAgentUsageLanePlacement(t *testing.T) {
+	st := &model.State{Receipts: map[string]model.Receipt{}, Projects: map[int64]model.Project{1: {ID: 1, Members: map[string]string{"owner": "Maintainer"}}}, AgentDefinitions: map[string]model.AgentDefinition{"agent:one": {ID: "agent:one"}}, Workflows: map[string]model.Workflow{"flow@1": {ID: "flow", Version: 1, ProjectID: 1, Published: true, Phases: []model.Phase{{ID: "doing"}, {ID: "done"}}}, "foreign@1": {ProjectID: 2, Published: true, Phases: []model.Phase{{ID: "doing"}}}}}
+	actor := model.Account{ID: "owner"}
+	in := AgentUsageInput{ProjectID: 1, Name: "Discuss", AgentID: "agent:one", Kind: "todo-conversation", View: "Board", Workflow: "flow@1", Phase: "doing", Enabled: true, RequestID: "create"}
+	call := func() (any, bool, error) {
+		raw, _ := json.Marshal(in)
+		return agentUsageCall(st, actor, "saveAgentUsage", raw)
+	}
+	result, _, err := call()
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := result.(model.AgentUsage)
+	if u.View != "Board" || !usageMatchesTicket(u, model.Ticket{Workflow: "flow@1", Phase: "doing"}) || usageMatchesTicket(u, model.Ticket{Workflow: "flow@1", Phase: "done"}) || usageMatchesTicket(u, model.Ticket{Workflow: "flow@2", Phase: "doing"}) {
+		t.Fatal("placement was not enforced")
+	}
+	in.RequestID, in.Workflow = "foreign", "foreign@1"
+	if _, _, err = call(); err == nil {
+		t.Fatal("foreign workflow accepted")
+	}
+	in.RequestID, in.Workflow, in.Phase = "missing", "flow@1", "missing"
+	if _, _, err = call(); err == nil {
+		t.Fatal("unknown lane accepted")
+	}
+}

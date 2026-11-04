@@ -53,7 +53,7 @@ func spellcheckEligible(st *model.State, a model.Account, in SpellcheckInput) (m
 	}
 	u, ok := st.AgentUsages[in.UsageID]
 	agent := st.AgentDefinitions[u.AgentID]
-	if !ok || u.ProjectID != t.ProjectID || !u.Enabled || u.Kind != "todo-spellcheck" || u.Version != in.UsageVersion || agent.ID == "" || agent.Archived {
+	if !ok || u.Removed || u.ProjectID != t.ProjectID || !u.Enabled || u.Kind != "todo-spellcheck" || !usageMatchesTicket(u, t) || u.Version != in.UsageVersion || agent.ID == "" || agent.Archived {
 		return t, u, agent, failure(409, "usage_unavailable", "The configured agent action changed or is unavailable")
 	}
 	if err = expected(t, in.ExpectedVersion); err != nil {

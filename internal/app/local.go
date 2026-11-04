@@ -708,15 +708,21 @@ func (s *Service) openLocal(ctx context.Context, token, operation string, in Ope
 				if ticket.ProjectID != in.ProjectID {
 					return false, failure(422, "invalid_session_scope", "Ticket must belong to the selected project")
 				}
-				if in.UsageID != "" && (ticket.Kind != "task" || ticket.Agent || ticket.Deleted || ticket.Archived || ticket.Protected) {
-					return false, failure(409, "usage_unavailable", "This action requires a visible human Todo ticket")
+				if in.UsageID != "" && (ticket.Kind != "task" || ticket.Deleted || ticket.Archived || ticket.Protected || !usageMatchesTicket(st.AgentUsages[in.UsageID], ticket) || st.AgentUsages[in.UsageID].Workflow == "" && ticket.Agent) {
+					return false, failure(409, "usage_unavailable", "This action is unavailable for the ticket's current lane")
+				}
+				promptInput, _ := json.Marshal(PromptInput{ID: ticket.ID})
+				promptResult, _, promptErr := ticketPrompt(st, a, promptInput)
+				if promptErr != nil {
+					return false, promptErr
 				}
 				data, _ := json.Marshal(struct {
 					ID          int64  `json:"id"`
 					Title       string `json:"title"`
 					Description string `json:"description"`
 					Criteria    string `json:"criteria"`
-				}{ticket.ID, ticket.Title, ticket.Description, ticket.Criteria})
+					Prompt      string `json:"prompt"`
+				}{ticket.ID, ticket.Title, ticket.Description, ticket.Criteria, promptResult.(PromptView).Prompt.Text})
 				row.ContextTicketID = ticket.ID
 				row.ContextTicket = string(data)
 			}

@@ -22,6 +22,7 @@ func personaArguments(raw string) ([]string, error) {
 	a := payload.Agent
 	var prompt strings.Builder
 	prompt.WriteString("Agent role: " + a.Name + "\nGoal: " + a.Goal + "\n" + a.Prompt)
+	prompt.WriteString("\nTeleport is a built-in skill for this session. Run `tk skill` to read its instructions before using Teleport; use the scoped session credentials and authority provided, if available.")
 	if len(payload.Skills) > 0 {
 		prompt.WriteString("\nFor this role, read and apply the installed skill instructions when relevant:")
 		for _, path := range payload.Skills {

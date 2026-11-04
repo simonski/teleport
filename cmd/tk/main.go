@@ -144,6 +144,13 @@ func run(args []string) error {
 		if len(args) != 2 || !filepath.IsAbs(args[1]) {
 			return errors.New("persona wrapper requires an absolute executable path")
 		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		if err = teleportskill.EnsureInstalled(home); err != nil {
+			return fmt.Errorf("Teleport skill unavailable: %w", err)
+		}
 		parameters, err := personaArguments(os.Getenv("TELEPORT_AGENT_PERSONA"))
 		if err != nil {
 			return err
@@ -156,6 +163,9 @@ func run(args []string) error {
 			}
 		}
 		harness.Env = append(harness.Env, "TERM=xterm-256color")
+		if executable, err := os.Executable(); err == nil && filepath.Base(executable) == "tk" {
+			harness.Env = append(harness.Env, "PATH="+filepath.Dir(executable)+string(os.PathListSeparator)+os.Getenv("PATH"))
+		}
 		return harness.Run()
 	}
 	if command == "_terminal-fixture" {

@@ -62,6 +62,7 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type State struct {
+	AgentUsages        map[string]AgentUsage      `json:"agentUsages,omitempty"`
 	AgentDefinitions   map[string]AgentDefinition `json:"agentDefinitions,omitempty"`
 	LocationWrites     int64                      `json:"locationWrites,omitempty"`
 	LastLocations      map[string]RecentContext   `json:"lastLocations,omitempty"`

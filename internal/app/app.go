@@ -232,6 +232,10 @@ func (s *Service) Call(ctx context.Context, token, operation string, raw json.Ra
 			var changed bool
 			result, changed, err = agentFactoryCall(st, a, operation, raw)
 			return changed, err
+		case "listAgentUsages", "saveAgentUsage":
+			var changed bool
+			result, changed, err = agentUsageCall(st, a, operation, raw)
+			return changed, err
 		default:
 			var changed bool
 			result, changed, err = projectOperations(st, a, operation, raw)

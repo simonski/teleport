@@ -32,3 +32,18 @@ async function startAgentConversation(agent,project,ticket=0){
   catch(error){if(error.status&&error.status<500&&agentLaunch===launch)agentLaunch=null;throw error;}
   finally{launch.pending=false;}
 }
+
+async function agentUsageSettings(project){
+  const actor=session?.account.id,epoch=++detailEpoch;
+  const [usages,agents]=await Promise.all([api('listAgentUsages',{projectId:project}),api('listProjectAgents',{projectId:project})]);
+  if(session?.account.id!==actor||detailEpoch!==epoch||projectId!==project||foregroundOpen())return;
+  const dialog=closeOnlyDialog('Agent usage',`<p>Project actions bind a reusable agent to a specific interaction.</p><p class="form-help">Spellcheck execution is not available yet. Saved actions will not run until a scoped execution adapter is available.</p><div id="project-usages">${usages.items.map(item=>`<div class="session-row"><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(agents.items.find(agent=>agent.id===item.agentId)?.name||'Agent unavailable')} · Todos · ${item.enabled?'Enabled':'Disabled'}</span><button type="button" class="secondary" data-edit-usage="${escapeHTML(item.id)}">Edit</button></div>`).join('')||'<p>No actions configured.</p>'}</div><button type="button" class="secondary" id="new-agent-usage" ${agents.items.length?'':'disabled'}>Add spellcheck action</button>${agents.items.length?'':'<p class="form-help">An administrator must first create an agent.</p>'}`);
+  dialog.querySelectorAll('[data-edit-usage]').forEach(button=>button.onclick=()=>{dialog.close();agentUsageForm(project,agents.items,usages.items.find(item=>item.id===button.dataset.editUsage));});
+  on('new-agent-usage','click',()=>{dialog.close();agentUsageForm(project,agents.items);});
+}
+function agentUsageForm(project,agents,usage=null){
+  const available=[...agents];if(usage&&!available.some(a=>a.id===usage.agentId))available.push({id:usage.agentId,name:'Agent unavailable'});
+  const dialog=openDialog(usage?'Edit agent usage':'Add agent usage',`<label>Action name<input name="name" required maxlength="120" value="${escapeHTML(usage?.name||'Spellcheck')}"></label><label>Agent<select name="agentId">${available.map(agent=>`<option value="${escapeHTML(agent.id)}" ${agent.id===usage?.agentId?'selected':''}>${escapeHTML(agent.name)}</option>`).join('')}</select></label><p>Human action · Todos → ticket context menu → Agents</p><p>Applies to editable Todo-stage human tickets. Successful corrections will retain the original text.</p><label class="checkbox-label"><input name="enabled" type="checkbox" ${!usage||usage.enabled?'checked':''}>Enable action when execution becomes available</label><p class="form-help">Execution is not available yet.</p><p id="usage-status" class="save-status" role="status"></p>`,'Save usage');
+  const guard=captureDialogCompletion(dialog),form=byId('editor-form'),requestId=crypto.randomUUID();let busy=false;
+  form.onsubmit=async event=>{event.preventDefault();if(busy)return;busy=true;const data=new FormData(form);try{await api('saveAgentUsage',{projectId:project,...(usage?{id:usage.id,expectedVersion:usage.version}:{}),requestId,name:data.get('name'),agentId:data.get('agentId'),enabled:data.has('enabled')});if(!guard.current())return;dialog.close();await agentUsageSettings(project);}catch(error){if(guard.current())byId('usage-status').textContent=error.message;}finally{busy=false;}};
+}

@@ -83,6 +83,9 @@ function newTicketForm(kind=ticketCreationContext(view,lens,view==='Tickets'?wor
   const dialog=openDialog('New ticket',`<label>Title<input name="title" required maxlength="20000"></label>${projectField}<div class="form-grid"><label>Type<select name="kind"><option value="task" ${kind==='task'?'selected':''}>Task</option><option value="epic" ${kind==='epic'?'selected':''}>Epic</option><option value="goal" ${kind==='goal'?'selected':''}>Goal</option></select></label><label>Intent<select name="intent"><option value="agent" ${human?'':'selected'}>Agent</option><option value="human" ${human?'selected':''}>Human</option></select></label></div><label>Description<textarea name="description" rows="3" maxlength="20000"></textarea></label><label>Success criteria<textarea name="criteria" rows="2" maxlength="20000"></textarea></label>`,'Create ticket');
   byId('editor-form').onsubmit=async e=>{e.preventDefault();const form=Object.fromEntries(new FormData(e.currentTarget));form.projectId=selectedProject||Number(form.projectId);form.agent=form.intent==='agent';delete form.intent;try{await api('createTicket',{...form,requestId});dialog.close();await workspace();notice('Ticket created');}catch(error){showError(error);}};
 }
+function ticketHistoryHTML(history){
+  return history.map((h,index)=>{const before=history[index-1]?.snapshot,after=h.snapshot,changed=before&&(before.title!==after.title||before.description!==after.description);return `<div class="revision"><span>v${h.version}</span><strong>${escapeHTML(h.action)}</strong><span>${escapeHTML(after.status)} · ${escapeHTML(h.actor)}</span>${changed?`<details><summary>Compare text</summary><p><strong>Before</strong></p><pre class="criteria-box">${escapeHTML(before.title)}\n\n${escapeHTML(before.description||'')}</pre><p><strong>After</strong></p><pre class="criteria-box">${escapeHTML(after.title)}\n\n${escapeHTML(after.description||'')}</pre></details>`:''}</div>`;}).join('');
+}
 async function editTicket(id){
   const epoch=++detailEpoch,account=session?.account.id,scope=projectId,token={};ticketEditorPending=token;
   try{
@@ -100,7 +103,7 @@ async function editTicket(id){
       ${!t.agent&&writable?`<div class="status-actions">${humanMoves(t).map(move=>`<button type="button" class="secondary" data-transition="${escapeHTML(move.target)}">Move to ${move.role}</button>`).join('')}</div>`:''}
       ${agentHTML(t)}${nativeSessionHTML(t)}${readyReviewHTML(t)}${deliveryHTML(t)}${goalHTML(t)}${controlsHTML(t)}
       ${sourceIdeas.length?'<section><h3>Source Ideas</h3><div class="status-actions">'+sourceIdeas.map(link=>'<button type="button" class="secondary" data-source-idea="'+escapeHTML(link.ideaId)+'">'+escapeHTML(link.ideaId)+' · accepted v'+link.ideaVersion+'</button>').join('')+'</div></section>':''}
-      <details class="history"><summary>History · ${history.length} revisions</summary>${history.map(h=>`<div class="revision"><span>v${h.version}</span><strong>${escapeHTML(h.action)}</strong><span>${escapeHTML(h.snapshot.status)} · ${escapeHTML(h.actor)}</span></div>`).join('')}</details>`,'Save changes');
+      <details class="history"><summary>History · ${history.length} revisions</summary>${ticketHistoryHTML(history)}</details>`,'Save changes');
     const guard=captureDialogCompletion(dialog),form=byId('editor-form');let saving=false;
     form.addEventListener('input',()=>dialog.dataset.dirty='true');
     dialog.querySelectorAll('[data-source-idea]').forEach(button=>button.onclick=()=>{dialog.close();openIdea(button.dataset.sourceIdea);});

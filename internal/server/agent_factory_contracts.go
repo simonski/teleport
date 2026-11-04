@@ -17,11 +17,18 @@ func init() {
 			ProjectID int64 `json:"projectId"`
 		}{}, app.AgentDefinitionPage{}},
 		{"openAgentSession", "Start a project-scoped conversation with an agent persona", app.OpenAgentSessionInput{}, app.LocalSessionInfo{}},
+		{"listAgentUsages", "List project agent usages", struct {
+			ProjectID int64 `json:"projectId"`
+		}{}, app.AgentUsageList{}},
+		{"saveAgentUsage", "Configure a project agent usage", app.AgentUsageInput{}, model.AgentUsage{}},
 	}
 	for _, entry := range entries {
 		action := "ACT-1515"
 		if entry.name == "openAgentSession" {
 			action = "ACT-1516"
+		}
+		if entry.name == "listAgentUsages" || entry.name == "saveAgentUsage" {
+			action = "ACT-1517"
 		}
 		Operations = append(Operations, Operation{entry.name, action, entry.summary})
 		contracts[entry.name] = contract{entry.input, entry.output}

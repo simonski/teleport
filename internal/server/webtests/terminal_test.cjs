@@ -51,6 +51,16 @@ test('only previously live direct terminals close their dialog on confirmed exit
   for(const test of ["closeDirectTerminalAfterExit({harness:'shell',state:'running'},{state:'unknown'})","closeDirectTerminalAfterExit({harness:'shell',state:'running'},{state:'stopping'})","closeDirectTerminalAfterExit({harness:'codex',state:'running'},{state:'exited'})","closeDirectTerminalAfterExit({harness:'shell',state:'exited'},{state:'exited'})"])assert.equal(vm.runInContext(test,context),false);
 });
 
+test('session elapsed time advances and freezes only on confirmed exit',()=>{
+  const context=vm.createContext({document:{addEventListener(){}},setInterval(){}});vm.runInContext(source,context);
+  const start=Date.parse('2026-11-04T12:00:00Z');context.start=start;
+  assert.equal(vm.runInContext("terminalElapsed({createdAt:'2026-11-04T12:00:00Z',state:'running'},start+65000)",context),'01:05');
+  assert.equal(vm.runInContext("terminalElapsed({createdAt:'2026-11-04T12:00:00Z',state:'unknown'},start+3661000)",context),'1:01:01');
+  assert.equal(vm.runInContext("terminalElapsed({createdAt:'2026-11-04T12:00:00Z',state:'exited',exitedAt:'2026-11-04T12:02:03Z'},start+500000)",context),'02:03');
+  assert.equal(vm.runInContext("terminalElapsed({createdAt:'2026-11-04T12:00:00Z',state:'failed'},start+500000)",context),'—');
+  assert.equal(vm.runInContext("terminalElapsed({state:'running'},start)",context),'—');
+});
+
 test('all retained live and idle robots expose exact session and ticket identity',()=>{
   const context=vm.createContext({document:{addEventListener(){}},setInterval(){},escapeHTML:String});vm.runInContext(source,context);
   vm.runInContext(`localSessions=Array.from({length:5},(_,i)=>({id:'H'+i,state:i===4?'unknown':'running',ticketId:i?7:0,activity:i?'active':'idle'}))`,context);

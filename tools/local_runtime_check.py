@@ -179,6 +179,7 @@ def main(database_url=None):
                 browser("click", '[data-ticket-menu="agents"]'); browser("wait", '[data-agent-usage]')
                 browser("click", '[data-agent-usage]')
                 browser("wait", "--fn", "terminalView && Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n').includes('Planning proposal fixture')")
+                browser("wait", "--fn", "document.querySelector('#terminal-started')?.dateTime && /^\\d+:\\d{2}(?::\\d{2})?$/.test(document.querySelector('#terminal-elapsed')?.textContent)")
                 transcript = browser("eval", "Array.from({length:terminalView.terminal.buffer.active.length},(_,i)=>terminalView.terminal.buffer.active.getLine(i)?.translateToString()).join('\\n')")
                 assert "Starting " + args.proposal_harness + " planning harness" in transcript and "Planning source" in transcript and "Produce a proposal" in transcript
                 browser("press", "Escape")

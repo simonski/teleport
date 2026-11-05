@@ -67,6 +67,10 @@ func TestTransferRequiresCurrentOwnershipOfBothProjects(t *testing.T) {
 	if _, err := svc.Call(context.Background(), ownerToken, "transferTicket", body); err == nil {
 		t.Fatal("one-project ownership allowed a transfer")
 	}
+	previewBody, _ := json.Marshal(app.TransferPreviewInput{ID: ticket.ID, DestinationProjectID: destination.ID})
+	if _, err := svc.Call(context.Background(), ownerToken, "previewTicketTransfer", previewBody); err == nil {
+		t.Fatal("preview exposed a transfer without ownership of both projects")
+	}
 	current := call(t, svc, admin, "getTicket", map[string]any{"id": ticket.ID}).(model.Ticket)
 	if current.ProjectID != source.ID || current.Version != ticket.Version {
 		t.Fatal("forbidden transfer partially mutated work")
@@ -98,5 +102,37 @@ func TestDependenciesAndTransfersAreAtomic(t *testing.T) {
 	b = call(t, svc, token, "transferTicket", map[string]any{"id": b.ID, "expectedVersion": b.Version, "destinationProjectId": destination.ID}).(model.Ticket)
 	if b.ProjectID != destination.ID || b.ParentID != destination.UnassignedEpic {
 		t.Fatal("transfer failed to use destination defaults")
+	}
+}
+
+func TestTicketTransferPreviewIncludesParentAndHiddenChildren(t *testing.T) {
+	svc, token := fixture(t)
+	source := call(t, svc, token, "createProject", map[string]any{"name": "Transfer preview source", "requestId": "source"}).(model.Project)
+	destination := call(t, svc, token, "createProject", map[string]any{"name": "Transfer preview destination", "requestId": "destination"}).(model.Project)
+	unassigned := call(t, svc, token, "createTicket", map[string]any{"projectId": source.ID, "title": "Unassigned story", "agent": false, "requestId": "unassigned"}).(model.Ticket)
+	single := call(t, svc, token, "previewTicketTransfer", app.TransferPreviewInput{ID: unassigned.ID, DestinationProjectID: destination.ID}).(app.TransferPreview)
+	if single.IncludesParent || single.RootID != unassigned.ID || single.Total != 1 {
+		t.Fatal("protected default was included in transfer", single)
+	}
+	epic := call(t, svc, token, "createTicket", map[string]any{"projectId": source.ID, "kind": "epic", "title": "Parent", "agent": false, "requestId": "epic"}).(model.Ticket)
+	child := call(t, svc, token, "createTicket", map[string]any{"projectId": source.ID, "parentId": epic.ID, "title": "Story", "agent": false, "requestId": "child"}).(model.Ticket)
+	hidden := call(t, svc, token, "createTicket", map[string]any{"projectId": source.ID, "parentId": epic.ID, "title": "Hidden", "agent": false, "requestId": "hidden"}).(model.Ticket)
+	call(t, svc, token, "setTicketVisibility", map[string]any{"id": hidden.ID, "expectedVersion": hidden.Version, "archived": true})
+	preview := call(t, svc, token, "previewTicketTransfer", app.TransferPreviewInput{ID: child.ID, DestinationProjectID: destination.ID}).(app.TransferPreview)
+	if !preview.IncludesParent || preview.RootID != epic.ID || preview.Stories != 2 || preview.Total != 3 || preview.Hidden != 1 {
+		t.Fatalf("unexpected preview: %#v", preview)
+	}
+	call(t, svc, token, "updateTicket", map[string]any{"id": child.ID, "expectedVersion": child.Version, "title": "Changed"})
+	input := app.TransferInput{ID: preview.RootID, ExpectedVersion: preview.RootVersion, DestinationProjectID: destination.ID, ExpectedRevision: &preview.Revision}
+	body, _ := json.Marshal(input)
+	if _, err := svc.Call(context.Background(), token, "transferTicket", body); err == nil {
+		t.Fatal("stale preview allowed transfer")
+	}
+	preview = call(t, svc, token, "previewTicketTransfer", app.TransferPreviewInput{ID: child.ID, DestinationProjectID: destination.ID}).(app.TransferPreview)
+	call(t, svc, token, "transferTicket", app.TransferInput{ID: preview.RootID, ExpectedVersion: preview.RootVersion, DestinationProjectID: destination.ID, ExpectedRevision: &preview.Revision})
+	for _, id := range []int64{epic.ID, child.ID, hidden.ID} {
+		if call(t, svc, token, "getTicket", app.IDInput{ID: id}).(model.Ticket).ProjectID != destination.ID {
+			t.Fatal("subtree did not move together")
+		}
 	}
 }

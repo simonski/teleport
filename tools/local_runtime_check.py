@@ -146,6 +146,11 @@ def main(database_url=None):
         if args.proposal_only:
             definition = tk("saveAgentDefinition", {"name":"Fixture planner","goal":"Propose a breakdown","prompt":"","skills":[],"harness":args.proposal_harness,"model":"fixture-model","thinking":"high","requestId":"planner"})
             ticket = tk("createTicket", {"projectId":project["id"],"title":"Planning source","agent":False,"requestId":"planning-source"})
+            if args.browser:
+                move_destination = tk("createProject", {"name":"Move destination","requestId":"move-destination"})
+                move_parent = tk("createTicket", {"projectId":project["id"],"kind":"epic","title":"Move parent","agent":False,"requestId":"move-parent"})
+                move_story = tk("createTicket", {"projectId":project["id"],"parentId":move_parent["id"],"title":"Move story","agent":False,"requestId":"move-story"})
+                move_sibling = tk("createTicket", {"projectId":project["id"],"parentId":move_parent["id"],"title":"Move sibling","agent":False,"requestId":"move-sibling"})
             usage = tk("saveAgentUsage", {"projectId":project["id"],"name":"Plan","agentId":definition["id"],"kind":"todo-proposal","view":"Todos","workflow":ticket["workflow"],"phase":ticket["phase"],"enabled":True,"requestId":"planning-usage"})
             def run_proposal(request_id, previous=None):
                 nonlocal session_id
@@ -253,6 +258,16 @@ def main(database_url=None):
             totals = next(window for window in tk("getUsageSummary", {"projectId":project["id"]})["windows"] if window["name"] == "all")
             assert totals["invocations"] == (5 if args.browser else 3) and totals["failed"] == (2 if args.browser else 1) and totals["tokens"] == (750 if args.browser else 450)
             assert len(tk("listTicketProposals", {"ticketId":ticket["id"]})["items"]) == (3 if args.browser else 2)
+            if args.browser:
+                browser("press", "Escape")
+                move_card = f'.ticket-open[data-ticket="{move_story["id"]}"]'
+                browser("wait", move_card); browser("eval", f'document.querySelector({json.dumps(move_card)}).focus()')
+                browser("press", "Shift+F10"); browser("wait", '[data-ticket-menu="projects"]'); browser("click", '[data-ticket-menu="projects"]')
+                browser("click", f'[data-ticket-project="{move_destination["id"]}"]')
+                browser("wait", "--fn", "document.querySelector('tk-dialog[open]')?.textContent.includes('2 stories and 1 parent ticket')")
+                browser("click", '#editor button[type="submit"]')
+                wait_for(lambda: tk("getTicket", {"id":move_story["id"]})["projectId"] == move_destination["id"])
+                assert tk("getTicket", {"id":move_parent["id"]})["projectId"] == move_destination["id"] and tk("getTicket", {"id":move_sibling["id"]})["projectId"] == move_destination["id"]
             tk("shutdownLocalRuntime", {"confirm":True})
             clean = True
             print("PASS: proposal PTY, persisted feedback, revision and idempotent human acceptance; no model calls")

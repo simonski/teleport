@@ -32,10 +32,25 @@ type DependenciesInput struct {
 	Dependencies    []int64 `json:"dependencies"`
 }
 type TransferInput struct {
+	ID                   int64  `json:"id"`
+	ExpectedVersion      int64  `json:"expectedVersion"`
+	DestinationProjectID int64  `json:"destinationProjectId"`
+	ParentID             int64  `json:"parentId,omitempty"`
+	ExpectedRevision     *int64 `json:"expectedRevision,omitempty"`
+}
+type TransferPreviewInput struct {
 	ID                   int64 `json:"id"`
-	ExpectedVersion      int64 `json:"expectedVersion"`
 	DestinationProjectID int64 `json:"destinationProjectId"`
-	ParentID             int64 `json:"parentId,omitempty"`
+}
+type TransferPreview struct {
+	RootID         int64  `json:"rootId"`
+	RootTitle      string `json:"rootTitle"`
+	RootVersion    int64  `json:"rootVersion"`
+	Revision       int64  `json:"revision"`
+	Total          int    `json:"total"`
+	Stories        int    `json:"stories"`
+	Hidden         int    `json:"hidden"`
+	IncludesParent bool   `json:"includesParent"`
 }
 type MoveInput struct {
 	ID              int64 `json:"id"`
@@ -303,6 +318,42 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		}
 		reconcileDependencyStops(st, a)
 		return t, true, nil
+	case "previewTicketTransfer":
+		var in TransferPreviewInput
+		if err := parse(raw, &in); err != nil {
+			return nil, false, err
+		}
+		t, err := ticketFor(st, a, in.ID, "Maintainer")
+		if err != nil {
+			return nil, false, err
+		}
+		if err = require(st, a, in.DestinationProjectID, "Maintainer"); err != nil {
+			return nil, false, err
+		}
+		if t.ProjectID == in.DestinationProjectID {
+			return nil, false, failure(422, "same_project", "Choose another project")
+		}
+		root := t
+		if t.Kind == "task" {
+			if parent, ok := st.Tickets[t.ParentID]; ok && !parent.Protected {
+				root = parent
+			}
+		}
+		if root.Protected {
+			return nil, false, failure(403, "protected_record", "Protected defaults cannot be transferred")
+		}
+		ids := subtree(st, root.ID)
+		out := TransferPreview{RootID: root.ID, RootTitle: root.Title, RootVersion: root.Version, Revision: st.Revision, Total: len(ids), IncludesParent: root.ID != t.ID}
+		for _, id := range ids {
+			item := st.Tickets[id]
+			if item.Kind == "task" {
+				out.Stories++
+			}
+			if item.Archived || item.Deleted {
+				out.Hidden++
+			}
+		}
+		return out, false, nil
 	case "transferTicket":
 		var in TransferInput
 		if err := parse(raw, &in); err != nil {
@@ -314,6 +365,9 @@ func controlOperations(st *model.State, a model.Account, operation string, raw j
 		}
 		if err = require(st, a, in.DestinationProjectID, "Maintainer"); err != nil {
 			return nil, false, err
+		}
+		if in.ExpectedRevision != nil && *in.ExpectedRevision != st.Revision {
+			return nil, false, failure(409, "version_conflict", "The workspace changed; review the transfer again")
 		}
 		if err = expected(t, in.ExpectedVersion); err != nil {
 			return nil, false, err

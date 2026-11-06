@@ -13,6 +13,8 @@ Open http://localhost:9999 and sign in with the initial local account `admin` / 
 
 PostgreSQL is the sole application database. `make db-up` explicitly starts a private socket-only development cluster and writes owner-only `~/.teleport/database.json`; `make db-down` stops it without deleting data. An existing installation requires explicit migration before local setup. For an external instance, set `TELEPORT_DB` or provide `-db-config PATH` containing `{"url":"postgresql://…"}` with mode `0600`. Keep passwords out of command arguments. Test and smoke tools provision separate disposable clusters automatically; `TELEPORT_POSTGRES_BIN` selects server binaries.
 
+If `tk serve` cannot connect to the repository-managed local database, run `make db-up` from the repository and retry `tk serve`. For an external database, start or contact its PostgreSQL service and check the configured connection. Starting the local cluster preserves existing data.
+
 The browser bundles Three.js 0.187.0 under its [MIT license](internal/server/web/vendor/LICENSE). `python3 -B tools/vendor_web.py --verify` checks the pinned artifact hashes offline. No CDN or Node runtime is required by the built application.
 
 Run `make sbom` to generate `sbom.cdx.json`.

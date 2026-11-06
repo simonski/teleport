@@ -17,6 +17,7 @@ import (
 )
 
 var ErrUninitialized = errors.New("storage is not initialized; run tk init")
+var ErrDatabaseUnavailable = errors.New("could not connect to PostgreSQL; verify database configuration and service availability")
 
 type Store struct {
 	db         *sql.DB
@@ -44,7 +45,7 @@ func Open(location string, initialize bool) (*Store, error) {
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			s.Close()
-			return nil, errors.New("could not connect to PostgreSQL; verify database configuration and service availability")
+			return nil, ErrDatabaseUnavailable
 		}
 		var locked bool
 		err = conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock(1949675634)").Scan(&locked)

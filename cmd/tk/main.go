@@ -294,6 +294,9 @@ func run(args []string) error {
 		*dbPath = location
 		db, err := store.Open(*dbPath, command == "init" && !exportState)
 		if err != nil {
+			if errors.Is(err, store.ErrDatabaseUnavailable) {
+				return fmt.Errorf("%w\nFor the repository-managed local database, run make db-up from the repository, then retry tk %s. For an external database, start or contact its PostgreSQL service and check the configured connection", err, command)
+			}
 			return err
 		}
 		defer db.Close()

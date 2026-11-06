@@ -1,14 +1,37 @@
 """Verify database command privacy, deadlines and external-cluster ownership."""
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
 
-from postgres import _deadline,cluster,pg
+from postgres import _deadline,cluster,pg,start
 
 
 class PostgresToolTest(unittest.TestCase):
+    def test_stale_pid_does_not_prevent_start(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "cluster"
+            data = folder / "data"
+            data.mkdir(parents=True)
+            (data / "PG_VERSION").write_text("17")
+            (data / "postmaster.pid").write_text("12345\n")
+            socket = Path(temp) / "socket"
+            with patch("postgres.subprocess.run", return_value=subprocess.CompletedProcess([], 3, "", "")), patch("postgres.pg") as command:
+                start(Path("/tools"), folder, socket)
+            self.assertEqual([call.args[1] for call in command.call_args_list], ["pg_ctl", "pg_isready"])
+
+    def test_existing_server_must_be_ready(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "cluster"
+            data = folder / "data"
+            data.mkdir(parents=True)
+            (data / "PG_VERSION").write_text("17")
+            with patch("postgres.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")), patch("postgres.pg") as command:
+                start(Path("/tools"), folder, Path(temp) / "socket")
+            self.assertEqual([call.args[1] for call in command.call_args_list], ["pg_isready"])
+
     def test_administration_passwords_never_enter_process_arguments(self):
         for url,password in (("postgresql://alice:private%40password@example.test/postgres","private@password"),("postgresql://alice:private@password@example.test/postgres","private@password"),("postgresql://alice@example.test/postgres?password=private-secret","private-secret")):
             with self.subTest(url=url),patch("postgres.subprocess.run",return_value=subprocess.CompletedProcess([],0,"","")) as run:

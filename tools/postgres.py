@@ -66,9 +66,16 @@ def start(binary, folder, socket):
     data = folder / "data"
     if not (data / "PG_VERSION").is_file():
         pg(binary, "initdb", "-D", data, "--auth=trust", "--username=teleport", "--encoding=UTF8", "--no-locale")
-    if not (data / "postmaster.pid").exists():
+    deadline = _deadline.get()
+    timeout = 30 if deadline is None else max(.001, min(30, deadline - time.monotonic()))
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+    status = subprocess.run([str(binary / "pg_ctl"), "-D", str(data), "status"], env=environment, capture_output=True, text=True, timeout=timeout)
+    if status.returncode not in (0, 3):
+        raise RuntimeError("PostgreSQL status failed; inspect the local cluster before retrying")
+    if status.returncode == 3:
         options = "-c listen_addresses='' -c unix_socket_permissions=0700 -c unix_socket_directories=" + str(socket)
         pg(binary, "pg_ctl", "-D", data, "-l", folder / "server.log", "-o", options, "-w", "start")
+    pg(binary, "pg_isready", "-h", socket, "-U", "teleport", "-d", "postgres")
     return base_url(socket)
 
 

@@ -102,6 +102,7 @@ type State struct {
 }
 
 type Project struct {
+	PersonalOwner      string             `json:"personalOwner,omitempty"`
 	MaxAgents          *int               `json:"maxAgents,omitempty"`
 	AllowedHarnesses   *[]string          `json:"allowedHarnesses,omitempty"`
 	Simulation         bool               `json:"simulation,omitempty"`

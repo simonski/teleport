@@ -27,7 +27,7 @@ func projectAvailability(st *model.State, in ProjectAvailabilityInput) ProjectAv
 	keys := map[string]bool{}
 	for _, p := range st.Projects {
 		keys[p.Key] = true
-		if sameProjectName(p.Name, in.Name) {
+		if p.PersonalOwner == "" && sameProjectName(p.Name, in.Name) {
 			r.NameAvailable = false
 		}
 		if p.Key == in.Key {

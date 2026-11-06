@@ -89,14 +89,27 @@ func collections(st *model.State) {
 	}
 }
 func role(st *model.State, a model.Account, projectID int64) string {
+	p, ok := st.Projects[projectID]
+	if !ok {
+		return ""
+	}
+	if p.PersonalOwner != "" {
+		if a.ServiceSessionID != "" {
+			row, exists := st.LocalSessions[a.ServiceSessionID]
+			if exists && row.Creator == p.PersonalOwner && a.ServiceProjectID == projectID {
+				return "Viewer"
+			}
+			return ""
+		}
+		if a.ID == p.PersonalOwner {
+			return "Maintainer"
+		}
+		return ""
+	}
 	if a.ServiceSessionID != "" {
 		if a.ServiceProjectID == projectID {
 			return "Viewer"
 		}
-		return ""
-	}
-	p, ok := st.Projects[projectID]
-	if !ok {
 		return ""
 	}
 	if a.Administrator {
@@ -116,6 +129,9 @@ func ticketFor(st *model.State, a model.Account, id int64, minimum string) (mode
 	t, ok := st.Tickets[id]
 	if !ok {
 		return t, failure(404, "not_found", "Ticket not found")
+	}
+	if p := st.Projects[t.ProjectID]; p.PersonalOwner != "" && role(st, a, t.ProjectID) == "" {
+		return model.Ticket{}, failure(404, "not_found", "Ticket not found")
 	}
 	if err := require(st, a, t.ProjectID, minimum); err != nil {
 		return model.Ticket{}, err
@@ -328,7 +344,7 @@ func projectOperations(st *model.State, a model.Account, operation string, raw j
 			return p, false, nil
 		}
 		for _, p := range st.Projects {
-			if sameProjectName(p.Name, in.Name) {
+			if p.PersonalOwner == "" && sameProjectName(p.Name, in.Name) {
 				return nil, false, failure(409, "project_name_exists", "Project name already exists")
 			}
 			if p.Key == in.Key {

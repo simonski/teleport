@@ -78,6 +78,8 @@ func freshInstallation(adminPassword string) model.State {
 	}
 	st := model.State{Schema: model.SchemaVersion, InstallationID: randomID(), Accounts: map[string]model.Account{}, Sessions: map[string]model.Session{}, Workflows: model.SeedWorkflows()}
 	st.Accounts["admin"] = model.Account{ID: "admin", Username: "admin", PasswordHash: hashPassword(adminPassword), Administrator: true}
+	collections(&st)
+	ensurePersonalProject(&st, st.Accounts["admin"])
 	return st
 }
 
@@ -91,6 +93,12 @@ func InitializeWithOptions(ctx context.Context, db *store.Store, options Initial
 			*st = freshInstallation(options.AdminPassword)
 		} else if options.AdminPassword != "" && !passwordMatches(st.Accounts["admin"].PasswordHash, options.AdminPassword) {
 			return false, failure(409, "initial_password_mismatch", "Existing admin credentials differ; initialization never resets a password")
+		}
+		collections(st)
+		for _, account := range st.Accounts {
+			before := len(st.Projects)
+			ensurePersonalProject(st, account)
+			changed = changed || len(st.Projects) != before
 		}
 		return changed, nil
 	})
@@ -296,6 +304,8 @@ func (s *Service) login(ctx context.Context, raw json.RawMessage) (any, error) {
 		if !passwordMatches(hash, input.Password) || !ok || a.Suspended {
 			return false, failure(401, "invalid_credentials", "Invalid username or password")
 		}
+		collections(st)
+		ensurePersonalProject(st, a)
 		token := randomID()
 		st.Sessions[digest(token)] = model.Session{AccountID: a.ID, Expires: time.Now().UTC().Add(12 * time.Hour)}
 		result = LoginResult{token, publicAccount(a)}

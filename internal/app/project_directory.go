@@ -65,6 +65,9 @@ func saveProject(st *model.State, a model.Account, raw json.RawMessage) (any, bo
 	if in.Name != nil {
 		name = strings.TrimSpace(*in.Name)
 	}
+	if p.PersonalOwner != "" && name != "Personal" {
+		return nil, false, failure(403, "protected_record", "The Personal project cannot be renamed")
+	}
 	if in.Description != nil {
 		description = *in.Description
 	}
@@ -81,7 +84,7 @@ func saveProject(st *model.State, a model.Account, raw json.RawMessage) (any, bo
 		return nil, false, failure(422, "invalid_project", "Provide a name within 200 bytes and description within 20000 bytes")
 	}
 	for id, other := range st.Projects {
-		if id != p.ID && sameProjectName(other.Name, name) {
+		if id != p.ID && other.PersonalOwner == "" && p.PersonalOwner == "" && sameProjectName(other.Name, name) {
 			return nil, false, failure(409, "project_name_exists", "Project name already exists")
 		}
 	}

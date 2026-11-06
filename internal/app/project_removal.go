@@ -32,6 +32,9 @@ func removalPreview(st *model.State, a model.Account, id int64) (ProjectRemovalP
 	if !ok {
 		return ProjectRemovalPreview{}, failure(404, "not_found", "Project not found")
 	}
+	if p.PersonalOwner != "" {
+		return ProjectRemovalPreview{}, failure(404, "not_found", "Project not found")
+	}
 	r := ProjectRemovalPreview{ID: id, Name: p.Name, Revision: st.Revision, Warning: "Project tickets, Ideas, their history, project workflows and session records are removed. Retained script records, request receipts, backups and files on disk are not erased. Active work, sessions, scripts and cross-project references must be resolved first."}
 	for _, t := range st.Tickets {
 		if t.ProjectID == id {

@@ -305,6 +305,9 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 	if !a.Administrator {
 		return nil, failure(403, "forbidden", "Only an installation administrator may grant local filesystem bindings")
 	}
+	if err := require(snapshot, a, in.ProjectID, "Viewer"); err != nil {
+		return nil, err
+	}
 	if _, ok := snapshot.Projects[in.ProjectID]; !ok {
 		return nil, failure(404, "not_found", "Project not found")
 	}
@@ -351,6 +354,9 @@ func (s *Service) configureRepository(ctx context.Context, token string, raw jso
 		}
 		if !a.Administrator {
 			return false, failure(403, "forbidden", "Administrator rights changed")
+		}
+		if err := require(st, a, in.ProjectID, "Viewer"); err != nil {
+			return false, err
 		}
 		p, ok := st.Projects[in.ProjectID]
 		if !ok {

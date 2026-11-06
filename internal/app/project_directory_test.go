@@ -24,6 +24,10 @@ func TestProjectDirectoryCountsHistoryAndMetadataVersions(t *testing.T) {
 	hidden := call(t, svc, token, "createTicket", app.CreateTicketInput{ProjectID: p.ID, Title: "Archived", RequestID: "hidden"}).(model.Ticket)
 	call(t, svc, token, "setTicketVisibility", map[string]any{"id": hidden.ID, "expectedVersion": hidden.Version, "archived": true})
 	page := call(t, svc, token, "listProjectSummaries", app.ProjectDirectoryInput{Limit: 1}).(app.Page[app.ProjectSummary])
+	if len(page.Items) != 1 || page.Items[0].Name != "Personal" || page.NextCursor == "" {
+		t.Fatal("missing personal project", page)
+	}
+	page = call(t, svc, token, "listProjectSummaries", app.ProjectDirectoryInput{Cursor: page.NextCursor, Limit: 1}).(app.Page[app.ProjectSummary])
 	row := page.Items[0]
 	if row.Tickets != 3 || row.Epics != 1 || row.Goals != 1 || row.Tokens != nil || row.UsageStatus != "unavailable" || row.Agents == nil || *row.Agents != 0 || row.LastActive == nil {
 		t.Fatal("incorrect aggregate", row)
